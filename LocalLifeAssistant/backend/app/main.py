@@ -4,7 +4,7 @@ import os
 # Load environment variables from .env file
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import json
@@ -12,6 +12,8 @@ import os
 from .routers import chat, recommendations
 from .database import get_db_manager
 from .models import Event, Restaurant
+from .geocoding import geocoding_service
+from .external_data_service import external_data_service
 
 # Create FastAPI app
 app = FastAPI(
@@ -103,6 +105,50 @@ async def get_stats():
         return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error getting stats: {str(e)}")
+
+@app.post("/api/geocode")
+async def geocode_location(request: dict):
+    """Geocode a location input (zipcode or city, state) to coordinates"""
+    try:
+        input_text = request.get("input_text")
+        if not input_text:
+            raise HTTPException(status_code=400, detail="input_text is required")
+
+        # Geocode the location
+        result = geocoding_service.geocode_location(input_text)
+        
+        if result:
+            latitude, longitude, formatted_address = result
+            #print(f"Latitude: {latitude}, Longitude: {longitude}")
+            # Call external data service with coordinates (placeholder)
+            await external_data_service.get_location_data(
+                latitude=latitude,
+                longitude=longitude,
+                location_context=formatted_address
+            )
+            
+            return {
+                "success": True,
+                "coordinates": {
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "formatted_address": formatted_address
+                },
+                "error_message": None
+            }
+        else:
+            return {
+                "success": False,
+                "coordinates": None,
+                "error_message": f"Could not geocode location: '{input_text}'"
+            }
+            
+    except Exception as e:
+        return {
+            "success": False,
+            "coordinates": None,
+            "error_message": f"Error geocoding location: {str(e)}"
+        }
 
 if __name__ == "__main__":
     import uvicorn

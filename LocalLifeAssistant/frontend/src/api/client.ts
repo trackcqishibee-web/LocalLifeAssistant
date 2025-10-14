@@ -8,6 +8,12 @@ export interface ChatMessage {
   timestamp?: string;
 }
 
+export interface LocationCoordinates {
+  latitude: number;
+  longitude: number;
+  formatted_address: string;
+}
+
 export interface ChatRequest {
   message: string;
   conversation_history: ChatMessage[];
@@ -88,6 +94,13 @@ class APIClient {
 
   async healthCheck(): Promise<any> {
     const response = await axios.get(`${this.baseURL}/health`);
+    return response.data;
+  }
+
+  async geocodeLocation(input: string): Promise<LocationCoordinates> {
+    const response = await axios.post(`${this.baseURL}/api/geocode`, {
+      input_text: input
+    });
     return response.data;
   }
 }
