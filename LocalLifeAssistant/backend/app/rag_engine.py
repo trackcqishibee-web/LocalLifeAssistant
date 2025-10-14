@@ -267,6 +267,10 @@ class RAGEngine:
                 n_results=max_results, 
                 where=filters
             )
+            # print("Searching for events")
+            # print(query)
+            # print(filters)
+            # print(event_results)
             search_results.extend(event_results)
         
         if intent["type"] in ["restaurant", "both"]:
@@ -275,6 +279,10 @@ class RAGEngine:
                 n_results=max_results, 
                 where=filters
             )
+            # print("Searching for restaurants")
+            # print(query)
+            # print(filters)
+            # print(restaurant_results)
             search_results.extend(restaurant_results)
         
         # Sort by relevance score
@@ -282,7 +290,7 @@ class RAGEngine:
         search_results = search_results[:max_results]
         
         # Format context for LLM
-        context = self._create_context_for_llm(search_results, intent)
+        context = self._format_context_for_llm(search_results, intent)
         
         # Create LLM prompt
         prompt = f"""
@@ -301,6 +309,8 @@ Be conversational and helpful. If no relevant results were found, suggest altern
         
         # Generate response using LLM
         try:
+            # print(prompt)
+            # print(context)
             response = await self.llm_provider.generate_response(
                 prompt=prompt,
                 context="",
