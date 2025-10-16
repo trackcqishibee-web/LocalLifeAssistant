@@ -1,19 +1,20 @@
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
+from .events_crawler import EventbriteCrawler
 
 logger = logging.getLogger(__name__)
 
 class ExternalDataService:
     """
-    Placeholder for external data services that will be implemented by other developers.
-    This service accepts location coordinates and should be replaced with actual
-    implementations when the external services become available.
+    External data service for fetching real events, restaurants, and other location-based data.
+    Now integrated with real Eventbrite API for events.
     """
     
     def __init__(self):
         self.service_name = "ExternalDataService"
-        self.is_available = False  # Will be True when real services are implemented
+        self.is_available = True  # Now available with real Eventbrite integration
+        self.events_crawler = EventbriteCrawler()
     
     async def get_location_data(self, latitude: float, longitude: float, 
                               location_context: Optional[str] = None) -> Dict[str, Any]:
@@ -57,7 +58,7 @@ class ExternalDataService:
     async def get_events_by_location(self, latitude: float, longitude: float, 
                                    radius_km: float = 10.0) -> Dict[str, Any]:
         """
-        Placeholder for getting events near a location.
+        Get real events near a location using Eventbrite API.
         
         Args:
             latitude: Location latitude
@@ -65,18 +66,40 @@ class ExternalDataService:
             radius_km: Search radius in kilometers
             
         Returns:
-            Dictionary containing placeholder events data
+            Dictionary containing real events data
         """
         logger.info(f"Events service called: lat={latitude}, lng={longitude}, radius={radius_km}km")
         
-        return {
-            "coordinates": {"latitude": latitude, "longitude": longitude},
-            "radius_km": radius_km,
-            "events": [],
-            "total_found": 0,
-            "service_status": "placeholder",
-            "message": "Events service not yet implemented"
-        }
+        try:
+            # Fetch real events from Eventbrite
+            events = self.events_crawler.fetch_events_by_coordinates(
+                latitude=latitude,
+                longitude=longitude,
+                radius_km=radius_km
+            )
+            
+            logger.info(f"Fetched {len(events)} events from Eventbrite")
+            
+            return {
+                "coordinates": {"latitude": latitude, "longitude": longitude},
+                "radius_km": radius_km,
+                "events": events,
+                "total_found": len(events),
+                "service_status": "active",
+                "message": f"Successfully fetched {len(events)} events from Eventbrite",
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching events: {e}")
+            return {
+                "coordinates": {"latitude": latitude, "longitude": longitude},
+                "radius_km": radius_km,
+                "events": [],
+                "total_found": 0,
+                "service_status": "error",
+                "message": f"Error fetching events: {str(e)}"
+            }
     
     async def get_restaurants_by_location(self, latitude: float, longitude: float,
                                         radius_km: float = 5.0) -> Dict[str, Any]:
