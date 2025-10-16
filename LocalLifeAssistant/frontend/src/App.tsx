@@ -156,10 +156,10 @@ const App: React.FC = () => {
       )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Chat Interface */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-[600px] flex flex-col">
+          <div className="lg:col-span-3">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-[700px] flex flex-col">
               <div className="p-4 border-b border-gray-200">
                 <div className="flex items-center space-x-2">
                   <MessageCircle className="w-5 h-5 text-primary-500" />
@@ -176,7 +176,7 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          {/* Recommendations Sidebar */}
+          {/* Sidebar */}
           <div className="space-y-6">
             {/* Location Input */}
             <LocationInput
@@ -208,19 +208,27 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Recommendations */}
-            {recommendations.length > 0 && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  Recommendations ({recommendations.length})
-                </h3>
-                <div className="space-y-4">
-                  {recommendations.map((rec, index) => (
-                    <RecommendationCard key={index} recommendation={rec} />
-                  ))}
+            {/* Stats Display */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Database Stats</h3>
+              {stats ? (
+                <div className="text-sm text-gray-600 space-y-2">
+                  <div className="flex justify-between">
+                    <span>Events:</span>
+                    <span className="font-medium">{stats.events_count}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Restaurants:</span>
+                    <span className="font-medium">{stats.restaurants_count}</span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-2">
+                    Last updated: {stats.cache_timestamp ? new Date(stats.cache_timestamp).toLocaleTimeString() : 'Unknown'}
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="text-sm text-gray-500">Loading stats...</div>
+              )}
+            </div>
           </div>
         </div>
       </div>

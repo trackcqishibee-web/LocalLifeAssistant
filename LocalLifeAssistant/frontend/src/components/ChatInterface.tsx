@@ -1,6 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Loader2 } from 'lucide-react';
 import { ChatMessage, apiClient, ChatRequest } from '../api/client';
+import RecommendationCard from './RecommendationCard';
+
+interface ChatMessageWithRecommendations extends ChatMessage {
+  recommendations?: any[];
+}
 
 interface ChatInterfaceProps {
   onNewMessage: (message: ChatMessage) => void;
@@ -17,6 +22,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 }) => {
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [messagesWithRecommendations, setMessagesWithRecommendations] = useState<ChatMessageWithRecommendations[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -25,19 +31,33 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   useEffect(() => {
     scrollToBottom();
+  }, [conversationHistory, messagesWithRecommendations]);
+
+  // Sync with conversation history
+  useEffect(() => {
+    const syncedMessages = conversationHistory.map(msg => {
+      const existing = messagesWithRecommendations.find(m => m.timestamp === msg.timestamp);
+      return {
+        ...msg,
+        recommendations: existing?.recommendations || []
+      };
+    });
+    setMessagesWithRecommendations(syncedMessages);
   }, [conversationHistory]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim() || isLoading) return;
 
-    const userMessage: ChatMessage = {
+    const userMessage: ChatMessageWithRecommendations = {
       role: 'user',
       content: message.trim(),
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      recommendations: []
     };
 
     onNewMessage(userMessage);
+    setMessagesWithRecommendations(prev => [...prev, userMessage]);
     setMessage('');
     setIsLoading(true);
 
@@ -50,14 +70,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       const response = await apiClient.chat(request);
       
-      const assistantMessage: ChatMessage = {
+      const assistantMessage: ChatMessageWithRecommendations = {
         role: 'assistant',
         content: response.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        recommendations: response.recommendations || []
       };
 
       onNewMessage(assistantMessage);
+      console.log('Received recommendations:', response.recommendations);
       onRecommendations(response.recommendations || []);
+      
+      // Update local state with recommendations
+      setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
     } catch (error) {
       console.error('Error sending message:', error);
       const errorMessage: ChatMessage = {
@@ -75,7 +100,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     <div className="flex flex-col h-full">
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {conversationHistory.map((msg, index) => (
+        {messagesWithRecommendations.map((msg, index) => (
           <div
             key={index}
             className={`chat-message ${msg.role}`}
@@ -96,7 +121,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 <div className="text-sm text-gray-500 mb-1">
                   {msg.role === 'user' ? 'You' : 'Assistant'}
                 </div>
-                <div className="whitespace-pre-wrap">{msg.content}</div>
+                <div className="whitespace-pre-wrap mb-3">{msg.content}</div>
+                
+                {/* Display recommendations inline */}
+                {msg.recommendations && msg.recommendations.length > 0 && (
+                  <div className="mt-4 space-y-3">
+                    <div className="text-sm font-medium text-gray-700 mb-2">
+                      📋 Recommendations ({msg.recommendations.length})
+                    </div>
+                    {msg.recommendations.map((rec, recIndex) => (
+                      <div key={recIndex} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                        <RecommendationCard recommendation={rec} />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

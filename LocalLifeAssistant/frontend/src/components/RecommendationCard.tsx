@@ -15,7 +15,9 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
 
   const formatDate = (dateString: string) => {
     try {
+      if (!dateString || dateString === 'TBD') return 'Date TBD';
       const date = new Date(dateString);
+      if (isNaN(date.getTime())) return dateString;
       return date.toLocaleDateString('en-US', {
         weekday: 'short',
         year: 'numeric',
@@ -25,7 +27,7 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
         minute: '2-digit'
       });
     } catch {
-      return dateString;
+      return dateString || 'Date TBD';
     }
   };
 

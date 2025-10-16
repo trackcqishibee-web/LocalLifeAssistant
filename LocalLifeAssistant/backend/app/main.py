@@ -37,7 +37,7 @@ app.include_router(recommendations.router)
 
 @app.on_event("startup")
 async def startup_event():
-    """Load mock data into ChromaDB on startup"""
+    """Load data into ChromaDB on startup - real events + mock restaurants"""
     try:
         db_manager = get_db_manager()
         
@@ -47,17 +47,27 @@ async def startup_event():
             print("Data already loaded in ChromaDB")
             return
         
-        # Load events
-        events_file = os.path.join(os.path.dirname(__file__), "..", "data", "mock_events.json")
-        if os.path.exists(events_file):
-            with open(events_file, "r") as f:
-                events_data = json.load(f)
-            
+        # Load real events from Eventbrite
+        print("Fetching real events from Eventbrite...")
+        from .events_crawler import fetch_events
+        
+        try:
+            events_data = fetch_events(max_pages=3)  # Fetch 3 pages of events
             events = [Event(**event) for event in events_data]
             db_manager.add_events(events)
-            print(f"Loaded {len(events)} events into ChromaDB")
+            print(f"Loaded {len(events)} real events from Eventbrite into ChromaDB")
+        except Exception as e:
+            print(f"Error fetching real events, falling back to mock data: {e}")
+            # Fallback to mock events
+            events_file = os.path.join(os.path.dirname(__file__), "..", "data", "mock_events.json")
+            if os.path.exists(events_file):
+                with open(events_file, "r") as f:
+                    events_data = json.load(f)
+                events = [Event(**event) for event in events_data]
+                db_manager.add_events(events)
+                print(f"Loaded {len(events)} mock events into ChromaDB")
         
-        # Load restaurants
+        # Load restaurants (still using mock data for now)
         restaurants_file = os.path.join(os.path.dirname(__file__), "..", "data", "mock_restaurants.json")
         if os.path.exists(restaurants_file):
             with open(restaurants_file, "r") as f:
@@ -65,12 +75,12 @@ async def startup_event():
             
             restaurants = [Restaurant(**restaurant) for restaurant in restaurants_data]
             db_manager.add_restaurants(restaurants)
-            print(f"Loaded {len(restaurants)} restaurants into ChromaDB")
+            print(f"Loaded {len(restaurants)} mock restaurants into ChromaDB")
         
-        print("Mock data loaded successfully!")
+        print("Data loaded successfully!")
         
     except Exception as e:
-        print(f"Error loading mock data: {str(e)}")
+        print(f"Error loading data: {str(e)}")
 
 @app.get("/")
 async def root():
