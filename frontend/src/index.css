@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .chat-message {
+    @apply p-4 rounded-lg max-w-3xl;
+  }
+  
+  .chat-message.user {
+    @apply bg-primary-500 text-white ml-auto;
+  }
+  
+  .chat-message.assistant {
+    @apply bg-gray-100 text-gray-900 mr-auto;
+  }
+  
+  .recommendation-card {
+    @apply bg-white rounded-lg shadow-md p-6 border border-gray-200 hover:shadow-lg transition-shadow;
+  }
+}
