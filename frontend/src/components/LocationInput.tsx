@@ -45,11 +45,17 @@ const LocationInput: React.FC<LocationInputProps> = ({
       const response = await apiClient.geocodeLocation(inputValue.trim());
 
       if (response.success && response.coordinates) {
-        setCurrentLocation(response.coordinates);
-        onLocationChange(response.coordinates);
+        const locationData: LocationCoordinates = {
+          latitude: response.coordinates.latitude,
+          longitude: response.coordinates.longitude,
+          formatted_address: response.formatted_address || response.coordinates.formatted_address,
+          success: true
+        };
+        setCurrentLocation(locationData);
+        onLocationChange(locationData);
         
         // Save to localStorage
-        localStorage.setItem('userLocation', JSON.stringify(response.coordinates));
+        localStorage.setItem('userLocation', JSON.stringify(locationData));
         
         setSuccess(true);
         setInputValue('');

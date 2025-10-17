@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Settings, MessageCircle, MapPin, Calendar } from 'lucide-react';
+import { Settings, MessageCircle, MapPin } from 'lucide-react';
 import ChatInterface from './components/ChatInterface';
-import RecommendationCard from './components/RecommendationCard';
 import LocationInput from './components/LocationInput';
 import { ChatMessage, apiClient, LocationCoordinates } from './api/client';
 
 const App: React.FC = () => {
   const [conversationHistory, setConversationHistory] = useState<ChatMessage[]>([]);
-  const [recommendations, setRecommendations] = useState<any[]>([]);
   const [llmProvider, setLlmProvider] = useState('openai');
   const [showSettings, setShowSettings] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -48,9 +46,6 @@ const App: React.FC = () => {
     setConversationHistory(prev => [...prev, message]);
   };
 
-  const handleRecommendations = (newRecommendations: any[]) => {
-    setRecommendations(newRecommendations);
-  };
 
   const handleLocationChange = useCallback((location: LocationCoordinates | null) => {
     setUserLocation(location);
@@ -58,7 +53,6 @@ const App: React.FC = () => {
 
   const clearConversation = () => {
     setConversationHistory([]);
-    setRecommendations([]);
   };
 
   const exampleQueries = [
@@ -169,7 +163,6 @@ const App: React.FC = () => {
               
               <ChatInterface
                 onNewMessage={handleNewMessage}
-                onRecommendations={handleRecommendations}
                 llmProvider={llmProvider}
                 conversationHistory={conversationHistory}
               />

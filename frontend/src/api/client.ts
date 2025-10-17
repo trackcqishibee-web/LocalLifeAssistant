@@ -12,6 +12,12 @@ export interface LocationCoordinates {
   latitude: number;
   longitude: number;
   formatted_address: string;
+  success?: boolean;
+  coordinates?: {
+    latitude: number;
+    longitude: number;
+  };
+  error_message?: string;
 }
 
 export interface ChatRequest {
