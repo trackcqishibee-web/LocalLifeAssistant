@@ -46,6 +46,11 @@ const App: React.FC = () => {
     setConversationHistory(prev => [...prev, message]);
   };
 
+  const handleRecommendations = (recommendations: any[]) => {
+    // Handle recommendations if needed
+    console.log('Received recommendations:', recommendations);
+  };
+
 
   const handleLocationChange = useCallback((location: LocationCoordinates | null) => {
     setUserLocation(location);
@@ -163,6 +168,7 @@ const App: React.FC = () => {
               
               <ChatInterface
                 onNewMessage={handleNewMessage}
+                onRecommendations={handleRecommendations}
                 llmProvider={llmProvider}
                 conversationHistory={conversationHistory}
               />
