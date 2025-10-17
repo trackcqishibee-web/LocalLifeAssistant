@@ -33,12 +33,36 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Configure CORS origins based on environment
+def get_cors_origins():
+    """Get CORS origins based on environment variables"""
+    # Default origins for local development
+    origins = [
+        "http://localhost:3000",  # React dev server
+        "http://localhost:5173",  # Vite dev server
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+    ]
+    
+    # Add production frontend URL if specified
+    frontend_url = os.getenv("FRONTEND_URL")
+    if frontend_url:
+        origins.append(frontend_url)
+    
+    # Add any additional origins from environment
+    additional_origins = os.getenv("ADDITIONAL_CORS_ORIGINS")
+    if additional_origins:
+        # Split by comma and strip whitespace
+        origins.extend([origin.strip() for origin in additional_origins.split(",")])
+    
+    return origins
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=get_cors_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
