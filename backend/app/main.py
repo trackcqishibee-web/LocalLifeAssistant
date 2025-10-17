@@ -18,10 +18,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-# Import our working modules
-from app.events_crawler import EventbriteCrawler
-from app.external_data_service import ExternalDataService
-from app.geocoding import geocoding_service
+from .events_crawler import EventbriteCrawler
+from .external_data_service import ExternalDataService
+from .geocoding import geocoding_service
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
