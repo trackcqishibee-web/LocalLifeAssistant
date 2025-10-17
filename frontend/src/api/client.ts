@@ -12,12 +12,16 @@ export interface LocationCoordinates {
   latitude: number;
   longitude: number;
   formatted_address: string;
-  success?: boolean;
-  coordinates?: {
+}
+
+export interface GeocodeResponse {
+  success: boolean;
+  coordinates: {
     latitude: number;
     longitude: number;
-  };
-  error_message?: string;
+    formatted_address: string;
+  } | null;
+  error_message: string | null;
 }
 
 export interface ChatRequest {
@@ -103,7 +107,7 @@ class APIClient {
     return response.data;
   }
 
-  async geocodeLocation(input: string): Promise<LocationCoordinates> {
+  async geocodeLocation(input: string): Promise<GeocodeResponse> {
     const response = await axios.post(`${this.baseURL}/api/geocode`, {
       input_text: input
     });

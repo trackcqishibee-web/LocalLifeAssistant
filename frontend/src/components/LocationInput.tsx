@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MapPin, Loader2, Check, X } from 'lucide-react';
-import { apiClient, LocationCoordinates } from '../api/client';
+import { apiClient, LocationCoordinates, GeocodeResponse } from '../api/client';
 
 interface LocationInputProps {
   onLocationChange: (coordinates: LocationCoordinates | null) => void;
@@ -42,14 +42,13 @@ const LocationInput: React.FC<LocationInputProps> = ({
     setSuccess(false);
 
     try {
-      const response = await apiClient.geocodeLocation(inputValue.trim());
+      const response: GeocodeResponse = await apiClient.geocodeLocation(inputValue.trim());
 
       if (response.success && response.coordinates) {
         const locationData: LocationCoordinates = {
           latitude: response.coordinates.latitude,
           longitude: response.coordinates.longitude,
-          formatted_address: response.formatted_address || response.coordinates.formatted_address,
-          success: true
+          formatted_address: response.coordinates.formatted_address
         };
         setCurrentLocation(locationData);
         onLocationChange(locationData);
