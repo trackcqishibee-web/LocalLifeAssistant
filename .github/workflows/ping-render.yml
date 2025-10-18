@@ -14,4 +14,4 @@ jobs:
       - name: Ping Render App
         run: |
           echo "Pinging Render app at $(date)"
-          curl -s https://https://locomoco.top
+          curl -s https://locomoco.top
