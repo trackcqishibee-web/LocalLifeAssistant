@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -12,6 +12,16 @@ export interface LocationCoordinates {
   latitude: number;
   longitude: number;
   formatted_address: string;
+}
+
+export interface GeocodeResponse {
+  success: boolean;
+  coordinates: {
+    latitude: number;
+    longitude: number;
+    formatted_address: string;
+  } | null;
+  error_message: string | null;
 }
 
 export interface ChatRequest {
@@ -98,7 +108,7 @@ class APIClient {
     return response.data;
   }
 
-  async geocodeLocation(input: string): Promise<LocationCoordinates> {
+  async geocodeLocation(input: string): Promise<GeocodeResponse> {
     const response = await axios.post(`${this.baseURL}/api/geocode`, {
       input_text: input
     });
