@@ -63,7 +63,7 @@ pip install -r requirements.txt
 
 # Set up environment variables
 cp ../.env.example .env
-# Edit .env with your API keys
+# Edit .env with your OpenAI API key
 ```
 
 ### 3. Frontend Setup
@@ -78,14 +78,21 @@ npm install
 
 ### 4. Environment Configuration
 
-Create a `.env` file in the backend directory:
+Create a `.env` file in the project root directory (copy from `.env.example`):
 
 ```env
+# Required: OpenAI API Configuration
 OPENAI_API_KEY=your_openai_api_key_here
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-DEFAULT_LLM_PROVIDER=openai
-CHROMA_PERSIST_DIRECTORY=./chroma_db
+
+# Optional: Eventbrite API Configuration
+EVENTBRITE_API_KEY=your_eventbrite_api_key_here
+
+# Optional: Server Configuration
+PORT=8000
+HOST=0.0.0.0
 ```
+
+**Important**: You must set your OpenAI API key for the application to work!
 
 ## 🎯 Usage
 
@@ -93,6 +100,10 @@ CHROMA_PERSIST_DIRECTORY=./chroma_db
 
 1. **Start the Backend**:
    ```bash
+   # Option 1: Use the startup script (recommended)
+   python start_backend.py
+   
+   # Option 2: Manual start
    cd backend
    python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
