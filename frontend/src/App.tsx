@@ -91,7 +91,10 @@ const App: React.FC = () => {
     "What restaurants are good for a date night?",
     "Show me free events in Brooklyn",
     "I want to try some new cuisine",
-    "What networking events are happening?"
+    "What networking events are happening?",
+    "Find events in Los Angeles",
+    "Show me restaurants in Chicago",
+    "What's happening in Miami this weekend?"
   ];
 
   return (
