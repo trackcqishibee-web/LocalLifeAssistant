@@ -19,6 +19,7 @@ import uvicorn
 # Import our existing components
 from location_aware_crawler import LocationAwareEventbriteCrawler
 from location_aware_main import SmartCityMapper, extract_city_from_location
+import re
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -232,6 +233,91 @@ class CacheManager:
 # Initialize cache manager
 cache_manager = CacheManager()
 
+def extract_city_from_query_llm(query: str) -> Optional[str]:
+    """
+    Extract city name from user query using LLM.
+    Returns the city name if found, None otherwise.
+    """
+    try:
+        # Create a focused prompt for city extraction
+        prompt = f"""
+You are a location extraction assistant. Your task is to identify if the user's query mentions a specific US city or location.
+
+User query: "{query}"
+
+Instructions:
+1. Look for explicit city names, neighborhoods, or regions in the query
+2. Only return a city name if it's clearly mentioned
+3. If no specific location is mentioned, return "none"
+4. Return the city name in lowercase format
+5. For neighborhoods like "Brooklyn", "Manhattan", "Queens", return "new york"
+6. For regions like "Bay Area", return "san francisco"
+
+Examples:
+- "Show me free events in Brooklyn" → "new york"
+- "Find restaurants in Los Angeles" → "los angeles" 
+- "What's happening in Miami this weekend?" → "miami"
+- "Find me a chinese place to eat nearby" → "none"
+- "Show me events in Chicago" → "chicago"
+- "What restaurants are good for a date night?" → "none"
+
+Return only the city name or "none", nothing else.
+"""
+
+        # Call OpenAI API for city extraction
+        response = openai.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a precise location extraction assistant. Return only city names or 'none'."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=50,
+            temperature=0.1
+        )
+        
+        extracted_city = response.choices[0].message.content.strip().lower()
+        
+        # Validate the response
+        if extracted_city == "none" or not extracted_city:
+            logger.info(f"No city found in query (LLM): '{query}'")
+            return None
+        
+        # Map common variations to standard city names
+        city_mapping = {
+            'brooklyn': 'new york',
+            'manhattan': 'new york', 
+            'queens': 'new york',
+            'bronx': 'new york',
+            'staten island': 'new york',
+            'nyc': 'new york',
+            'la': 'los angeles',
+            'sf': 'san francisco',
+            'bay area': 'san francisco',
+            'dc': 'washington',
+            'washington dc': 'washington',
+            'vegas': 'las vegas',
+            'nola': 'new orleans',
+            'philly': 'philadelphia',
+            'chi': 'chicago'
+        }
+        
+        # Apply city mapping
+        final_city = city_mapping.get(extracted_city, extracted_city)
+        
+        logger.info(f"LLM extracted city '{final_city}' from query: '{query}'")
+        return final_city
+        
+    except Exception as e:
+        logger.error(f"LLM city extraction failed: {e}")
+        return None
+
+def extract_city_from_query(query: str) -> Optional[str]:
+    """
+    Extract city name from user query using LLM.
+    Returns the city name if found, None otherwise.
+    """
+    return extract_city_from_query_llm(query)
+
 # Routes
 @app.get("/health")
 async def health_check():
@@ -267,14 +353,25 @@ async def smart_cached_chat(request: ChatRequest):
     try:
         logger.info(f"Smart cached chat request: {request.message}")
         
-        # Extract city from location
-        location_dict = request.location.model_dump() if request.location else None
-        city = extract_city_from_location(location_dict)
-        if not city:
-            city = "new york"  # Default fallback
-            logger.info("No location provided, defaulting to New York")
+        # Step 1: Try to extract city from query first (highest priority)
+        query_city = extract_city_from_query(request.message)
         
-        logger.info(f"Using city: {city}")
+        # Step 2: Extract city from location (fallback)
+        location_dict = request.location.model_dump() if request.location else None
+        location_city = extract_city_from_location(location_dict)
+        
+        # Step 3: Determine which city to use
+        if query_city:
+            city = query_city
+            logger.info(f"Using city from query: {city}")
+        elif location_city:
+            city = location_city
+            logger.info(f"Using city from location: {city}")
+        else:
+            city = "new york"  # Default fallback
+            logger.info("No city found in query or location, defaulting to New York")
+        
+        logger.info(f"Final city decision: {city}")
         
         # Step 1: Try to get cached events
         cached_events = cache_manager.get_cached_events(city)
