@@ -53,14 +53,14 @@ class ChatResponse(BaseModel):
     recommendations: List[Dict[str, Any]] = []
     llm_provider_used: str
     cache_used: bool = False
-    cache_age_hours: float = 0.0
+    cache_age_hours: Optional[float] = None
 
 class GeocodeRequest(BaseModel):
     input_text: str
 
 class GeocodeResponse(BaseModel):
     success: bool
-    coordinates: Optional[Dict[str, Any]] = None
+    coordinates: Optional[LocationCoordinates] = None
     formatted_address: Optional[str] = None
     error_message: Optional[str] = None
 
@@ -72,34 +72,6 @@ city_mapper = SmartCityMapper()
 CACHE_DIR = "./event_cache"
 CACHE_TTL_HOURS = 6  # Cache events for 6 hours
 MAX_CACHE_SIZE_MB = 100  # Maximum cache size in MB
-
-# Pydantic models
-class LocationCoordinates(BaseModel):
-    latitude: float
-    longitude: float
-    formatted_address: str
-
-class ChatRequest(BaseModel):
-    message: str
-    conversation_history: List[Dict[str, Any]] = []
-    llm_provider: str = "openai"
-    location: Optional[LocationCoordinates] = None
-
-class ChatResponse(BaseModel):
-    message: str
-    recommendations: List[Dict[str, Any]]
-    llm_provider_used: str
-    cache_used: bool = False
-    cache_age_hours: Optional[float] = None
-
-class GeocodeRequest(BaseModel):
-    input_text: str
-
-class GeocodeResponse(BaseModel):
-    success: bool
-    coordinates: Optional[LocationCoordinates] = None
-    formatted_address: Optional[str] = None
-    error_message: Optional[str] = None
 
 class CacheManager:
     """Intelligent cache manager for city-based event storage"""
