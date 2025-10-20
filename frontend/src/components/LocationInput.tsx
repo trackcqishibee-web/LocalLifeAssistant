@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MapPin, Loader2, Check, X } from 'lucide-react';
-import { apiClient, LocationCoordinates, GeocodeResponse } from '../api/client';
+import { apiClient, LocationCoordinates } from '../api/client';
 
 interface LocationInputProps {
   onLocationChange: (coordinates: LocationCoordinates | null) => void;

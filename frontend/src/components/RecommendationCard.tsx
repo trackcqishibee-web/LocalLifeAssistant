@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapPin, Calendar, Star, ExternalLink, Users, Clock } from 'lucide-react';
+import { MapPin, Calendar, Star, ExternalLink, Clock } from 'lucide-react';
 
 interface RecommendationCardProps {
   recommendation: {
@@ -11,7 +11,7 @@ interface RecommendationCardProps {
 }
 
 const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation }) => {
-  const { type, data, relevance_score, explanation } = recommendation;
+  const { type, data, explanation } = recommendation;
 
   const formatDate = (dateString: string) => {
     try {
@@ -28,56 +28,6 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
       });
     } catch {
       return dateString || 'Date TBD';
-    }
-  };
-
-  const getPriceDisplay = () => {
-    if (type === 'event') {
-      // Check if the event is free
-      if (data.is_free) {
-        return 'Free';
-      }
-      
-      // Get the minimum price only
-      const minPrice = data.ticket_min_price;
-      
-      // If no price data, return TBD
-      if (!minPrice) {
-        return 'Price TBD';
-      }
-      
-      // If price is already "Free" (from backend formatting), return it
-      if (minPrice === 'Free') {
-        return 'Free';
-      }
-      
-      // If price is "0.00" or "0", return Free
-      if (minPrice === '0.00' || minPrice === '0') {
-        return 'Free';
-      }
-      
-      // Return only the minimum price (clean, no concatenation)
-      // Ensure we format the price properly to remove trailing zeros
-      const priceNum = parseFloat(minPrice);
-      
-      // Simple formatting - just use the original string if it's clean
-      if (minPrice === '16.74') {
-        return '$16.74';
-      }
-      
-      // Format the price to remove trailing zeros
-      let formattedPrice;
-      if (priceNum % 1 === 0) {
-        // Whole number - no decimal places
-        formattedPrice = priceNum.toString();
-      } else {
-        // Decimal number - remove trailing zeros
-        formattedPrice = priceNum.toFixed(2).replace(/\.?0+$/, '');
-      }
-      
-      return `$${formattedPrice}`;
-    } else {
-      return data.price_range || 'Price TBD';
     }
   };
 
