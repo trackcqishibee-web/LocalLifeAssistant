@@ -33,7 +33,7 @@ cd /opt/locallifeassistant
 
 # Clone repository
 echo "📥 Cloning repository..."
-git clone https://github.com/LijieTu/LocalLifeAssistant.git .
+git clone -b feature/llm-city-extraction https://github.com/LijieTu/LocalLifeAssistant.git .
 
 # Create production environment file
 echo "🔐 Setting up environment variables..."
