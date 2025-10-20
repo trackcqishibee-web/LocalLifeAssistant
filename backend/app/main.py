@@ -18,7 +18,8 @@ import uvicorn
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv('../.env')
+# Try multiple locations for flexibility (local dev vs Docker)
+load_dotenv('../.env') or load_dotenv('.env') or load_dotenv('/app/.env')
 
 # Initialize OpenAI client with API key from environment
 openai.api_key = os.getenv("OPENAI_API_KEY")
