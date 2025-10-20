@@ -249,20 +249,331 @@ curl -X POST http://localhost:8000/api/chat \
   -d '{"message": "Find me a jazz concert", "conversation_history": []}'
 ```
 
-## 🚀 Deployment
+## 🚀 Development & Deployment Guide
 
-### Docker Deployment
+### 🔧 **Development Workflow**
+
+#### **Making Product Logic Changes**
+
+1. **Backend Changes** (`backend/app/main.py`):
+   ```bash
+   # Edit the main application logic
+   nano backend/app/main.py
+   
+   # Test locally
+   python start_backend.py
+   ```
+
+2. **Frontend Changes** (`frontend/src/`):
+   ```bash
+   # Edit React components
+   nano frontend/src/components/YourComponent.tsx
+   
+   # Test locally
+   cd frontend
+   npm run dev
+   ```
+
+3. **API Changes**:
+   ```bash
+   # Add new endpoints in backend/app/main.py
+   # Update frontend API client in frontend/src/api/client.ts
+   ```
+
+#### **Testing Changes Locally**
+
 ```bash
-# Build and run with Docker Compose
-docker-compose up --build
+# Start backend
+python start_backend.py
+
+# Start frontend (in another terminal)
+cd frontend
+npm run dev
+
+# Test at http://localhost:3000
 ```
 
-### Production Considerations
-- Set up proper CORS origins
-- Use environment-specific configurations
-- Implement rate limiting
-- Add authentication if needed
-- Set up monitoring and logging
+### 🐳 **Docker Deployment (Production)**
+
+#### **Prerequisites**
+- DigitalOcean Droplet (or any VPS)
+- Domain name with Cloudflare DNS
+- SSH access to your server
+
+#### **Initial Server Setup**
+
+1. **Connect to your server**:
+   ```bash
+   ssh root@138.197.222.160
+   ```
+
+2. **Run the setup script**:
+   ```bash
+   wget https://raw.githubusercontent.com/YOUR_USERNAME/LocalLifeAssistant/feature/llm-city-extraction/deploy/docker-setup.sh
+   chmod +x docker-setup.sh
+   ./docker-setup.sh
+   ```
+
+#### **Deploying Changes**
+
+1. **Push your changes to GitHub**:
+   ```bash
+   git add .
+   git commit -m "Your changes description"
+   git push origin feature/llm-city-extraction
+   ```
+
+2. **Deploy to production**:
+   ```bash
+   # SSH into your server
+   ssh root@138.197.222.160
+   
+   # Navigate to the project
+   cd /opt/locallifeassistant
+   
+   # Pull latest changes
+   git pull origin feature/llm-city-extraction
+   
+   # Rebuild and deploy
+   cd deploy
+   docker-compose build --no-cache
+   docker-compose up -d
+   ```
+
+#### **Environment Configuration**
+
+1. **Update environment variables**:
+   ```bash
+   # On your server
+   cd /opt/locallifeassistant/deploy
+   nano .env
+   ```
+
+2. **Required environment variables**:
+   ```env
+   OPENAI_API_KEY=your_openai_api_key_here
+   ```
+
+#### **Monitoring Deployment**
+
+```bash
+# Check container status
+docker-compose ps
+
+# View logs
+docker-compose logs backend
+docker-compose logs frontend
+docker-compose logs nginx
+
+# Restart services if needed
+docker-compose restart backend
+```
+
+### 🌐 **Domain & SSL Setup**
+
+#### **Cloudflare Configuration**
+
+1. **Add DNS Records**:
+   - `A` record: `locomoco.lijietu.com` → `YOUR_DROPLET_IP`
+   - `A` record: `www.locomoco.lijietu.com` → `YOUR_DROPLET_IP`
+   - Enable **Proxy** (orange cloud) ✅
+
+2. **SSL Settings**:
+   - SSL/TLS encryption mode: **Full (strict)**
+   - Always Use HTTPS: **On**
+
+#### **Nginx Configuration**
+
+The application uses Nginx as a reverse proxy:
+- **Frontend**: `https://locomoco.lijietu.com/` → React app
+- **API**: `https://locomoco.lijietu.com/api/` → FastAPI backend
+
+### 🔄 **Common Deployment Scenarios**
+
+#### **Scenario 1: Adding New Features**
+
+```bash
+# 1. Develop locally
+# Edit your code...
+
+# 2. Test locally
+python start_backend.py
+cd frontend && npm run dev
+
+# 3. Commit and push
+git add .
+git commit -m "Add new feature: description"
+git push origin feature/llm-city-extraction
+
+# 4. Deploy to production
+ssh root@138.197.222.160
+cd /opt/locallifeassistant
+git pull origin feature/llm-city-extraction
+cd deploy
+docker-compose build --no-cache
+docker-compose up -d
+```
+
+#### **Scenario 2: Updating Dependencies**
+
+```bash
+# 1. Update requirements.txt or package.json
+# Edit backend/requirements.txt or frontend/package.json
+
+# 2. Deploy with rebuild
+cd deploy
+docker-compose build --no-cache
+docker-compose up -d
+```
+
+#### **Scenario 3: Environment Variable Changes**
+
+```bash
+# 1. Update .env file on server
+cd /opt/locallifeassistant/deploy
+nano .env
+
+# 2. Restart services
+docker-compose restart backend
+```
+
+#### **Scenario 4: Database/Cache Reset**
+
+```bash
+# Clear ChromaDB cache
+docker-compose down
+docker volume rm deploy_chroma_data
+docker-compose up -d
+```
+
+### 🛠️ **Troubleshooting Deployment**
+
+#### **Common Issues**
+
+1. **"Disconnected" Error**:
+   ```bash
+   # Check if API is accessible
+   curl https://locomoco.lijietu.com/api/health
+   
+   # Check Nginx logs
+   docker-compose logs nginx
+   ```
+
+2. **Build Failures**:
+   ```bash
+   # Check build logs
+   docker-compose build --no-cache
+   
+   # Check for syntax errors
+   docker-compose config
+   ```
+
+3. **Container Not Starting**:
+   ```bash
+   # Check container status
+   docker-compose ps
+   
+   # Check logs
+   docker-compose logs backend
+   ```
+
+#### **Useful Commands**
+
+```bash
+# View all containers
+docker ps -a
+
+# Restart specific service
+docker-compose restart backend
+
+# View real-time logs
+docker-compose logs -f backend
+
+# Access container shell
+docker exec -it locallifeassistant-backend bash
+
+# Check disk usage
+df -h
+
+# Check memory usage
+free -h
+```
+
+### 📊 **Production Monitoring**
+
+#### **Health Checks**
+
+```bash
+# Backend health
+curl https://locomoco.lijietu.com/api/health
+
+# Frontend accessibility
+curl https://locomoco.lijietu.com/
+
+# Direct backend (bypassing Nginx)
+curl http://138.197.222.160:8000/health
+```
+
+#### **Performance Monitoring**
+
+```bash
+# Check container resource usage
+docker stats
+
+# Check system resources
+htop
+```
+
+### 🔐 **Security Considerations**
+
+- **API Keys**: Store in environment variables, never in code
+- **CORS**: Configured for your domain only
+- **SSL**: Enabled via Cloudflare
+- **Firewall**: Only ports 80, 443, and 22 open
+- **Updates**: Regularly update Docker images and system packages
+
+### 📝 **Deployment Checklist**
+
+Before deploying to production:
+
+- [ ] Code tested locally
+- [ ] Environment variables configured
+- [ ] Domain DNS pointing to server
+- [ ] SSL certificate active
+- [ ] CORS origins updated
+- [ ] API keys valid and not expired
+- [ ] Database/cache cleared if needed
+- [ ] Backup created (if applicable)
+
+### 🚨 **Emergency Procedures**
+
+#### **Rollback Deployment**
+
+```bash
+# Revert to previous commit
+git log --oneline
+git reset --hard PREVIOUS_COMMIT_HASH
+git push origin feature/llm-city-extraction --force
+
+# Redeploy
+cd deploy
+docker-compose build --no-cache
+docker-compose up -d
+```
+
+#### **Service Recovery**
+
+```bash
+# Restart all services
+docker-compose restart
+
+# If containers won't start
+docker-compose down
+docker-compose up -d
+
+# If still failing, check logs
+docker-compose logs
+```
 
 ## 🤝 Contributing
 
