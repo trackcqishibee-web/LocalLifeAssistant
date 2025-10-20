@@ -108,7 +108,7 @@ class APIClient {
     return response.data;
   }
 
-  async geocodeLocation(input: string): Promise<GeocodeResponse> {
+  async geocodeLocation(input: string): Promise<LocationCoordinates> {
     const response = await axios.post(`${this.baseURL}/api/geocode`, {
       input_text: input
     });
