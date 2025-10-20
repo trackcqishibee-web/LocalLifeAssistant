@@ -42,9 +42,9 @@ const LocationInput: React.FC<LocationInputProps> = ({
     setSuccess(false);
 
     try {
-      const response: LocationCoordinates = await apiClient.geocodeLocation(inputValue.trim());
+      const response = await apiClient.geocodeLocation(inputValue.trim());
 
-      // The API client now returns coordinates directly
+      // The API client returns coordinates directly when successful
       setCurrentLocation(response);
       onLocationChange(response);
       
