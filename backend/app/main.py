@@ -44,7 +44,11 @@ app = FastAPI(title="Smart Cached RAG Local Life Assistant", version="2.1.0")
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:3003", "http://localhost:3004", "http://localhost:3005"],  # Frontend URLs
+    allow_origins=[
+        "http://localhost:3000", "http://localhost:3001", "http://localhost:3002", 
+        "http://localhost:3003", "http://localhost:3004", "http://localhost:3005",
+        "https://locomoco.lijietu.com", "https://www.locomoco.lijietu.com"
+    ],  # Frontend URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
