@@ -9,7 +9,6 @@ const App: React.FC = () => {
   const [llmProvider, setLlmProvider] = useState('openai');
   const [showSettings, setShowSettings] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
-  const [stats, setStats] = useState<any>(null);
   const [userLocation, setUserLocation] = useState<LocationCoordinates | null>(null);
 
   const availableProviders = [
@@ -20,7 +19,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     checkConnection();
-    loadStats();
   }, []);
 
   const checkConnection = async () => {
@@ -30,15 +28,6 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('Connection failed:', error);
       setIsConnected(false);
-    }
-  };
-
-  const loadStats = async () => {
-    try {
-      const statsData = await apiClient.getStats();
-      setStats(statsData);
-    } catch (error) {
-      console.error('Failed to load stats:', error);
     }
   };
 
@@ -56,6 +45,47 @@ const App: React.FC = () => {
     setUserLocation(location);
   }, []);
 
+  const handleExampleQuery = async (query: string) => {
+    const userMessage: ChatMessage = {
+      role: 'user',
+      content: query,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Add user message to chat
+    handleNewMessage(userMessage);
+    
+    // Create a temporary chat interface to send the request
+    try {
+      const request = {
+        message: query,
+        conversation_history: conversationHistory,
+        llm_provider: llmProvider,
+        location: userLocation
+      };
+      
+      const response = await apiClient.chat(request);
+      
+      const assistantMessage = {
+        role: 'assistant' as const,
+        content: response.message,
+        timestamp: new Date().toISOString(),
+        recommendations: response.recommendations || []
+      } as any;
+      
+      handleNewMessage(assistantMessage);
+      handleRecommendations(response.recommendations || []);
+    } catch (error) {
+      console.error('Error sending example query:', error);
+      const errorMessage: ChatMessage = {
+        role: 'assistant',
+        content: 'Sorry, I encountered an error. Please try again.',
+        timestamp: new Date().toISOString()
+      };
+      handleNewMessage(errorMessage);
+    }
+  };
+
   const clearConversation = () => {
     setConversationHistory([]);
   };
@@ -65,7 +95,10 @@ const App: React.FC = () => {
     "What restaurants are good for a date night?",
     "Show me free events in Brooklyn",
     "I want to try some new cuisine",
-    "What networking events are happening?"
+    "What networking events are happening?",
+    "Find events in Los Angeles",
+    "Show me restaurants in Chicago",
+    "What's happening in Miami this weekend?"
   ];
 
   return (
@@ -125,22 +158,6 @@ const App: React.FC = () => {
                 </select>
               </div>
               
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Database Stats
-                </label>
-                <div className="text-sm text-gray-600">
-                  {stats ? (
-                    <>
-                      <div>Events: {stats.events_count}</div>
-                      <div>Restaurants: {stats.restaurants_count}</div>
-                    </>
-                  ) : (
-                    <div>Loading...</div>
-                  )}
-                </div>
-              </div>
-              
               <div className="flex items-end">
                 <button
                   onClick={clearConversation}
@@ -171,6 +188,7 @@ const App: React.FC = () => {
                 onRecommendations={handleRecommendations}
                 llmProvider={llmProvider}
                 conversationHistory={conversationHistory}
+                userLocation={userLocation}
               />
             </div>
           </div>
@@ -190,43 +208,13 @@ const App: React.FC = () => {
                 {exampleQueries.map((query, index) => (
                   <button
                     key={index}
-                    onClick={() => {
-                      // Simulate clicking on example query
-                      const userMessage: ChatMessage = {
-                        role: 'user',
-                        content: query,
-                        timestamp: new Date().toISOString()
-                      };
-                      handleNewMessage(userMessage);
-                    }}
+                    onClick={() => handleExampleQuery(query)}
                     className="w-full text-left p-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
                   >
                     "{query}"
                   </button>
                 ))}
               </div>
-            </div>
-
-            {/* Stats Display */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Database Stats</h3>
-              {stats ? (
-                <div className="text-sm text-gray-600 space-y-2">
-                  <div className="flex justify-between">
-                    <span>Events:</span>
-                    <span className="font-medium">{stats.events_count}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Restaurants:</span>
-                    <span className="font-medium">{stats.restaurants_count}</span>
-                  </div>
-                  <div className="text-xs text-gray-500 mt-2">
-                    Last updated: {stats.cache_timestamp ? new Date(stats.cache_timestamp).toLocaleTimeString() : 'Unknown'}
-                  </div>
-                </div>
-              ) : (
-                <div className="text-sm text-gray-500">Loading stats...</div>
-              )}
             </div>
           </div>
         </div>

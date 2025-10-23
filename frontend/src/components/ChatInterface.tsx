@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2 } from 'lucide-react';
-import { ChatMessage, apiClient, ChatRequest } from '../api/client';
+import { Send, Loader2, User } from 'lucide-react';
+import { ChatMessage, apiClient, ChatRequest, LocationCoordinates } from '../api/client';
 import RecommendationCard from './RecommendationCard';
 
 interface ChatMessageWithRecommendations extends ChatMessage {
@@ -12,13 +12,15 @@ interface ChatInterfaceProps {
   onRecommendations: (recommendations: any[]) => void;
   llmProvider: string;
   conversationHistory: ChatMessage[];
+  userLocation: LocationCoordinates | null;
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onNewMessage,
   onRecommendations,
   llmProvider,
-  conversationHistory
+  conversationHistory,
+  userLocation
 }) => {
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -39,7 +41,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       const existing = messagesWithRecommendations.find(m => m.timestamp === msg.timestamp);
       return {
         ...msg,
-        recommendations: existing?.recommendations || []
+        recommendations: existing?.recommendations || (msg as any).recommendations || []
       };
     });
     setMessagesWithRecommendations(syncedMessages);
@@ -65,7 +67,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       const request: ChatRequest = {
         message: message.trim(),
         conversation_history: conversationHistory,
-        llm_provider: llmProvider
+        llm_provider: llmProvider,
+        location: userLocation
       };
 
       const response = await apiClient.chat(request);
@@ -108,8 +111,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <div className="flex items-start space-x-2">
               <div className="flex-shrink-0">
                 {msg.role === 'user' ? (
-                  <div className="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                    U
+                  <div className="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center text-white">
+                    <User className="w-4 h-4" />
                   </div>
                 ) : (
                   <div className="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
