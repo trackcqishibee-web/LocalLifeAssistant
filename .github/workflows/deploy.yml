@@ -9,14 +9,6 @@ on:
         description: 'Domain name (e.g., myapp.com)'
         required: true
         default: 'your-domain.com'
-      deploy_mode:
-        description: 'Deployment mode'
-        required: true
-        default: 'traditional'
-        type: choice
-        options:
-        - traditional
-        - docker
 
 jobs:
   deploy:
@@ -50,7 +42,6 @@ jobs:
           export GITHUB_BRANCH="main"
           export OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
           export EMAIL="admin@$DOMAIN_NAME"
-          export DEPLOY_MODE="${{ github.event.inputs.deploy_mode || 'traditional' }}"
           
           # Run automated deployment
           ./auto-deploy.sh
@@ -91,5 +82,4 @@ jobs:
       run: |
         echo "🎉 Deployment completed successfully!"
         echo "🌐 Application URL: https://${{ github.event.inputs.domain || 'your-domain.com' }}"
-        echo "🔧 Deployment mode: ${{ github.event.inputs.deploy_mode || 'traditional' }}"
         echo "📝 Server IP: ${{ secrets.SERVER_IP }}"

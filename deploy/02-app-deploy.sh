@@ -30,13 +30,8 @@ cd ../frontend
 sudo -u appuser npm install
 sudo -u appuser npm run build
 
-# Create production environment file
-echo "🔐 Creating production environment file..."
-cd ..
-sudo -u appuser cp .env.example .env.production
-
-echo "✅ Production environment file created"
-echo "📝 Environment variables will be configured automatically in the next step"
+# Environment file will be created by configure_environment() function
+echo "📝 Environment file will be created automatically in the next step"
 
 # Create systemd service for backend
 echo "⚙️ Creating systemd service for backend..."
@@ -50,7 +45,7 @@ Type=simple
 User=appuser
 WorkingDirectory=/opt/locallifeassistant/backend
 Environment=PATH=/opt/locallifeassistant/backend/venv/bin
-EnvironmentFile=/opt/locallifeassistant/.env.production
+EnvironmentFile=/opt/locallifeassistant/.env
 ExecStart=/opt/locallifeassistant/backend/venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=3

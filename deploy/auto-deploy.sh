@@ -36,7 +36,7 @@ GITHUB_REPO=${GITHUB_REPO:-"wjshku/LocalLifeAssistant"}
 GITHUB_BRANCH=${GITHUB_BRANCH:-"main"}
 OPENAI_API_KEY=${OPENAI_API_KEY}
 EMAIL=${EMAIL:-"admin@$DOMAIN_NAME"}
-DEPLOY_MODE=${DEPLOY_MODE:-"traditional"}  # traditional or docker
+DEPLOY_MODE=${DEPLOY_MODE:-"traditional"}
 
 print_step "🚀 Starting automated deployment..."
 echo "📝 Configuration:"
@@ -72,99 +72,88 @@ check_prerequisites() {
     print_success "Prerequisites check passed"
 }
 
-# Setup server (traditional deployment)
+# Setup server
 setup_server() {
-    if [ "$DEPLOY_MODE" = "traditional" ]; then
-        print_step "Setting up server (traditional mode)..."
-        chmod +x 01-server-setup.sh
-        ./01-server-setup.sh
-        print_success "Server setup completed"
-    fi
+    print_step "Setting up server..."
+    chmod +x 01-server-setup.sh
+    ./01-server-setup.sh
+    print_success "Server setup completed"
 }
 
 # Deploy application
 deploy_application() {
-    if [ "$DEPLOY_MODE" = "traditional" ]; then
-        print_step "Deploying application (traditional mode)..."
-        chmod +x 02-app-deploy.sh
-        ./02-app-deploy.sh
-        print_success "Application deployment completed"
-    elif [ "$DEPLOY_MODE" = "docker" ]; then
-        print_step "Deploying application (Docker mode)..."
-        chmod +x docker/docker-deploy.sh
-        ./docker/docker-deploy.sh
-        print_success "Docker deployment completed"
-    fi
+    print_step "Deploying application..."
+    chmod +x 02-app-deploy.sh
+    ./02-app-deploy.sh
+    print_success "Application deployment completed"
 }
 
 # Configure environment variables
 configure_environment() {
-    if [ "$DEPLOY_MODE" = "traditional" ]; then
-        print_step "Configuring environment variables..."
+    print_step "Configuring environment variables..."
 
-        # Path to production environment file
-        ENV_FILE="/opt/locallifeassistant/.env.production"
+        # Since environment variables are already set globally by GitHub Actions,
+        # we just need to create a .env file with the correct values for systemd
+        ENV_FILE="/opt/locallifeassistant/.env"
 
-        # Set OpenAI API Key
-        if [ -n "$OPENAI_API_KEY" ]; then
-            print_step "Setting OpenAI API key..."
-            sudo -u appuser sed -i "s|OPENAI_API_KEY=.*|OPENAI_API_KEY=$OPENAI_API_KEY|" "$ENV_FILE"
-            print_success "OpenAI API key configured"
-        else
-            print_warning "OPENAI_API_KEY not set, please configure manually"
-        fi
+        print_step "Creating .env file with global environment variables..."
 
-        # Set Domain Name (for CORS)
-        if [ -n "$DOMAIN_NAME" ]; then
-            print_step "Setting domain name for CORS..."
-            sudo -u appuser sed -i "s|DOMAIN_NAME=.*|DOMAIN_NAME=$DOMAIN_NAME|" "$ENV_FILE"
-            print_success "Domain name configured for CORS"
-        fi
+        # Create .env file with actual values (no template needed since vars are global)
+        sudo -u appuser bash -c "cat > '$ENV_FILE' << EOF
+# OpenAI API Configuration
+OPENAI_API_KEY=$OPENAI_API_KEY
+
+# Server Configuration
+PORT=8000
+HOST=0.0.0.0
+
+# Frontend Configuration
+VITE_API_BASE_URL=https://$DOMAIN_NAME
+
+# Domain Configuration (for CORS auto-generation)
+DOMAIN_NAME=$DOMAIN_NAME
+
+# ChromaDB Configuration
+CHROMA_PERSIST_DIRECTORY=/opt/locallifeassistant/backend/chroma_db
+
+# Logging Configuration
+LOG_LEVEL=INFO
+EOF"
+
+        print_success "Environment variables saved to .env file"
 
         # Verify configuration
         if sudo -u appuser grep -q "OPENAI_API_KEY=sk-" "$ENV_FILE" 2>/dev/null; then
-            print_success "Environment variables configured successfully"
+            print_success "Environment configuration completed successfully"
         else
-            print_warning "Environment variables may need manual configuration"
+            print_warning "Environment configuration may have issues"
         fi
-    fi
 }
 
 # Configure web server
 configure_web_server() {
-    if [ "$DEPLOY_MODE" = "traditional" ]; then
-        print_step "Configuring Nginx..."
-        chmod +x 03-nginx-setup.sh
-        ./03-nginx-setup.sh "$DOMAIN_NAME"
-        print_success "Nginx configuration completed"
-    fi
+    print_step "Configuring Nginx..."
+    chmod +x 03-nginx-setup.sh
+    ./03-nginx-setup.sh "$DOMAIN_NAME"
+    print_success "Nginx configuration completed"
 }
 
 # Setup SSL certificates
 setup_ssl_certificates() {
-    if [ "$DEPLOY_MODE" = "traditional" ]; then
-        print_step "Setting up SSL certificates..."
-        chmod +x 04-ssl-setup.sh
-        ./04-ssl-setup.sh
-        print_success "SSL certificates configured"
-    fi
+    print_step "Setting up SSL certificates..."
+    chmod +x 04-ssl-setup.sh
+    ./04-ssl-setup.sh
+    print_success "SSL certificates configured"
 }
 
 # Start services
 start_services() {
     print_step "Starting services..."
-    
-    if [ "$DEPLOY_MODE" = "traditional" ]; then
-        sudo systemctl start locallifeassistant-backend
-        sudo systemctl enable locallifeassistant-backend
-        sudo systemctl start nginx
-        sudo systemctl enable nginx
-        print_success "Traditional services started"
-    elif [ "$DEPLOY_MODE" = "docker" ]; then
-        cd /opt/locallifeassistant
-        docker-compose up -d
-        print_success "Docker services started"
-    fi
+    sudo systemctl start locallifeassistant-backend
+    sudo systemctl enable locallifeassistant-backend
+    sudo systemctl start nginx
+    sudo systemctl enable nginx
+    print_success "Services started"
 }
 
 # Health check
@@ -195,22 +184,13 @@ show_summary() {
     echo ""
     echo "📝 Deployment Summary:"
     echo "   Domain: https://$DOMAIN_NAME"
-    echo "   Mode: $DEPLOY_MODE"
     echo "   Backend: http://localhost:8000"
     echo ""
     echo "🔧 Management Commands:"
-    
-    if [ "$DEPLOY_MODE" = "traditional" ]; then
-        echo "   Backend status: sudo systemctl status locallifeassistant-backend"
-        echo "   Backend logs: sudo journalctl -u locallifeassistant-backend -f"
-        echo "   Nginx status: sudo systemctl status nginx"
-        echo "   Restart backend: sudo systemctl restart locallifeassistant-backend"
-    elif [ "$DEPLOY_MODE" = "docker" ]; then
-        echo "   Docker status: docker-compose ps"
-        echo "   Docker logs: docker-compose logs -f"
-        echo "   Restart services: docker-compose restart"
-        echo "   Stop services: docker-compose down"
-    fi
+    echo "   Backend status: sudo systemctl status locallifeassistant-backend"
+    echo "   Backend logs: sudo journalctl -u locallifeassistant-backend -f"
+    echo "   Nginx status: sudo systemctl status nginx"
+    echo "   Restart backend: sudo systemctl restart locallifeassistant-backend"
     
     echo ""
     echo "📊 Monitoring:"
