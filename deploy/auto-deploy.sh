@@ -97,6 +97,39 @@ deploy_application() {
     fi
 }
 
+# Configure environment variables
+configure_environment() {
+    if [ "$DEPLOY_MODE" = "traditional" ]; then
+        print_step "Configuring environment variables..."
+
+        # Path to production environment file
+        ENV_FILE="/opt/locallifeassistant/.env.production"
+
+        # Set OpenAI API Key
+        if [ -n "$OPENAI_API_KEY" ]; then
+            print_step "Setting OpenAI API key..."
+            sudo -u appuser sed -i "s|OPENAI_API_KEY=.*|OPENAI_API_KEY=$OPENAI_API_KEY|" "$ENV_FILE"
+            print_success "OpenAI API key configured"
+        else
+            print_warning "OPENAI_API_KEY not set, please configure manually"
+        fi
+
+        # Set Domain Name (for CORS)
+        if [ -n "$DOMAIN_NAME" ]; then
+            print_step "Setting domain name for CORS..."
+            sudo -u appuser sed -i "s|DOMAIN_NAME=.*|DOMAIN_NAME=$DOMAIN_NAME|" "$ENV_FILE"
+            print_success "Domain name configured for CORS"
+        fi
+
+        # Verify configuration
+        if sudo -u appuser grep -q "OPENAI_API_KEY=sk-" "$ENV_FILE" 2>/dev/null; then
+            print_success "Environment variables configured successfully"
+        else
+            print_warning "Environment variables may need manual configuration"
+        fi
+    fi
+}
+
 # Configure web server
 configure_web_server() {
     if [ "$DEPLOY_MODE" = "traditional" ]; then
@@ -192,6 +225,7 @@ main() {
     check_prerequisites
     setup_server
     deploy_application
+    configure_environment
     configure_web_server
     setup_ssl_certificates
     start_services
