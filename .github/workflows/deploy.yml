@@ -18,12 +18,19 @@ jobs:
         chmod 600 ~/.ssh/id_rsa
         ssh-keyscan -H "${{ secrets.SERVER_IP }}" >> ~/.ssh/known_hosts
     
-    - name: 📥 Download deployment script
+    - name: 📥 Download deployment scripts
       run: |
         ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
           cd /tmp
+          # Download all deployment scripts
           wget -q https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/auto-deploy.sh
-          chmod +x auto-deploy.sh
+          wget -q https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/01-server-setup.sh
+          wget -q https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/02-app-deploy.sh
+          wget -q https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/03-nginx-setup.sh
+          wget -q https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/04-ssl-setup.sh
+
+          # Make all scripts executable
+          chmod +x *.sh
         EOF
     
     - name: 🚀 Deploy application
