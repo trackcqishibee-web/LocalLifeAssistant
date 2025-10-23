@@ -4,11 +4,6 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
-    inputs:
-      domain:
-        description: 'Domain name (e.g., myapp.com)'
-        required: true
-        default: 'your-domain.com'
 
 jobs:
   deploy:
@@ -23,23 +18,34 @@ jobs:
         chmod 600 ~/.ssh/id_rsa
         ssh-keyscan -H "${{ secrets.SERVER_IP }}" >> ~/.ssh/known_hosts
     
-    - name: 📥 Download deployment script
+    - name: 📥 Download deployment scripts
       run: |
-        ssh -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} << 'EOF'
+        ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
           cd /tmp
-          wget -q https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/auto-deploy.sh
-          chmod +x auto-deploy.sh
+          # Clean up any existing deployment scripts to avoid cache issues
+          rm -f auto-deploy.sh* 01-server-setup.sh* 02-app-deploy.sh* 03-nginx-setup.sh* 04-ssl-setup.sh* reboot-recovery.sh*
+          
+          # Download all deployment scripts (fresh copy with cache busting)
+          wget -q -O auto-deploy.sh "https://raw.githubusercontent.com/${{ github.repository }}/main/deploy/auto-deploy.sh?t=$(date +%s)"
+          wget -q -O 01-server-setup.sh "https://raw.githubusercontent.com/${{ github.repository }}/main/deploy/01-server-setup.sh?t=$(date +%s)"
+          wget -q -O 02-app-deploy.sh "https://raw.githubusercontent.com/${{ github.repository }}/main/deploy/02-app-deploy.sh?t=$(date +%s)"
+          wget -q -O 03-nginx-setup.sh "https://raw.githubusercontent.com/${{ github.repository }}/main/deploy/03-nginx-setup.sh?t=$(date +%s)"
+          wget -q -O 04-ssl-setup.sh "https://raw.githubusercontent.com/${{ github.repository }}/main/deploy/04-ssl-setup.sh?t=$(date +%s)"
+          wget -q -O reboot-recovery.sh "https://raw.githubusercontent.com/${{ github.repository }}/main/deploy/reboot-recovery.sh?t=$(date +%s)"
+
+          # Make all scripts executable
+          chmod +x *.sh
         EOF
     
     - name: 🚀 Deploy application
       run: |
-        ssh -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} << 'EOF'
+        ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
           cd /tmp
-          
+
           # Set environment variables
-          export DOMAIN_NAME="${{ github.event.inputs.domain || 'your-domain.com' }}"
-          export GITHUB_REPO="wjshku/LocalLifeAssistant"
-          export GITHUB_BRANCH="main"
+          export DOMAIN_NAME="${{ secrets.DOMAIN_NAME || 'your-domain.com' }}"
+          export GITHUB_REPO="${{ vars.DEPLOY_GITHUB_REPO || 'wjshku/LocalLifeAssistant' }}"
+          export GITHUB_BRANCH="${{ vars.DEPLOY_GITHUB_BRANCH || 'main' }}"
           export OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
           export EMAIL="admin@$DOMAIN_NAME"
           
@@ -49,7 +55,7 @@ jobs:
     
     - name: 🔍 Health check
       run: |
-        ssh -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} << 'EOF'
+        ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
           echo "🔍 Performing post-deployment health check..."
           
           # Check if services are running
@@ -81,5 +87,5 @@ jobs:
     - name: 📊 Deployment summary
       run: |
         echo "🎉 Deployment completed successfully!"
-        echo "🌐 Application URL: https://${{ github.event.inputs.domain || 'your-domain.com' }}"
+        echo "🌐 Application URL: https://${{ secrets.DOMAIN_NAME || 'your-domain.com' }}"
         echo "📝 Server IP: ${{ secrets.SERVER_IP }}"

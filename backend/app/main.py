@@ -13,10 +13,10 @@ from pydantic import BaseModel
 import uvicorn
 from dotenv import load_dotenv
 
-from event_service import EventbriteCrawler
-from cache_manager import CacheManager
-from geocoding import GeocodingService, GeocodeRequest, GeocodeResponse, LocationCoordinates
-from search_service import SearchService
+from .event_service import EventbriteCrawler
+from .cache_manager import CacheManager
+from .geocoding import GeocodingService, GeocodeRequest, GeocodeResponse, LocationCoordinates
+from .search_service import SearchService
 
 # Load environment variables from .env file
 load_dotenv('../.env') or load_dotenv('.env') or load_dotenv('/app/.env')

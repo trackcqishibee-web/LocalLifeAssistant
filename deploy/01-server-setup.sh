@@ -38,21 +38,61 @@ sudo apt install -y certbot python3-certbot-nginx
 echo "⚙️ Installing PM2..."
 sudo npm install -g pm2
 
-# Create application user
+# Create application user (robust, idempotent version)
 echo "👤 Creating application user..."
-sudo useradd -m -s /bin/bash appuser
-sudo usermod -aG sudo appuser
+# Temporarily disable exit on error for user creation
+set +e
+# Try to create user, capture exit code
+sudo useradd -m -s /bin/bash appuser 2>/dev/null
+USERADD_EXIT=$?
+set -e
 
-# Create application directory
+if [ $USERADD_EXIT -eq 0 ]; then
+    # User was created successfully
+    sudo usermod -aG sudo appuser
+    echo "✅ Application user created and added to sudo group"
+elif [ $USERADD_EXIT -eq 9 ]; then
+    # User already exists (exit code 9)
+    if ! getent group sudo | grep -q ":appuser\|,appuser"; then
+        sudo usermod -aG sudo appuser
+        echo "✅ Added existing user to sudo group"
+    else
+        echo "ℹ️  Application user already exists and is in sudo group"
+    fi
+else
+    # Unexpected error
+    echo "❌ Unexpected error creating user (exit code: $USERADD_EXIT)"
+    echo "   Attempting to continue with existing user if available..."
+    if getent passwd appuser > /dev/null 2>&1; then
+        echo "ℹ️  Found existing appuser, continuing..."
+    else
+        echo "⚠️  No appuser found, some operations may fail"
+    fi
+fi
+
+# Create application directory (preserve virtual environments)
 echo "📁 Creating application directory..."
-sudo mkdir -p /opt/locallifeassistant
+# Create directory if it doesn't exist
+if [ ! -d "/opt/locallifeassistant" ]; then
+    sudo mkdir -p /opt/locallifeassistant
+    echo "✅ Application directory created"
+else
+    echo "ℹ️  Application directory already exists"
+fi
+# Ensure correct ownership
 sudo chown appuser:appuser /opt/locallifeassistant
+echo "✅ Application directory ownership set to appuser:appuser"
 
 # Configure firewall
 echo "🔥 Configuring firewall..."
 sudo ufw allow OpenSSH
 sudo ufw allow 'Nginx Full'
-sudo ufw --force enable
+if sudo ufw status | grep -q "Status: inactive"; then
+    sudo ufw --force enable
+    echo "✅ Firewall enabled"
+else
+    echo "ℹ️  Firewall already enabled"
+fi
 
 echo "✅ Basic setup complete!"
 echo "📝 Next steps:"

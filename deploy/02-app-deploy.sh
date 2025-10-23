@@ -10,17 +10,47 @@ echo "🚀 Deploying Local Life Assistant application..."
 # Navigate to application directory
 cd /opt/locallifeassistant
 
-# Clone repository (replace with your actual repository URL)
-echo "📥 Cloning repository..."
-sudo -u appuser git clone https://github.com/LijieTu/LocalLifeAssistant.git .
+# Clone or update repository (handle repo changes and preserve venv)
+echo "📥 Cloning/updating repository..."
+if [ -d ".git" ]; then
+    # Check if remote URL matches
+    CURRENT_REPO=$(sudo -u appuser git remote get-url origin)
+    EXPECTED_REPO="https://github.com/${GITHUB_REPO}.git"
+    
+    if [ "$CURRENT_REPO" = "$EXPECTED_REPO" ]; then
+        # Same repo, update it
+        echo "ℹ️  Repository exists, updating..."
+        sudo -u appuser git fetch origin
+        sudo -u appuser git reset --hard origin/main
+        echo "✅ Repository updated"
+    else
+        # Different repo, clean code but preserve venv
+        echo "ℹ️  Repository URL changed, cleaning and re-cloning..."
+        sudo -u appuser find . -maxdepth 1 -type f -delete
+        sudo -u appuser find . -maxdepth 1 -type d ! -name "." ! -name "venv" ! -name "__pycache__" -exec rm -rf {} +
+        sudo -u appuser git clone https://github.com/${GITHUB_REPO}.git .
+        echo "✅ Repository cloned"
+    fi
+else
+    # No repository, clone it
+    echo "ℹ️  No repository found, cloning..."
+    sudo -u appuser git clone https://github.com/${GITHUB_REPO}.git .
+    echo "✅ Repository cloned"
+fi
 
-# Switch to main branch
+# Ensure we're on main branch
 sudo -u appuser git checkout main
 
 # Set up backend
 echo "🐍 Setting up backend..."
 cd backend
-sudo -u appuser python3.11 -m venv venv
+# Create virtual environment if it doesn't exist
+if [ ! -d "venv" ]; then
+    sudo -u appuser python3.11 -m venv venv
+    echo "✅ Virtual environment created"
+else
+    echo "ℹ️  Virtual environment already exists"
+fi
 sudo -u appuser ./venv/bin/pip install --upgrade pip
 sudo -u appuser ./venv/bin/pip install -r requirements.txt
 
