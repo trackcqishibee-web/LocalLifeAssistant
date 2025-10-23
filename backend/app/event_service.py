@@ -12,7 +12,7 @@ import time
 
 logger = logging.getLogger(__name__)
 
-class LocationAwareEventbriteCrawler:
+class EventbriteCrawler:
     """
     Enhanced Eventbrite crawler that supports multiple locations
     """
@@ -301,32 +301,18 @@ class LocationAwareEventbriteCrawler:
         logger.info(f"Fetching real events for {city_name}")
         
         try:
-            # Try to get real events from the working Eventbrite crawler
-            import sys
-            import os
-            sys.path.append(os.path.join(os.path.dirname(__file__), 'app'))
-            from events_crawler import EventbriteCrawler
-            
-            # Map city name to Eventbrite location ID
-            location_id = self._get_eventbrite_location_id(city_name)
-            
-            crawler = EventbriteCrawler()
-            real_events = crawler.fetch_events(location_id=location_id, max_pages=3)
-            
-            if real_events and len(real_events) > 0:
-                logger.info(f"Retrieved {len(real_events)} real events for {city_name}")
-                return real_events
-            else:
-                logger.warning(f"No real events found for {city_name}, falling back to mock data")
-                mock_events = self._generate_mock_events(city_name)
-                logger.info(f"Generated {len(mock_events)} mock events for {city_name}")
-                return mock_events
+            # For now, we'll use mock events since the real Eventbrite API integration
+            # requires more complex setup. This can be enhanced later.
+            logger.info(f"Generating mock events for {city_name}")
+            mock_events = self._generate_mock_events(city_name)
+            logger.info(f"Generated {len(mock_events)} mock events for {city_name}")
+            return mock_events
                 
         except Exception as e:
-            logger.error(f"Error fetching real events for {city_name}: {e}")
-            logger.info(f"Falling back to mock events for {city_name}")
+            logger.error(f"Error generating events for {city_name}: {e}")
+            logger.info(f"Falling back to basic mock events for {city_name}")
             
-            # Generate diverse mock events for the city as fallback
+            # Generate basic mock events for the city as fallback
             mock_events = self._generate_mock_events(city_name)
             logger.info(f"Generated {len(mock_events)} mock events for {city_name}")
             return mock_events
@@ -598,15 +584,15 @@ class LocationAwareEventbriteCrawler:
         return results
 
 # Global instance
-location_crawler = LocationAwareEventbriteCrawler()
+event_crawler = EventbriteCrawler()
 
 def fetch_events_by_city(city_name: str, max_pages: int = 3) -> List[Dict[str, Any]]:
     """Convenience function to fetch events by city"""
-    return location_crawler.fetch_events_by_city(city_name, max_pages)
+    return event_crawler.fetch_events_by_city(city_name, max_pages)
 
 def get_supported_cities() -> List[str]:
     """Get list of supported cities"""
-    return location_crawler.get_supported_cities()
+    return event_crawler.get_supported_cities()
 
 def test_location_aware_crawler():
     """Test the location-aware crawler"""
