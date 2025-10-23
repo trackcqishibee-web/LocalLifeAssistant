@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MapPin, Loader2, Check, X } from 'lucide-react';
-import { apiClient, LocationCoordinates, GeocodeResponse } from '../api/client';
+import { apiClient, LocationCoordinates } from '../api/client';
 
 interface LocationInputProps {
   onLocationChange: (coordinates: LocationCoordinates | null) => void;
@@ -42,28 +42,20 @@ const LocationInput: React.FC<LocationInputProps> = ({
     setSuccess(false);
 
     try {
-      const response: GeocodeResponse = await apiClient.geocodeLocation(inputValue.trim());
+      const response: LocationCoordinates = await apiClient.geocodeLocation(inputValue.trim());
 
-      if (response.success && response.coordinates) {
-        const locationData: LocationCoordinates = {
-          latitude: response.coordinates.latitude,
-          longitude: response.coordinates.longitude,
-          formatted_address: response.coordinates.formatted_address
-        };
-        setCurrentLocation(locationData);
-        onLocationChange(locationData);
-        
-        // Save to localStorage
-        localStorage.setItem('userLocation', JSON.stringify(locationData));
-        
-        setSuccess(true);
-        setInputValue('');
-        
-        // Clear success message after 2 seconds
-        setTimeout(() => setSuccess(false), 2000);
-      } else {
-        setError(response.error_message || 'Failed to geocode location');
-      }
+      // The API client returns coordinates directly when successful
+      setCurrentLocation(response);
+      onLocationChange(response);
+      
+      // Save to localStorage
+      localStorage.setItem('userLocation', JSON.stringify(response));
+      
+      setSuccess(true);
+      setInputValue('');
+      
+      // Clear success message after 2 seconds
+      setTimeout(() => setSuccess(false), 2000);
     } catch (err) {
       console.error('Geocoding error:', err);
       setError('Failed to geocode location. Please try again.');
@@ -123,21 +115,22 @@ const LocationInput: React.FC<LocationInputProps> = ({
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Enter zipcode or city, state (e.g., 10001 or New York, NY)"
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Enter US zipcode (e.g., 10001)"
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              style={{ width: '156px' }}
               disabled={isLoading}
             />
             <button
               onClick={handleGeocode}
               disabled={!inputValue.trim() || isLoading}
-              className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              className="px-3 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1 whitespace-nowrap"
             >
               {isLoading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <MapPin className="w-4 h-4" />
               )}
-              <span>{isLoading ? 'Finding...' : 'Set Location'}</span>
+              <span className="text-sm">{isLoading ? 'Finding...' : 'Set'}</span>
             </button>
           </div>
 
@@ -156,7 +149,7 @@ const LocationInput: React.FC<LocationInputProps> = ({
           )}
 
           <div className="text-xs text-gray-500">
-            Enter your zipcode (e.g., 10001) or city and state (e.g., New York, NY) to get location-based recommendations.
+            Enter your US zipcode (e.g., 10001) to get location-based recommendations.
           </div>
         </div>
       )}

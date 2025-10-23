@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapPin, Calendar, DollarSign, Star, ExternalLink, Users, Clock } from 'lucide-react';
+import { MapPin, Calendar, Star, ExternalLink, Clock } from 'lucide-react';
 
 interface RecommendationCardProps {
   recommendation: {
@@ -11,7 +11,7 @@ interface RecommendationCardProps {
 }
 
 const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation }) => {
-  const { type, data, relevance_score, explanation } = recommendation;
+  const { type, data, explanation } = recommendation;
 
   const formatDate = (dateString: string) => {
     try {
@@ -31,14 +31,6 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
     }
   };
 
-  const getPriceDisplay = () => {
-    if (type === 'event') {
-      return data.is_free ? 'Free' : data.ticket_min_price || 'Price TBD';
-    } else {
-      return data.price_range || 'Price TBD';
-    }
-  };
-
   const getRatingDisplay = () => {
     if (type === 'restaurant' && data.rating) {
       return (
@@ -53,29 +45,21 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
 
   return (
     <div className="recommendation-card">
-      <div className="flex justify-between items-start mb-4">
-        <div className="flex-1">
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">
-            {type === 'event' ? data.title : data.name}
-          </h3>
-          <div className="flex items-center space-x-4 text-sm text-gray-600 mb-2">
+      <div className="mb-4">
+        <h3 className="text-xl font-semibold text-gray-900 mb-2">
+          {type === 'event' ? data.title : data.name}
+        </h3>
+        <div className="flex items-center space-x-4 text-sm text-gray-600 mb-2">
+          <div className="flex items-center space-x-1">
+            <MapPin className="w-4 h-4" />
+            <span>{data.venue_name || data.name}, {data.venue_city}</span>
+          </div>
+          {type === 'event' && (
             <div className="flex items-center space-x-1">
-              <MapPin className="w-4 h-4" />
-              <span>{data.venue_name || data.name}, {data.venue_city}</span>
+              <Calendar className="w-4 h-4" />
+              <span>{formatDate(data.start_datetime)}</span>
             </div>
-            {type === 'event' && (
-              <div className="flex items-center space-x-1">
-                <Calendar className="w-4 h-4" />
-                <span>{formatDate(data.start_datetime)}</span>
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="text-right">
-          <div className="text-sm text-gray-500">Relevance</div>
-          <div className="text-lg font-semibold text-primary-600">
-            {Math.round(relevance_score * 100)}%
-          </div>
+          )}
         </div>
       </div>
 
@@ -96,17 +80,8 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
 
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-1 text-sm text-gray-600">
-            <DollarSign className="w-4 h-4" />
-            <span>{getPriceDisplay()}</span>
-          </div>
+          {/* Price display removed */}
           
-          {type === 'event' && data.attendee_count && (
-            <div className="flex items-center space-x-1 text-sm text-gray-600">
-              <Users className="w-4 h-4" />
-              <span>{data.attendee_count} attendees</span>
-            </div>
-          )}
           
           {type === 'restaurant' && data.is_open_now !== undefined && (
             <div className="flex items-center space-x-1 text-sm text-gray-600">
@@ -129,7 +104,7 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
               className="inline-flex items-center space-x-1 px-3 py-1 bg-primary-500 text-white text-sm rounded hover:bg-primary-600 transition-colors"
             >
               <ExternalLink className="w-4 h-4" />
-              <span>View Event</span>
+              <span>View on Eventbrite</span>
             </a>
           )}
           

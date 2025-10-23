@@ -1,374 +1,246 @@
+#!/usr/bin/env python3
 """
-Simplified LocalLifeAssistant backend for testing events integration
-This version works without ChromaDB dependencies
+Smart Cached RAG Local Life Assistant
+Combines real-time fetching with intelligent city-based caching
 """
 
-from dotenv import load_dotenv
-import os
-import json
 import logging
-from typing import List, Dict, Any, Optional
-from datetime import datetime
-
-# Load environment variables
-load_dotenv()
-
+import os
+from typing import Dict, Any, List, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+import uvicorn
+from dotenv import load_dotenv
 
-from .events_crawler import EventbriteCrawler
-from .external_data_service import ExternalDataService
-from .geocoding import geocoding_service
+from .event_service import EventbriteCrawler
+from .cache_manager import CacheManager
+from .geocoding import GeocodingService, GeocodeRequest, GeocodeResponse, LocationCoordinates
+from .search_service import SearchService
 
-# Set up logging
+# Load environment variables from .env file
+load_dotenv('../.env') or load_dotenv('.env') or load_dotenv('/app/.env')
+
+# Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Create FastAPI app
-app = FastAPI(
-    title="Local Life Assistant API (Simplified)",
-    description="AI-powered local life assistant for events and restaurant recommendations - Events Only Version",
-    version="1.0.0"
-)
-
-# Configure CORS origins based on environment
-def get_cors_origins():
-    """Get CORS origins based on environment variables"""
-    # Default origins for local development
-    origins = [
-        "http://localhost:3000",  # React dev server
-        "http://localhost:5173",  # Vite dev server
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
-    ]
-    
-    # Add production frontend URL if specified
-    frontend_url = os.getenv("FRONTEND_URL")
-    if frontend_url:
-        origins.append(frontend_url)
-    
-    # Add any additional origins from environment
-    additional_origins = os.getenv("ADDITIONAL_CORS_ORIGINS")
-    if additional_origins:
-        # Split by comma and strip whitespace
-        origins.extend([origin.strip() for origin in additional_origins.split(",")])
-    
-    return origins
+app = FastAPI(title="Smart Cached RAG Local Life Assistant", version="2.1.0")
 
 # Add CORS middleware
+domain_name = os.getenv("DOMAIN_NAME")
+if domain_name and domain_name not in ["your-domain.com", "localhost", ""]:
+    # Production: Allow the actual domain and www subdomain
+    allow_origins = [
+        f"http://{domain_name}",
+        f"https://{domain_name}",
+        f"https://www.{domain_name}",
+    ]
+else:
+    # Development: Allow localhost
+    allow_origins = ["http://localhost:3000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_cors_origins(),
+    allow_origins=allow_origins,  # Dynamic CORS configuration based on domain
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize services
-events_crawler = EventbriteCrawler()
-external_service = ExternalDataService()
-
-# In-memory storage for events (instead of ChromaDB)
-events_cache: List[Dict[str, Any]] = []
-cache_timestamp: Optional[datetime] = None
-
+# Pydantic models
 class ChatRequest(BaseModel):
     message: str
     conversation_history: List[Dict[str, Any]] = []
-    llm_provider: Optional[str] = None
+    llm_provider: str = "openai"
+    location: Optional[LocationCoordinates] = None
 
 class ChatResponse(BaseModel):
     message: str
     recommendations: List[Dict[str, Any]] = []
     llm_provider_used: str
+    cache_used: bool = False
+    cache_age_hours: Optional[float] = None
 
-class RecommendationRequest(BaseModel):
-    query: str
-    type: Optional[str] = None
-    location: Optional[str] = None
-    category: Optional[str] = None
-    max_results: int = 5
+# Initialize services
+event_crawler = EventbriteCrawler()
+cache_manager = CacheManager()
+geocoding_service = GeocodingService()
+search_service = SearchService()
 
-def load_events():
-    """Load events into cache"""
-    global events_cache, cache_timestamp
-    
-    try:
-        logger.info("Loading events from Eventbrite...")
-        events = events_crawler.fetch_events(max_pages=3)
-        events_cache = events
-        cache_timestamp = datetime.now()
-        logger.info(f"Loaded {len(events)} events into cache")
-        return True
-    except Exception as e:
-        logger.error(f"Error loading events: {e}")
-        return False
+# Cache configuration
+CACHE_TTL_HOURS = 6  # Cache events for 6 hours
 
-def search_events(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
-    """Simple text-based event search"""
-    if not events_cache:
-        logger.info("No events in cache")
-        return []
-    
-    query_lower = query.lower()
-    # Split query into individual words for better matching
-    query_words = query_lower.split()
-    logger.info(f"Searching for words {query_words} in {len(events_cache)} events")
-    results = []
-    
-    for event in events_cache:
-        score = 0
-        
-        # Check each word in the query
-        for word in query_words:
-            # Check title
-            if word in event.get('title', '').lower():
-                score += 3
-            
-            # Check description
-            if word in event.get('description', '').lower():
-                score += 2
-            
-            # Check categories
-            for category in event.get('categories', []):
-                if word in category.lower():
-                    score += 1
-            
-            # Check venue
-            if word in event.get('venue_name', '').lower():
-                score += 1
-            
-            # Special handling for common terms
-            if word == "free" and event.get('is_free'):
-                score += 2
-            elif word == "free" and "free" in event.get('title', '').lower():
-                score += 2
-        
-        if score > 0:
-            results.append((score, event))
-    
-    # Sort by score and return top results
-    results.sort(key=lambda x: x[0], reverse=True)
-    logger.info(f"Found {len(results)} events with scores: {[score for score, _ in results[:5]]}")
-    return [event for score, event in results[:max_results]]
-
-@app.on_event("startup")
-async def startup_event():
-    """Load events on startup"""
-    logger.info("Starting LocalLifeAssistant (Simplified Version)...")
-    load_events()
-
-@app.get("/")
-async def root():
-    """Root endpoint"""
-    return {
-        "message": "Local Life Assistant API (Simplified)", 
-        "status": "running",
-        "version": "1.0.0",
-        "features": ["events", "geocoding"],
-        "note": "This is a simplified version for testing events integration"
-    }
-
+# Routes
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
     return {
-        "status": "healthy",
-        "database": "in-memory cache",
-        "events_count": len(events_cache),
-        "cache_timestamp": cache_timestamp.isoformat() if cache_timestamp else None,
-        "services": {
-            "events": "active",
-            "geocoding": "active",
-            "chromadb": "disabled (simplified version)"
-        }
+        "status": "healthy", 
+        "version": "2.1.0", 
+        "features": ["smart_caching", "real_time_events", "city_based_cache"]
     }
 
 @app.get("/stats")
 async def get_stats():
-    """Get database statistics"""
-    return {
-        "events_count": len(events_cache),
-        "restaurants_count": 0,
-        "cache_timestamp": cache_timestamp.isoformat() if cache_timestamp else None,
-        "note": "Restaurants not available in simplified version"
-    }
+    """Get system statistics including cache info"""
+    try:
+        cache_stats = cache_manager.get_cache_stats()
+        
+        return {
+            "status": "active",
+            "cache_stats": cache_stats,
+            "features": ["smart_caching", "real_time_events", "city_based_cache", "llm_city_extraction"]
+        }
+    except Exception as e:
+        logger.error(f"Error getting stats: {e}")
+        return {"status": "error", "message": str(e)}
 
 @app.post("/api/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    """Simplified chat endpoint"""
+async def smart_cached_chat(request: ChatRequest):
+    """
+    Smart cached chat endpoint
+    Uses cache when available, fetches fresh data when needed
+    """
     try:
-        # Simple keyword-based responses
-        message_lower = request.message.lower()
+        logger.info(f"Smart cached chat request: {request.message}")
         
-        # Always try to search for events first
-        logger.info(f"Searching for events with query: {request.message}")
-        recommendations = search_events(request.message, max_results=5)
-        logger.info(f"Found {len(recommendations)} recommendations")
+        # Step 1: Try to extract city from query first (highest priority)
+        query_city = geocoding_service.extract_city_from_query(request.message)
+        logger.info(f"Extracted city from query: '{query_city}'")
         
-        if recommendations:
-            # Simple, clean message for the chat
-            response_message = f"🎉 I found {len(recommendations)} events that match your search! Check out the recommendations below ↓"
-            
-            # Format recommendations for frontend
-            formatted_recommendations = []
-            for event in recommendations:
-                formatted_recommendations.append({
-                    "type": "event",
-                    "data": event,
-                    "relevance_score": 0.9,  # High relevance since they matched the search
-                    "explanation": f"This event matches your search for '{request.message}' based on title, description, or categories."
-                })
+        # Step 2: Extract city from location (fallback)
+        location_city = None
+        if request.location:
+            # Simple fallback: try to extract city from formatted address
+            address = request.location.formatted_address
+            if address:
+                # Extract city from "City, State, Country" format
+                parts = address.split(',')
+                if len(parts) >= 1:
+                    location_city = parts[0].strip()
+        
+        # Step 3: Determine which city to use
+        logger.info(f"Query city: '{query_city}', Location city: '{location_city}'")
+        if query_city:
+            city = query_city
+            logger.info(f"Using city from query: {city}")
+        elif location_city:
+            city = location_city
+            logger.info(f"Using city from location: {city}")
         else:
-            response_message = "😔 I couldn't find any events matching your query. Try asking about 'fashion events', 'music concerts', 'halloween parties', or 'free events'."
-            formatted_recommendations = []
+            city = "new york"  # Default fallback
+            logger.info("No city found in query or location, defaulting to New York")
+        
+        logger.info(f"Final city decision: {city}")
+        
+        # Step 1: Try to get cached events
+        cached_events = cache_manager.get_cached_events(city)
+        cache_age_hours = cache_manager.get_cache_age(city)
+        
+        if cached_events:
+            logger.info(f"Using cached events for {city} (age: {cache_age_hours:.1f}h)")
+            events = cached_events
+            cache_used = True
+        else:
+            logger.info(f"No valid cache for {city}, fetching fresh events")
+            # Step 2: Fetch fresh events if no cache
+            events = event_crawler.fetch_events_by_city(city, max_pages=2)
+            logger.info(f"Fetched {len(events)} fresh events for {city}")
+            
+            # Step 3: Cache the fresh events
+            cache_manager.cache_events(city, events)
+            cache_used = False
+            cache_age_hours = 0
+        
+        # Step 4: LLM-powered intelligent event search
+        logger.info(f"Starting LLM search for query: '{request.message}' with {len(events)} events")
+        top_events = await search_service.intelligent_event_search(request.message, events)
+        logger.info(f"LLM search returned {len(top_events)} events")
+        
+        # Debug: Check if events have LLM scores
+        if top_events:
+            first_event = top_events[0]
+            logger.info(f"First event has llm_scores: {first_event.get('llm_scores', 'None')}")
+            logger.info(f"First event relevance_score: {first_event.get('relevance_score', 'None')}")
+        
+        # Step 5: Format recommendations
+        formatted_recommendations = []
+        for event in top_events:
+            formatted_recommendations.append({
+                "type": "event",
+                "data": {
+                    **event,  # This includes llm_scores and relevance_score
+                    "source": "cached" if cache_used else "realtime"
+                },
+                "relevance_score": event.get('relevance_score', 0.5),  # Keep for backward compatibility
+                "explanation": f"Event in {city.title()}: {event.get('title', 'Unknown Event')}"
+            })
+        
+        # Step 6: Generate response message
+        if top_events:
+            response_message = f"🎉 Found {len(top_events)} events in {city.title()} that match your search! Check out the recommendations below ↓"
+        else:
+            response_message = f"😔 I couldn't find any events in {city.title()} matching your query. Try asking about 'fashion events', 'music concerts', 'halloween parties', or 'free events'."
         
         return ChatResponse(
             message=response_message,
             recommendations=formatted_recommendations,
-            llm_provider_used="simplified"
+            llm_provider_used=request.llm_provider,
+            cache_used=cache_used,
+            cache_age_hours=cache_age_hours
         )
         
     except Exception as e:
-        logger.error(f"Error in chat: {e}")
+        logger.error(f"Error in smart cached chat: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing chat request: {str(e)}")
 
-@app.post("/api/chat/simple")
-async def simple_chat(message: str, llm_provider: str = "simplified"):
-    """Simplified chat endpoint"""
-    request = ChatRequest(message=message, llm_provider=llm_provider)
-    response = await chat(request)
-    return {
-        "message": response.message,
-        "recommendations": response.recommendations,
-        "llm_provider_used": response.llm_provider_used
-    }
+@app.post("/api/geocode", response_model=GeocodeResponse)
+async def geocode_location(request: GeocodeRequest):
+    """Geocode a location input including US zipcodes"""
+    return await geocoding_service.geocode_location(request)
 
-@app.get("/api/recommendations")
-async def get_recommendations(
-    query: str,
-    type: Optional[str] = None,
-    location: Optional[str] = None,
-    category: Optional[str] = None,
-    max_results: int = 5
-):
-    """Get event recommendations"""
+@app.post("/api/cache/cleanup")
+async def cleanup_cache():
+    """Manually clean up expired cache files"""
     try:
-        if not events_cache:
-            load_events()
-        
-        recommendations = search_events(query, max_results)
-        
+        cache_manager.cleanup_old_cache()
+        stats = cache_manager.get_cache_stats()
         return {
-            "query": query,
-            "recommendations": recommendations,
-            "total_found": len(recommendations),
-            "source": "eventbrite"
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting recommendations: {str(e)}")
-
-@app.get("/api/events")
-async def get_events(query: str = "", max_results: int = 10):
-    """Get events only"""
-    try:
-        if not events_cache:
-            load_events()
-        
-        if query:
-            events = search_events(query, max_results)
-        else:
-            events = events_cache[:max_results]
-        
-        return {
-            "events": events,
-            "total_found": len(events),
-            "query": query
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error getting events: {str(e)}")
-
-@app.get("/api/restaurants")
-async def get_restaurants(query: str = "", max_results: int = 10):
-    """Restaurants not available in simplified version"""
-    return {
-        "restaurants": [],
-        "total_found": 0,
-        "message": "Restaurants not available in simplified version. Full version with ChromaDB required."
-    }
-
-@app.get("/api/test-search")
-async def test_search(query: str = "fashion"):
-    """Test search function directly"""
-    try:
-        recommendations = search_events(query, max_results=5)
-        return {
-            "query": query,
-            "recommendations": recommendations,
-            "total_found": len(recommendations),
-            "events_cache_size": len(events_cache)
+            "success": True,
+            "message": "Cache cleanup completed",
+            "stats": stats
         }
     except Exception as e:
-        return {"error": str(e)}
-
-@app.post("/api/geocode")
-async def geocode_location(request: dict):
-    """Geocode a location input"""
-    try:
-        input_text = request.get("input_text")
-        if not input_text:
-            raise HTTPException(status_code=400, detail="input_text is required")
-
-        result = geocoding_service.geocode_location(input_text)
-        
-        if result:
-            latitude, longitude, formatted_address = result
-            return {
-                "success": True,
-                "coordinates": {
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "formatted_address": formatted_address
-                },
-                "error_message": None
-            }
-        else:
-            return {
-                "success": False,
-                "coordinates": None,
-                "error_message": f"Could not geocode location: '{input_text}'"
-            }
-            
-    except Exception as e:
+        logger.error(f"Error cleaning up cache: {e}")
         return {
             "success": False,
-            "coordinates": None,
-            "error_message": f"Error geocoding location: {str(e)}"
+            "error": str(e)
         }
 
-@app.post("/api/refresh-events")
-async def refresh_events():
-    """Manually refresh events cache"""
+@app.get("/api/cache/stats")
+async def get_cache_stats():
+    """Get detailed cache statistics"""
     try:
-        success = load_events()
-        if success:
-            return {
-                "success": True,
-                "message": f"Refreshed {len(events_cache)} events",
-                "timestamp": cache_timestamp.isoformat() if cache_timestamp else None
-            }
-        else:
-            return {
-                "success": False,
-                "message": "Failed to refresh events"
-            }
+        stats = cache_manager.get_cache_stats()
+        return {
+            "success": True,
+            "stats": stats
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error refreshing events: {str(e)}")
+        logger.error(f"Error getting cache stats: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 if __name__ == "__main__":
-    import uvicorn
+    logger.info("Starting Smart Cached RAG Local Life Assistant...")
+    logger.info("Features: City-based caching + Real-time events + Rate limit protection")
+    logger.info(f"Cache TTL: {CACHE_TTL_HOURS} hours")
+    logger.info(f"Cache directory: {cache_manager.cache_dir}")
+    
+    # Clean up old cache on startup
+    cache_manager.cleanup_old_cache()
+    
     uvicorn.run(app, host="0.0.0.0", port=8000)
