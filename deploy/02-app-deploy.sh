@@ -35,21 +35,8 @@ echo "🔐 Creating production environment file..."
 cd ..
 sudo -u appuser cp .env.example .env.production
 
-# Auto-configure environment variables if available
-if [ -n "$OPENAI_API_KEY" ]; then
-    echo "🔑 Setting OpenAI API key..."
-    sudo -u appuser sed -i "s|OPENAI_API_KEY=.*|OPENAI_API_KEY=$OPENAI_API_KEY|" .env.production
-fi
-
-if [ -n "$DOMAIN_NAME" ]; then
-    echo "🌐 Setting domain name..."
-    sudo -u appuser sed -i "s|DOMAIN_NAME=.*|DOMAIN_NAME=$DOMAIN_NAME|" .env.production
-fi
-
-echo "📝 Production environment configured!"
-if [ -z "$OPENAI_API_KEY" ]; then
-    echo "⚠️  Warning: OPENAI_API_KEY not set. Please edit /opt/locallifeassistant/.env.production manually."
-fi
+echo "✅ Production environment file created"
+echo "📝 Environment variables will be configured automatically in the next step"
 
 # Create systemd service for backend
 echo "⚙️ Creating systemd service for backend..."
@@ -77,20 +64,8 @@ sudo systemctl daemon-reload
 sudo systemctl enable locallifeassistant-backend
 
 echo "✅ Application deployment complete!"
-echo "📝 Next steps:"
-echo "   1. Configure Nginx (run configure-nginx.sh)"
-echo "   2. Set up SSL certificates (run setup-ssl.sh)"
-echo "   3. Start the backend service: sudo systemctl start locallifeassistant-backend"
-echo ""
-echo "🔧 Environment configuration:"
-echo "   - .env.production created with auto-configured values"
-if [ -n "$OPENAI_API_KEY" ]; then
-    echo "   - ✅ OPENAI_API_KEY: Configured"
-else
-    echo "   - ❌ OPENAI_API_KEY: Not set (needs manual configuration)"
-fi
-if [ -n "$DOMAIN_NAME" ]; then
-    echo "   - ✅ DOMAIN_NAME: $DOMAIN_NAME"
-else
-    echo "   - ❌ DOMAIN_NAME: Not set"
-fi
+echo "📝 Next steps (automated in auto-deploy.sh):"
+echo "   1. Environment variables will be configured automatically"
+echo "   2. Nginx will be configured"
+echo "   3. SSL certificates will be set up"
+echo "   4. Services will be started automatically"
