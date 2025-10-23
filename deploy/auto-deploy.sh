@@ -204,8 +204,8 @@ show_summary() {
 main() {
     check_prerequisites
     setup_server
-    deploy_application
-    configure_environment
+    configure_environment   
+    deploy_application  
     configure_web_server
     setup_ssl_certificates
     start_services
