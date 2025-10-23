@@ -28,12 +28,20 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Smart Cached RAG Local Life Assistant", version="2.1.0")
 
 # Add CORS middleware
-allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
-allow_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
+domain_name = os.getenv("DOMAIN_NAME")
+if domain_name and domain_name not in ["your-domain.com", "localhost", ""]:
+    # Production: Allow the actual domain and www subdomain
+    allow_origins = [
+        f"https://{domain_name}",
+        f"https://www.{domain_name}",
+    ]
+else:
+    # Development: Allow localhost
+    allow_origins = ["http://localhost:3000"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allow_origins,  # Dynamic CORS configuration
+    allow_origins=allow_origins,  # Dynamic CORS configuration based on domain
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

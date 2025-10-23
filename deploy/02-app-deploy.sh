@@ -35,14 +35,9 @@ echo "🔐 Creating production environment file..."
 cd ..
 sudo -u appuser cp .env.example .env.production
 
-# Configure ALLOWED_ORIGINS based on DOMAIN_NAME
-if [ -n "$DOMAIN_NAME" ]; then
-    echo "🌐 Configuring CORS for domain: $DOMAIN_NAME"
-    sudo -u appuser sed -i "s|ALLOWED_ORIGINS=.*|ALLOWED_ORIGINS=https://$DOMAIN_NAME,https://www.$DOMAIN_NAME|" .env.production
-fi
-
 echo "📝 Please edit /opt/locallifeassistant/.env.production with your production API keys:"
 echo "   - OPENAI_API_KEY=your_production_openai_key"
+echo "   - DOMAIN_NAME=$DOMAIN_NAME"
 echo "   - CHROMA_PERSIST_DIRECTORY=/opt/locallifeassistant/backend/chroma_db"
 
 # Create systemd service for backend

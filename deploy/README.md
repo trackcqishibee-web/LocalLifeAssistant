@@ -99,8 +99,8 @@ cd docker && docker-compose up -d
 
 | 文件 | 用途 | 说明 |
 |------|------|------|
-| `.env.production.example` | 生产环境配置 | 传统部署使用 |
-| `.env.docker.example` | Docker 环境配置 | Docker 部署使用 |
+| `.env.example` | 生产环境配置模板 | 设置 DOMAIN_NAME，CORS 自动生成 |
+| `.env.docker.example` | Docker 环境配置 | Docker 特有配置 + DOMAIN_NAME |
 
 ### Nginx 配置
 
