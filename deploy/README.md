@@ -22,6 +22,18 @@ chmod +x docker/docker-deploy.sh
 ./docker/docker-deploy.sh
 ```
 
+### 🔄 重启恢复（系统重启后使用）
+
+```bash
+# 一键恢复所有服务（推荐）
+wget https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/reboot-recovery.sh
+chmod +x reboot-recovery.sh
+./reboot-recovery.sh
+
+# 或者使用一行命令
+wget https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/reboot-recovery.sh && chmod +x reboot-recovery.sh && ./reboot-recovery.sh
+```
+
 ## 📁 部署脚本说明
 
 ### 🔢 传统部署脚本（按顺序执行）
@@ -45,6 +57,7 @@ chmod +x docker/docker-deploy.sh
 | 脚本 | 功能 | 说明 |
 |------|------|------|
 | `auto-deploy.sh` | 一键部署 | 自动执行所有传统部署步骤 |
+| `reboot-recovery.sh` | 重启恢复 | 服务器重启后自动恢复所有服务 |
 
 ## 🛠️ 部署方式选择
 
@@ -176,6 +189,43 @@ Internet → Cloudflare → Nginx → Docker Containers
    sudo certbot certificates
    sudo certbot renew --dry-run
    ```
+
+### 🔄 重启恢复详细说明
+
+当服务器因内核更新或其他原因重启后，需要恢复应用服务：
+
+**自动恢复（推荐）：**
+```bash
+# 下载并执行恢复脚本
+wget https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/reboot-recovery.sh
+chmod +x reboot-recovery.sh
+./reboot-recovery.sh
+```
+
+**脚本执行内容：**
+1. ✅ 检查并启动后端服务 (`locallifeassistant-backend`)
+2. ✅ 检查并启动 Nginx 服务
+3. ✅ 设置服务开机自启
+4. ✅ 执行健康检查
+5. ✅ 显示服务状态摘要
+
+**手动恢复步骤：**
+```bash
+# 启动后端服务
+sudo systemctl start locallifeassistant-backend
+sudo systemctl enable locallifeassistant-backend
+
+# 启动 Nginx
+sudo systemctl start nginx
+sudo systemctl enable nginx
+
+# 检查状态
+sudo systemctl status locallifeassistant-backend
+sudo systemctl status nginx
+
+# 健康检查
+curl http://localhost:8000/health
+```
 
 ### 日志查看
 
