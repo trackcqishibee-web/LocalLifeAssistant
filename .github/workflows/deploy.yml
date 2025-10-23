@@ -4,11 +4,6 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
-    inputs:
-      domain:
-        description: 'Domain name (e.g., myapp.com)'
-        required: true
-        default: 'your-domain.com'
 
 jobs:
   deploy:
@@ -37,7 +32,7 @@ jobs:
           cd /tmp
           
           # Set environment variables
-          export DOMAIN_NAME="${{ github.event.inputs.domain || 'your-domain.com' }}"
+          export DOMAIN_NAME="${{ secrets.DOMAIN_NAME || 'your-domain.com' }}"
           export GITHUB_REPO="wjshku/LocalLifeAssistant"
           export GITHUB_BRANCH="main"
           export OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
@@ -81,5 +76,5 @@ jobs:
     - name: 📊 Deployment summary
       run: |
         echo "🎉 Deployment completed successfully!"
-        echo "🌐 Application URL: https://${{ github.event.inputs.domain || 'your-domain.com' }}"
+        echo "🌐 Application URL: https://${{ secrets.DOMAIN_NAME || 'your-domain.com' }}"
         echo "📝 Server IP: ${{ secrets.SERVER_IP }}"
