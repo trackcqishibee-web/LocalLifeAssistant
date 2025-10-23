@@ -22,7 +22,7 @@ else
     # Repository doesn't exist, clean directory and clone
     echo "ℹ️  No repository found, cleaning directory and cloning..."
     sudo rm -rf /opt/locallifeassistant/*
-    sudo -u appuser git clone https://github.com/LijieTu/LocalLifeAssistant.git .
+    sudo -u appuser git clone https://github.com/${GITHUB_REPO}.git .
     echo "✅ Repository cloned successfully"
 fi
 
