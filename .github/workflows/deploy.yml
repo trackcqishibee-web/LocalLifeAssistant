@@ -29,6 +29,7 @@ jobs:
           wget -q https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/03-nginx-setup.sh
           wget -q https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/04-ssl-setup.sh
           wget -q https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/reboot-recovery.sh
+          wget -q https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/cleanup-server.sh
 
           # Make all scripts executable
           chmod +x *.sh
