@@ -20,8 +20,13 @@ if [ -z "$DOMAIN_NAME" ]; then
     fi
 fi
 
-# Create Nginx configuration
+# Create Nginx configuration (force overwrite)
 echo "📝 Creating Nginx configuration for $DOMAIN_NAME..."
+# Remove existing configuration if it exists
+sudo rm -f /etc/nginx/sites-available/locallifeassistant
+sudo rm -f /etc/nginx/sites-enabled/locallifeassistant
+
+# Copy new configuration
 sudo cp /opt/locallifeassistant/deploy/nginx.conf /etc/nginx/sites-available/locallifeassistant
 
 # Replace placeholder domain in configuration
