@@ -7,12 +7,17 @@ set -e
 
 echo "🌐 Configuring Nginx..."
 
-# Replace placeholder domain with your actual domain
-read -p "Enter your domain name (e.g., myapp.com): " DOMAIN_NAME
+# Get domain name from command line argument or environment variable
+DOMAIN_NAME=${1:-$DOMAIN_NAME}
 
 if [ -z "$DOMAIN_NAME" ]; then
-    echo "❌ Domain name is required!"
-    exit 1
+    # Fallback to interactive input for manual usage
+    read -p "Enter your domain name (e.g., myapp.com): " DOMAIN_NAME
+
+    if [ -z "$DOMAIN_NAME" ]; then
+        echo "❌ Domain name is required!"
+        exit 1
+    fi
 fi
 
 # Create Nginx configuration

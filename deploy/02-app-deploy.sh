@@ -35,6 +35,12 @@ echo "🔐 Creating production environment file..."
 cd ..
 sudo -u appuser cp .env.example .env.production
 
+# Configure ALLOWED_ORIGINS based on DOMAIN_NAME
+if [ -n "$DOMAIN_NAME" ]; then
+    echo "🌐 Configuring CORS for domain: $DOMAIN_NAME"
+    sudo -u appuser sed -i "s|ALLOWED_ORIGINS=.*|ALLOWED_ORIGINS=https://$DOMAIN_NAME,https://www.$DOMAIN_NAME|" .env.production
+fi
+
 echo "📝 Please edit /opt/locallifeassistant/.env.production with your production API keys:"
 echo "   - OPENAI_API_KEY=your_production_openai_key"
 echo "   - CHROMA_PERSIST_DIRECTORY=/opt/locallifeassistant/backend/chroma_db"
@@ -51,6 +57,7 @@ Type=simple
 User=appuser
 WorkingDirectory=/opt/locallifeassistant/backend
 Environment=PATH=/opt/locallifeassistant/backend/venv/bin
+EnvironmentFile=/opt/locallifeassistant/.env.production
 ExecStart=/opt/locallifeassistant/backend/venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=3
