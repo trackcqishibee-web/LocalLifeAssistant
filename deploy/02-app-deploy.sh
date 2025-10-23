@@ -10,17 +10,32 @@ echo "🚀 Deploying Local Life Assistant application..."
 # Navigate to application directory
 cd /opt/locallifeassistant
 
-# Clone repository (replace with your actual repository URL)
-echo "📥 Cloning repository..."
-sudo -u appuser git clone https://github.com/LijieTu/LocalLifeAssistant.git .
+# Clone or update repository (idempotent)
+echo "📥 Cloning/updating repository..."
+if [ -d ".git" ]; then
+    # Repository already exists, update it
+    sudo -u appuser git fetch origin
+    sudo -u appuser git reset --hard origin/main
+    echo "✅ Repository updated to latest main branch"
+else
+    # Repository doesn't exist, clone it
+    sudo -u appuser git clone https://github.com/LijieTu/LocalLifeAssistant.git .
+    echo "✅ Repository cloned successfully"
+fi
 
-# Switch to main branch
+# Ensure we're on main branch
 sudo -u appuser git checkout main
 
 # Set up backend
 echo "🐍 Setting up backend..."
 cd backend
-sudo -u appuser python3.11 -m venv venv
+# Create virtual environment if it doesn't exist
+if [ ! -d "venv" ]; then
+    sudo -u appuser python3.11 -m venv venv
+    echo "✅ Virtual environment created"
+else
+    echo "ℹ️  Virtual environment already exists"
+fi
 sudo -u appuser ./venv/bin/pip install --upgrade pip
 sudo -u appuser ./venv/bin/pip install -r requirements.txt
 
