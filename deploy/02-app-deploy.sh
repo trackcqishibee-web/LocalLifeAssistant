@@ -30,14 +30,8 @@ cd ../frontend
 sudo -u appuser npm install
 sudo -u appuser npm run build
 
-# Create production environment file
-echo "🔐 Creating production environment file..."
-cd ..
-sudo -u appuser cp .env.example .env.production
-
-echo "📝 Please edit /opt/locallifeassistant/.env.production with your production API keys:"
-echo "   - OPENAI_API_KEY=your_production_openai_key"
-echo "   - CHROMA_PERSIST_DIRECTORY=/opt/locallifeassistant/backend/chroma_db"
+# Environment file will be created by configure_environment() function
+echo "📝 Environment file will be created automatically in the next step"
 
 # Create systemd service for backend
 echo "⚙️ Creating systemd service for backend..."
@@ -51,6 +45,7 @@ Type=simple
 User=appuser
 WorkingDirectory=/opt/locallifeassistant/backend
 Environment=PATH=/opt/locallifeassistant/backend/venv/bin
+EnvironmentFile=/opt/locallifeassistant/.env
 ExecStart=/opt/locallifeassistant/backend/venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=3
@@ -64,8 +59,8 @@ sudo systemctl daemon-reload
 sudo systemctl enable locallifeassistant-backend
 
 echo "✅ Application deployment complete!"
-echo "📝 Next steps:"
-echo "   1. Edit /opt/locallifeassistant/.env.production with your API keys"
-echo "   2. Configure Nginx (run configure-nginx.sh)"
-echo "   3. Set up SSL certificates (run setup-ssl.sh)"
-echo "   4. Start the backend service: sudo systemctl start locallifeassistant-backend"
+echo "📝 Next steps (automated in auto-deploy.sh):"
+echo "   1. Environment variables will be configured automatically"
+echo "   2. Nginx will be configured"
+echo "   3. SSL certificates will be set up"
+echo "   4. Services will be started automatically"

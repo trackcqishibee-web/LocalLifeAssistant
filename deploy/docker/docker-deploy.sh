@@ -37,7 +37,7 @@ git clone -b feature/llm-city-extraction https://github.com/LijieTu/LocalLifeAss
 
 # Create production environment file
 echo "🔐 Setting up environment variables..."
-cp deploy/env.docker.example .env
+cp ../.env.docker.example .env
 
 echo "📝 Please edit /opt/locallifeassistant/.env with your production API keys:"
 echo "   - OPENAI_API_KEY=your_production_openai_key"
