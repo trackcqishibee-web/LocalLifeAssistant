@@ -40,13 +40,23 @@ sudo npm install -g pm2
 
 # Create application user
 echo "👤 Creating application user..."
-sudo useradd -m -s /bin/bash appuser
-sudo usermod -aG sudo appuser
+if ! id -u appuser > /dev/null 2>&1; then
+    sudo useradd -m -s /bin/bash appuser
+    sudo usermod -aG sudo appuser
+    echo "✅ Application user created"
+else
+    echo "ℹ️  Application user already exists, skipping creation"
+fi
 
 # Create application directory
 echo "📁 Creating application directory..."
-sudo mkdir -p /opt/locallifeassistant
-sudo chown appuser:appuser /opt/locallifeassistant
+if [ ! -d "/opt/locallifeassistant" ]; then
+    sudo mkdir -p /opt/locallifeassistant
+    sudo chown appuser:appuser /opt/locallifeassistant
+    echo "✅ Application directory created"
+else
+    echo "ℹ️  Application directory already exists, skipping creation"
+fi
 
 # Configure firewall
 echo "🔥 Configuring firewall..."
