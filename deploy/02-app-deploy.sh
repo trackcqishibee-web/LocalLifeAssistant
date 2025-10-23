@@ -10,52 +10,24 @@ echo "🚀 Deploying Local Life Assistant application..."
 # Navigate to application directory
 cd /opt/locallifeassistant
 
-# Clone or update repository
-echo "📥 Cloning/updating repository..."
-if [ -d ".git" ]; then
-    echo "📦 Repository already exists, pulling latest changes..."
-    sudo -u appuser git fetch origin
-    sudo -u appuser git reset --hard origin/main
-    sudo -u appuser git clean -fd
-else
-    echo "📥 Cloning repository..."
-    sudo -u appuser git clone https://github.com/wjshku/LocalLifeAssistant.git .
-fi
+# Clone repository (replace with your actual repository URL)
+echo "📥 Cloning repository..."
+sudo -u appuser git clone https://github.com/LijieTu/LocalLifeAssistant.git .
+
+# Switch to main branch
+sudo -u appuser git checkout main
 
 # Set up backend
 echo "🐍 Setting up backend..."
 cd backend
-
-# Create or recreate virtual environment if needed
-if [ ! -d "venv" ] || [ ! -f "venv/bin/python" ]; then
-    echo "🐍 Creating Python virtual environment..."
-    sudo -u appuser python3.11 -m venv venv
-else
-    echo "🐍 Virtual environment already exists, skipping creation..."
-fi
-
-echo "📦 Installing/updating Python dependencies..."
+sudo -u appuser python3.11 -m venv venv
 sudo -u appuser ./venv/bin/pip install --upgrade pip
 sudo -u appuser ./venv/bin/pip install -r requirements.txt
 
 # Set up frontend
 echo "📦 Setting up frontend..."
 cd ../frontend
-
-# Clean previous build if exists
-if [ -d "node_modules" ]; then
-    echo "🧹 Cleaning previous node_modules..."
-    sudo -u appuser rm -rf node_modules
-fi
-
-if [ -d "dist" ] || [ -d "build" ]; then
-    echo "🧹 Cleaning previous build..."
-    sudo -u appuser rm -rf dist build
-fi
-
-echo "📦 Installing Node.js dependencies..."
 sudo -u appuser npm install
-echo "🔨 Building frontend..."
 sudo -u appuser npm run build
 
 # Environment file will be created by configure_environment() function

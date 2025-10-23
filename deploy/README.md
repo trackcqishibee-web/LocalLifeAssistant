@@ -34,63 +34,6 @@ chmod +x reboot-recovery.sh
 wget https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/reboot-recovery.sh && chmod +x reboot-recovery.sh && ./reboot-recovery.sh
 ```
 
-### 🧹 服务器清理（重复部署前使用）
-
-```bash
-# 下载清理脚本
-wget https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/cleanup-server.sh
-chmod +x cleanup-server.sh
-
-# 查看帮助信息
-./cleanup-server.sh --help
-
-# 推荐：只清理应用文件和配置（保留用户）
-./cleanup-server.sh --app
-
-# 完全清理（包括用户，谨慎使用）
-./cleanup-server.sh --all
-
-# 只停止服务（临时维护）
-./cleanup-server.sh --services
-```
-
-## 🔄 重复部署说明
-
-在同一服务器上重复部署时，建议按以下步骤操作：
-
-### 📋 重复部署流程
-
-1. **清理旧部署（推荐）**
-   ```bash
-   # 下载并运行清理脚本
-   wget https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/cleanup-server.sh
-   chmod +x cleanup-server.sh
-   ./cleanup-server.sh --app
-   ```
-
-2. **重新部署**
-   ```bash
-   # 运行完整部署
-   wget https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/auto-deploy.sh
-   chmod +x auto-deploy.sh
-   ./auto-deploy.sh
-   ```
-
-### 🧹 清理选项说明
-
-| 选项 | 清理内容 | 适用场景 |
-|------|----------|----------|
-| `--app` | 应用文件、配置、服务 | **推荐** - 重复部署时使用 |
-| `--services` | 只停止服务 | 临时维护、服务更新 |
-| `--all` | 完全清理包括用户 | 全新部署、问题排除 |
-
-### ⚠️ 重要提醒
-
-- **第一次部署**：无需清理，直接运行 `auto-deploy.sh`
-- **重复部署**：建议先运行 `./cleanup-server.sh --app`
-- **问题排除**：如果部署失败，尝试 `./cleanup-server.sh --all` 后重新部署
-- **数据安全**：`--all` 选项会删除用户，请谨慎使用
-
 ## 📁 部署脚本说明
 
 ### 🔢 传统部署脚本（按顺序执行）
@@ -115,7 +58,6 @@ chmod +x cleanup-server.sh
 |------|------|------|
 | `auto-deploy.sh` | 一键部署 | 自动执行所有传统部署步骤 |
 | `reboot-recovery.sh` | 重启恢复 | 服务器重启后自动恢复所有服务 |
-| `cleanup-server.sh` | 服务器清理 | 重复部署前清理服务器状态 |
 
 ## 🛠️ 部署方式选择
 
