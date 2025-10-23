@@ -1,0 +1,95 @@
+name: 🚀 Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      domain:
+        description: 'Domain name (e.g., myapp.com)'
+        required: true
+        default: 'your-domain.com'
+      deploy_mode:
+        description: 'Deployment mode'
+        required: true
+        default: 'traditional'
+        type: choice
+        options:
+        - traditional
+        - docker
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+    - name: 🔧 Configure SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H "${{ secrets.SERVER_IP }}" >> ~/.ssh/known_hosts
+    
+    - name: 📥 Download deployment script
+      run: |
+        ssh -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} << 'EOF'
+          cd /tmp
+          wget -q https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/auto-deploy.sh
+          chmod +x auto-deploy.sh
+        EOF
+    
+    - name: 🚀 Deploy application
+      run: |
+        ssh -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} << 'EOF'
+          cd /tmp
+          
+          # Set environment variables
+          export DOMAIN_NAME="${{ github.event.inputs.domain || 'your-domain.com' }}"
+          export GITHUB_REPO="wjshku/LocalLifeAssistant"
+          export GITHUB_BRANCH="main"
+          export OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
+          export EMAIL="admin@$DOMAIN_NAME"
+          export DEPLOY_MODE="${{ github.event.inputs.deploy_mode || 'traditional' }}"
+          
+          # Run automated deployment
+          ./auto-deploy.sh
+        EOF
+    
+    - name: 🔍 Health check
+      run: |
+        ssh -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} << 'EOF'
+          echo "🔍 Performing post-deployment health check..."
+          
+          # Check if services are running
+          if systemctl is-active --quiet locallifeassistant-backend; then
+            echo "✅ Backend service is running"
+          else
+            echo "❌ Backend service is not running"
+            exit 1
+          fi
+          
+          if systemctl is-active --quiet nginx; then
+            echo "✅ Nginx service is running"
+          else
+            echo "❌ Nginx service is not running"
+            exit 1
+          fi
+          
+          # Test backend health endpoint
+          if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+            echo "✅ Backend health check passed"
+          else
+            echo "❌ Backend health check failed"
+            exit 1
+          fi
+          
+          echo "🎉 All health checks passed!"
+        EOF
+    
+    - name: 📊 Deployment summary
+      run: |
+        echo "🎉 Deployment completed successfully!"
+        echo "🌐 Application URL: https://${{ github.event.inputs.domain || 'your-domain.com' }}"
+        echo "🔧 Deployment mode: ${{ github.event.inputs.deploy_mode || 'traditional' }}"
+        echo "📝 Server IP: ${{ secrets.SERVER_IP }}"
