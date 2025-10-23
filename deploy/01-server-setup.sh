@@ -70,17 +70,17 @@ else
     fi
 fi
 
-# Create application directory
+# Create application directory (force clean)
 echo "📁 Creating application directory..."
-if [ ! -d "/opt/locallifeassistant" ]; then
-    sudo mkdir -p /opt/locallifeassistant
-    echo "✅ Application directory created"
-else
-    echo "ℹ️  Application directory already exists"
+# Remove existing directory if it exists
+if [ -d "/opt/locallifeassistant" ]; then
+    sudo rm -rf /opt/locallifeassistant
+    echo "ℹ️  Removed existing application directory"
 fi
-# Ensure correct ownership regardless
+# Create fresh directory
+sudo mkdir -p /opt/locallifeassistant
 sudo chown appuser:appuser /opt/locallifeassistant
-echo "✅ Application directory ownership set to appuser:appuser"
+echo "✅ Application directory created with correct ownership"
 
 # Configure firewall
 echo "🔥 Configuring firewall..."

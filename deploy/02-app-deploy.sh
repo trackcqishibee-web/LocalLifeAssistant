@@ -10,21 +10,11 @@ echo "🚀 Deploying Local Life Assistant application..."
 # Navigate to application directory
 cd /opt/locallifeassistant
 
-# Clone or update repository (force clean approach)
-echo "📥 Cloning/updating repository..."
-if [ -d ".git" ]; then
-    # Repository already exists, update it
-    echo "ℹ️  Repository exists, updating..."
-    sudo -u appuser git fetch origin
-    sudo -u appuser git reset --hard origin/main
-    echo "✅ Repository updated to latest main branch"
-else
-    # Repository doesn't exist, clean directory and clone
-    echo "ℹ️  No repository found, cleaning directory and cloning..."
-    sudo rm -rf /opt/locallifeassistant/*
-    sudo -u appuser git clone https://github.com/${GITHUB_REPO}.git .
-    echo "✅ Repository cloned successfully"
-fi
+# Clone repository (always fresh)
+echo "📥 Cloning repository..."
+# Always clone fresh (directory should be clean from 01-server-setup.sh)
+sudo -u appuser git clone https://github.com/${GITHUB_REPO}.git .
+echo "✅ Repository cloned successfully"
 
 # Ensure we're on main branch
 sudo -u appuser git checkout main

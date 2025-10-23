@@ -23,7 +23,7 @@ jobs:
         ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
           cd /tmp
           # Clean up any existing deployment scripts to avoid cache issues
-          rm -f auto-deploy.sh 01-server-setup.sh 02-app-deploy.sh 03-nginx-setup.sh 04-ssl-setup.sh reboot-recovery.sh
+          rm -f auto-deploy.sh* 01-server-setup.sh* 02-app-deploy.sh* 03-nginx-setup.sh* 04-ssl-setup.sh* reboot-recovery.sh*
           
           # Download all deployment scripts (fresh copy with cache busting)
           wget -q -O auto-deploy.sh "https://raw.githubusercontent.com/${{ github.repository }}/main/deploy/auto-deploy.sh?t=$(date +%s)"
@@ -44,8 +44,8 @@ jobs:
 
           # Set environment variables
           export DOMAIN_NAME="${{ secrets.DOMAIN_NAME || 'your-domain.com' }}"
-          export GITHUB_REPO="${{ secrets.GITHUB_REPO || 'wjshku/LocalLifeAssistant' }}"
-          export GITHUB_BRANCH="${{ secrets.GITHUB_BRANCH || 'main' }}"
+          export GITHUB_REPO="${{ vars.DEPLOY_GITHUB_REPO || 'wjshku/LocalLifeAssistant' }}"
+          export GITHUB_BRANCH="${{ vars.DEPLOY_GITHUB_BRANCH || 'main' }}"
           export OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
           export EMAIL="admin@$DOMAIN_NAME"
           
