@@ -38,20 +38,36 @@ sudo apt install -y certbot python3-certbot-nginx
 echo "⚙️ Installing PM2..."
 sudo npm install -g pm2
 
-# Check application user (skip creation)
-echo "👤 Checking application user..."
-if getent passwd appuser > /dev/null 2>&1; then
-    # User exists, ensure they're in sudo group
+# Create application user (robust, idempotent version)
+echo "👤 Creating application user..."
+# Temporarily disable exit on error for user creation
+set +e
+# Try to create user, capture exit code
+sudo useradd -m -s /bin/bash appuser 2>/dev/null
+USERADD_EXIT=$?
+set -e
+
+if [ $USERADD_EXIT -eq 0 ]; then
+    # User was created successfully
+    sudo usermod -aG sudo appuser
+    echo "✅ Application user created and added to sudo group"
+elif [ $USERADD_EXIT -eq 9 ]; then
+    # User already exists (exit code 9)
     if ! getent group sudo | grep -q ":appuser\|,appuser"; then
         sudo usermod -aG sudo appuser
         echo "✅ Added existing user to sudo group"
     else
-        echo "ℹ️  Application user exists and is in sudo group"
+        echo "ℹ️  Application user already exists and is in sudo group"
     fi
 else
-    echo "⚠️  Application user 'appuser' not found!"
-    echo "   This may cause issues with subsequent deployment scripts."
-    echo "   Please ensure appuser exists before running deployment scripts."
+    # Unexpected error
+    echo "❌ Unexpected error creating user (exit code: $USERADD_EXIT)"
+    echo "   Attempting to continue with existing user if available..."
+    if getent passwd appuser > /dev/null 2>&1; then
+        echo "ℹ️  Found existing appuser, continuing..."
+    else
+        echo "⚠️  No appuser found, some operations may fail"
+    fi
 fi
 
 # Create application directory
