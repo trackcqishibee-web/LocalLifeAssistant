@@ -41,28 +41,46 @@ sudo npm install -g pm2
 # Create application user
 echo "👤 Creating application user..."
 if ! id -u appuser > /dev/null 2>&1; then
-    sudo useradd -m -s /bin/bash appuser
-    sudo usermod -aG sudo appuser
-    echo "✅ Application user created"
+    # User doesn't exist, create them
+    if sudo useradd -m -s /bin/bash appuser; then
+        sudo usermod -aG sudo appuser
+        echo "✅ Application user created and added to sudo group"
+    else
+        echo "❌ Failed to create application user"
+        exit 1
+    fi
 else
-    echo "ℹ️  Application user already exists, skipping creation"
+    # User exists, ensure they're in sudo group
+    if ! groups appuser | grep -q sudo; then
+        sudo usermod -aG sudo appuser
+        echo "✅ Added existing user to sudo group"
+    else
+        echo "ℹ️  Application user already exists and is in sudo group"
+    fi
 fi
 
 # Create application directory
 echo "📁 Creating application directory..."
 if [ ! -d "/opt/locallifeassistant" ]; then
     sudo mkdir -p /opt/locallifeassistant
-    sudo chown appuser:appuser /opt/locallifeassistant
     echo "✅ Application directory created"
 else
-    echo "ℹ️  Application directory already exists, skipping creation"
+    echo "ℹ️  Application directory already exists"
 fi
+# Ensure correct ownership regardless
+sudo chown appuser:appuser /opt/locallifeassistant
+echo "✅ Application directory ownership set to appuser:appuser"
 
 # Configure firewall
 echo "🔥 Configuring firewall..."
 sudo ufw allow OpenSSH
 sudo ufw allow 'Nginx Full'
-sudo ufw --force enable
+if sudo ufw status | grep -q "Status: inactive"; then
+    sudo ufw --force enable
+    echo "✅ Firewall enabled"
+else
+    echo "ℹ️  Firewall already enabled"
+fi
 
 echo "✅ Basic setup complete!"
 echo "📝 Next steps:"
