@@ -32,6 +32,7 @@ domain_name = os.getenv("DOMAIN_NAME")
 if domain_name and domain_name not in ["your-domain.com", "localhost", ""]:
     # Production: Allow the actual domain and www subdomain
     allow_origins = [
+        f"http://{domain_name}",
         f"https://{domain_name}",
         f"https://www.{domain_name}",
     ]

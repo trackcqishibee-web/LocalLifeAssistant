@@ -35,10 +35,21 @@ echo "🔐 Creating production environment file..."
 cd ..
 sudo -u appuser cp .env.example .env.production
 
-echo "📝 Please edit /opt/locallifeassistant/.env.production with your production API keys:"
-echo "   - OPENAI_API_KEY=your_production_openai_key"
-echo "   - DOMAIN_NAME=$DOMAIN_NAME"
-echo "   - CHROMA_PERSIST_DIRECTORY=/opt/locallifeassistant/backend/chroma_db"
+# Auto-configure environment variables if available
+if [ -n "$OPENAI_API_KEY" ]; then
+    echo "🔑 Setting OpenAI API key..."
+    sudo -u appuser sed -i "s|OPENAI_API_KEY=.*|OPENAI_API_KEY=$OPENAI_API_KEY|" .env.production
+fi
+
+if [ -n "$DOMAIN_NAME" ]; then
+    echo "🌐 Setting domain name..."
+    sudo -u appuser sed -i "s|DOMAIN_NAME=.*|DOMAIN_NAME=$DOMAIN_NAME|" .env.production
+fi
+
+echo "📝 Production environment configured!"
+if [ -z "$OPENAI_API_KEY" ]; then
+    echo "⚠️  Warning: OPENAI_API_KEY not set. Please edit /opt/locallifeassistant/.env.production manually."
+fi
 
 # Create systemd service for backend
 echo "⚙️ Creating systemd service for backend..."
@@ -67,7 +78,19 @@ sudo systemctl enable locallifeassistant-backend
 
 echo "✅ Application deployment complete!"
 echo "📝 Next steps:"
-echo "   1. Edit /opt/locallifeassistant/.env.production with your API keys"
-echo "   2. Configure Nginx (run configure-nginx.sh)"
-echo "   3. Set up SSL certificates (run setup-ssl.sh)"
-echo "   4. Start the backend service: sudo systemctl start locallifeassistant-backend"
+echo "   1. Configure Nginx (run configure-nginx.sh)"
+echo "   2. Set up SSL certificates (run setup-ssl.sh)"
+echo "   3. Start the backend service: sudo systemctl start locallifeassistant-backend"
+echo ""
+echo "🔧 Environment configuration:"
+echo "   - .env.production created with auto-configured values"
+if [ -n "$OPENAI_API_KEY" ]; then
+    echo "   - ✅ OPENAI_API_KEY: Configured"
+else
+    echo "   - ❌ OPENAI_API_KEY: Not set (needs manual configuration)"
+fi
+if [ -n "$DOMAIN_NAME" ]; then
+    echo "   - ✅ DOMAIN_NAME: $DOMAIN_NAME"
+else
+    echo "   - ❌ DOMAIN_NAME: Not set"
+fi
