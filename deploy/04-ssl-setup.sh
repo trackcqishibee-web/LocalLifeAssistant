@@ -20,7 +20,7 @@ echo "🌐 Setting up SSL for domain: $DOMAIN_NAME"
 # Obtain SSL certificate
 echo "📜 Obtaining SSL certificate from Let's Encrypt..."
 EMAIL=${EMAIL:-"admin@$DOMAIN_NAME"}
-sudo certbot --nginx -d $DOMAIN_NAME -d www.$DOMAIN_NAME --non-interactive --agree-tos --email $EMAIL
+sudo certbot --nginx -d $DOMAIN_NAME --non-interactive --agree-tos --email $EMAIL
 
 # Test certificate renewal
 echo "🔄 Testing certificate renewal..."
