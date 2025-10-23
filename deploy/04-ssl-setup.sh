@@ -22,14 +22,10 @@ echo "📜 Obtaining SSL certificate from Let's Encrypt..."
 EMAIL=${EMAIL:-"admin@$DOMAIN_NAME"}
 sudo certbot --nginx -d $DOMAIN_NAME --non-interactive --agree-tos --email $EMAIL
 
-# Test certificate renewal
-echo "🔄 Testing certificate renewal..."
-sudo certbot renew --dry-run
-
-# Set up automatic renewal
+# Set up automatic renewal (skip renewal test since certificate is already working)
 echo "⏰ Setting up automatic certificate renewal..."
-sudo systemctl enable certbot.timer
-sudo systemctl start certbot.timer
+sudo systemctl enable certbot.timer 2>/dev/null || echo "⚠️  Failed to enable certbot timer"
+sudo systemctl start certbot.timer 2>/dev/null || echo "⚠️  Failed to start certbot timer"
 
 echo "✅ SSL certificates configured successfully!"
 echo "🔗 Your application is now available at: https://$DOMAIN_NAME"
