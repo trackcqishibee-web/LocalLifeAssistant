@@ -26,7 +26,7 @@ print_error() {
 
 # Check if we're in the right directory
 if [ ! -f "docker-compose.yml" ]; then
-    print_error "docker-compose.yml not found. Please run this script from the deploy directory."
+    print_error "docker-compose.yml not found. Please run this script from the deploy/docker directory."
     exit 1
 fi
 
