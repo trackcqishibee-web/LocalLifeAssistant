@@ -102,7 +102,7 @@ configure_web_server() {
     if [ "$DEPLOY_MODE" = "traditional" ]; then
         print_step "Configuring Nginx..."
         chmod +x 03-nginx-setup.sh
-        echo "$DOMAIN_NAME" | ./03-nginx-setup.sh
+        ./03-nginx-setup.sh "$DOMAIN_NAME"
         print_success "Nginx configuration completed"
     fi
 }
@@ -112,7 +112,7 @@ setup_ssl_certificates() {
     if [ "$DEPLOY_MODE" = "traditional" ]; then
         print_step "Setting up SSL certificates..."
         chmod +x 04-ssl-setup.sh
-        echo "$DOMAIN_NAME" | ./04-ssl-setup.sh
+        ./04-ssl-setup.sh
         print_success "SSL certificates configured"
     fi
 }
