@@ -14,6 +14,14 @@ export default defineConfig(({ mode }) => {
           target: env.VITE_API_BASE_URL || 'http://localhost:8000',
           changeOrigin: true,
         },
+        '/health': {
+          target: env.VITE_API_BASE_URL || 'http://localhost:8000',
+          changeOrigin: true,
+        },
+        '/stats': {
+          target: env.VITE_API_BASE_URL || 'http://localhost:8000',
+          changeOrigin: true,
+        },
       },
     },
     // Make environment variables available to the app
