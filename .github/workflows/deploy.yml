@@ -20,7 +20,7 @@ jobs:
     
     - name: 📥 Download deployment script
       run: |
-        ssh -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} << 'EOF'
+        ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
           cd /tmp
           wget -q https://raw.githubusercontent.com/wjshku/LocalLifeAssistant/main/deploy/auto-deploy.sh
           chmod +x auto-deploy.sh
@@ -28,9 +28,9 @@ jobs:
     
     - name: 🚀 Deploy application
       run: |
-        ssh -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} << 'EOF'
+        ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
           cd /tmp
-          
+
           # Set environment variables
           export DOMAIN_NAME="${{ secrets.DOMAIN_NAME || 'your-domain.com' }}"
           export GITHUB_REPO="wjshku/LocalLifeAssistant"
@@ -44,7 +44,7 @@ jobs:
     
     - name: 🔍 Health check
       run: |
-        ssh -o StrictHostKeyChecking=no root@${{ secrets.SERVER_IP }} << 'EOF'
+        ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
           echo "🔍 Performing post-deployment health check..."
           
           # Check if services are running
