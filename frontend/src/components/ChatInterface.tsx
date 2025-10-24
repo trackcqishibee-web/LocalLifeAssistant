@@ -16,6 +16,7 @@ interface ChatInterfaceProps {
   userLocation: LocationCoordinates | null;
   userId: string;
   onTrialExceeded: () => void;
+  conversationId: string | null;
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
@@ -25,7 +26,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   conversationHistory,
   userLocation,
   userId,
-  onTrialExceeded
+  onTrialExceeded,
+  conversationId
 }) => {
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -81,7 +83,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         llm_provider: llmProvider,
         location: userLocation,
         is_initial_response: isInitialResponse,
-        user_id: userId
+        user_id: userId,
+        conversation_id: conversationId
       };
 
       const response = await apiClient.chat(request);
@@ -89,6 +92,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       // Check if trial exceeded
       if (response.trial_exceeded) {
         onTrialExceeded();
+      }
+
+      // Update conversation ID if it changed (new conversation)
+      if (response.conversation_id && response.conversation_id !== conversationId) {
+        // This will trigger App.tsx to update
+        console.log('Conversation ID updated:', response.conversation_id);
+        localStorage.setItem('current_conversation_id', response.conversation_id);
       }
       
       // Set extraction summary if available and keep loading state to show it

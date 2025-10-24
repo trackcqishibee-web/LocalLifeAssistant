@@ -19,6 +19,7 @@ from .geocoding import GeocodingService, GeocodeRequest, GeocodeResponse, Locati
 from .search_service import SearchService
 from .extraction_service import ExtractionService, UserPreferences
 from .usage_tracker import UsageTracker
+from .conversation_storage import ConversationStorage
 
 # Load environment variables from .env file
 load_dotenv('../.env') or load_dotenv('.env') or load_dotenv('/app/.env')
@@ -112,6 +113,7 @@ class ChatRequest(BaseModel):
     user_preferences: Optional[UserPreferences] = None
     is_initial_response: bool = False  # Flag for welcome message response
     user_id: str  # NEW - Required anonymous user ID
+    conversation_id: Optional[str] = None  # NEW
 
 class ChatResponse(BaseModel):
     message: str
@@ -123,6 +125,7 @@ class ChatResponse(BaseModel):
     extraction_summary: Optional[str] = None  # NEW
     usage_stats: Optional[Dict[str, Any]] = None  # NEW - Trial info
     trial_exceeded: bool = False  # NEW - Flag to show registration prompt
+    conversation_id: str  # NEW
 
 # Initialize services
 event_crawler = EventbriteCrawler()
@@ -131,9 +134,15 @@ geocoding_service = GeocodingService()
 search_service = SearchService()
 extraction_service = ExtractionService()
 usage_tracker = UsageTracker()
+conversation_storage = ConversationStorage()
 
 # Cache configuration
 CACHE_TTL_HOURS = 6  # Cache events for 6 hours
+
+# Create conversations directory on startup
+CONVERSATIONS_DIR = "backend/conversations"
+os.makedirs(CONVERSATIONS_DIR, exist_ok=True)
+logger.info(f"Conversations directory: {CONVERSATIONS_DIR}")
 
 # Routes
 @app.get("/health")
@@ -190,6 +199,21 @@ async def smart_cached_chat(request: ChatRequest):
             usage_stats = usage_tracker.increment_usage(user_id)
         else:
             usage_stats = None
+        
+        # Get or create conversation
+        conversation_id = request.conversation_id
+        if not conversation_id:
+            conversation_id = conversation_storage.create_conversation(user_id, {
+                "location": request.location.dict() if request.location else None,
+                "llm_provider": request.llm_provider
+            })
+
+        # Save user message
+        conversation_storage.save_message(user_id, conversation_id, {
+            "role": "user",
+            "content": request.message,
+            "timestamp": datetime.now().isoformat()
+        })
         
         # Step 1: Extract user preferences if this is an initial response
         extracted_preferences = None
@@ -333,6 +357,22 @@ async def smart_cached_chat(request: ChatRequest):
             if summary_parts:
                 extraction_summary = " • ".join(summary_parts)
         
+        # Save assistant response
+        conversation_storage.save_message(user_id, conversation_id, {
+            "role": "assistant",
+            "content": response_message,
+            "timestamp": datetime.now().isoformat(),
+            "recommendations": formatted_recommendations,
+            "extracted_preferences": extracted_preferences.dict() if extracted_preferences else None,
+            "cache_used": cache_used,
+            "cache_age_hours": cache_age_hours
+        })
+
+        # Update conversation metadata
+        conversation_storage.update_metadata(user_id, conversation_id, {
+            "last_message_at": datetime.now().isoformat()
+        })
+        
         return ChatResponse(
             message=response_message,
             recommendations=formatted_recommendations,
@@ -342,7 +382,8 @@ async def smart_cached_chat(request: ChatRequest):
             extracted_preferences=extracted_preferences,
             extraction_summary=extraction_summary,
             usage_stats=usage_stats,  # NEW
-            trial_exceeded=False
+            trial_exceeded=False,
+            conversation_id=conversation_id  # NEW
         )
         
     except Exception as e:
@@ -382,13 +423,20 @@ async def register_user(
     from datetime import datetime
     real_user_id = f"registered_{datetime.now().timestamp()}"
     
+    # Migrate conversations from anonymous to registered user
+    migrated_count = conversation_storage.migrate_user_conversations(
+        anonymous_user_id,
+        real_user_id
+    )
+    
     # Mark as registered
     usage_tracker.mark_registered(anonymous_user_id, real_user_id)
     
     return {
         "success": True,
         "user_id": real_user_id,
-        "message": "Registration successful! Your conversation history has been preserved."
+        "migrated_conversations": migrated_count,
+        "message": f"Registration successful! {migrated_count} conversations migrated."
     }
 
 @app.post("/api/users/login")
@@ -441,7 +489,37 @@ async def migrate_conversations(
             "migrated_conversations": len(os.listdir(anonymous_dir))
         }
     
-    return {"success": False, "error": "No conversations to migrate"}
+        return {"success": False, "error": "No conversations to migrate"}
+
+@app.post("/api/conversations/create")
+async def create_conversation(user_id: str, metadata: Dict[str, Any] = {}):
+    """Create a new conversation for a user"""
+    conversation_id = conversation_storage.create_conversation(user_id, metadata)
+    return {"conversation_id": conversation_id}
+
+@app.get("/api/conversations/{user_id}/{conversation_id}")
+async def get_conversation(user_id: str, conversation_id: str):
+    """Get specific conversation for a user"""
+    try:
+        conversation = conversation_storage.get_conversation(user_id, conversation_id)
+        return conversation
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+@app.get("/api/conversations/{user_id}/list")
+async def list_user_conversations(user_id: str, limit: int = 50):
+    """List all conversations for a specific user"""
+    conversations = conversation_storage.list_user_conversations(user_id, limit)
+    return {"conversations": conversations}
+
+@app.delete("/api/conversations/{user_id}/{conversation_id}")
+async def delete_conversation(user_id: str, conversation_id: str):
+    """Delete a conversation"""
+    try:
+        conversation_storage.delete_conversation(user_id, conversation_id)
+        return {"success": True}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
 @app.post("/api/geocode", response_model=GeocodeResponse)
 async def geocode_location(request: GeocodeRequest):
