@@ -7,7 +7,7 @@ Combines real-time fetching with intelligent city-based caching
 import logging
 import os
 from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
@@ -30,7 +30,9 @@ app = FastAPI(title="Smart Cached RAG Local Life Assistant", version="2.1.0")
 
 # Add CORS middleware
 domain_name = os.getenv("DOMAIN_NAME")
+render_frontend_url = os.getenv("RENDER_FRONTEND_URL")
 logger.info(f"DOMAIN_NAME environment variable: '{domain_name}'")
+
 
 if domain_name and domain_name not in ["your-domain.com", "localhost", ""]:
     # Production: Allow the actual domain and www subdomain
@@ -40,17 +42,25 @@ if domain_name and domain_name not in ["your-domain.com", "localhost", ""]:
         f"https://www.{domain_name}",
     ]
     logger.info(f"Production CORS configured for domain: {domain_name}")
+elif render_frontend_url:
+    # Render deployment: Allow the frontend URL
+    allow_origins = [render_frontend_url]
 else:
-    # Development: Allow localhost origins (cannot use * with credentials)
+    # Development: Allow localhost and common dev ports
     allow_origins = [
-        "http://localhost:3000",
+        "http://localhost:3000", 
         "http://localhost:8000", 
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:8000",
-        "http://localhost:5173",  # Vite default port
+        "http://127.0.0.1:3000", 
+        "http://127.0.0.1:8000", 
+        "http://localhost:5173", 
         "http://127.0.0.1:5173"
     ]
-    logger.info("Development CORS configured for localhost")
+
+# Log CORS configuration for debugging
+logger.info(f"DOMAIN_NAME environment variable: '{domain_name}'")
+logger.info(f"RENDER_FRONTEND_URL environment variable: '{render_frontend_url}'")
+logger.info(f"Allowed origins: {allow_origins}")
+
 
 logger.info(f"Allowed origins: {allow_origins}")
 
@@ -82,6 +92,14 @@ async def cors_middleware(request, call_next):
     response.headers["Access-Control-Allow-Credentials"] = "true"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
+
+# Add middleware to log CORS requests for debugging
+@app.middleware("http")
+async def log_cors_requests(request: Request, call_next):
+    origin = request.headers.get("origin")
+    logger.info(f"CORS middleware - Origin: {origin}, Allowed origins: {allow_origins}")
+    response = await call_next(request)
     return response
 
 # Pydantic models
