@@ -6,13 +6,15 @@ interface RegistrationModalProps {
   onClose: () => void;
   onRegister: (email: string, password: string, name: string) => Promise<void>;
   trialRemaining: number;
+  onSwitchToLogin?: () => void;
 }
 
 const RegistrationModal: React.FC<RegistrationModalProps> = ({
   isOpen,
   onClose,
   onRegister,
-  trialRemaining
+  trialRemaining,
+  onSwitchToLogin
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -51,9 +53,13 @@ const RegistrationModal: React.FC<RegistrationModalProps> = ({
           <p className="text-red-600 mb-4">
             🔒 You've used all your free interactions. Register to continue!
           </p>
-        ) : (
+        ) : trialRemaining < 10 ? (
           <p className="text-amber-600 mb-4">
             ⚠️ Only {trialRemaining} free interactions remaining. Register to keep your conversation history!
+          </p>
+        ) : (
+          <p className="text-blue-600 mb-4">
+            🎉 Register now to save your conversations and get unlimited access!
           </p>
         )}
         
@@ -123,12 +129,17 @@ const RegistrationModal: React.FC<RegistrationModalProps> = ({
           </button>
         </form>
         
-        <p className="text-sm text-gray-600 mt-4 text-center">
-          Already have an account?{' '}
-          <button className="text-primary-500 hover:underline">
-            Login
-          </button>
-        </p>
+        {onSwitchToLogin && (
+          <p className="text-sm text-gray-600 mt-4 text-center">
+            Already have an account?{' '}
+            <button 
+              onClick={onSwitchToLogin}
+              className="text-primary-500 hover:underline"
+            >
+              Login
+            </button>
+          </p>
+        )}
       </div>
     </div>
   );

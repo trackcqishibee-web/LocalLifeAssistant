@@ -3,9 +3,10 @@ import { Settings, MessageCircle, MapPin } from 'lucide-react';
 import ChatInterface from './components/ChatInterface';
 import LocationInput from './components/LocationInput';
 import RegistrationModal from './components/RegistrationModal';
+import LoginModal from './components/LoginModal';
 import { ChatMessage, apiClient, LocationCoordinates } from './api/client';
 import { getOrCreateUserId, setUserId } from './utils/userIdManager';
-import { getUsageStats, updateUsageStats, shouldShowRegistrationPrompt, markRegistrationPrompted, getTrialWarningMessage } from './utils/usageTracker';
+import { updateUsageStats, shouldShowRegistrationPrompt, markRegistrationPrompted, getTrialWarningMessage } from './utils/usageTracker';
 
 const App: React.FC = () => {
   const [conversationHistory, setConversationHistory] = useState<ChatMessage[]>([]);
@@ -16,6 +17,7 @@ const App: React.FC = () => {
   const [userId, setUserIdState] = useState<string>('');
   const [usageStats, setUsageStats] = useState<any>(null);
   const [showRegistrationModal, setShowRegistrationModal] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const [trialWarning, setTrialWarning] = useState('');
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
 
@@ -147,6 +149,47 @@ const App: React.FC = () => {
     }
   };
 
+  const handleLogin = async (email: string, password: string) => {
+    try {
+      const response = await apiClient.login(email, password);
+      
+      if (response.success) {
+        // Update user ID to logged-in user
+        setUserIdState(response.user_id);
+        setUserId(response.user_id);
+        
+        // Load user's conversations
+        const conversations = await apiClient.listUserConversations(response.user_id);
+        
+        // Load most recent conversation if exists
+        if (conversations.length > 0) {
+          const mostRecent = conversations[0];
+          const conversation = await apiClient.getConversation(response.user_id, mostRecent.conversation_id);
+          setCurrentConversationId(mostRecent.conversation_id);
+          setConversationHistory(conversation.messages);
+          localStorage.setItem('current_conversation_id', mostRecent.conversation_id);
+        }
+        
+        setShowLoginModal(false);
+        alert('Login successful! Welcome back!');
+      }
+    } catch (error: any) {
+      console.error('Login failed:', error);
+      throw error;
+    }
+  };
+
+  // Add switch modal handlers
+  const handleSwitchToRegister = () => {
+    setShowLoginModal(false);
+    setShowRegistrationModal(true);
+  };
+
+  const handleSwitchToLogin = () => {
+    setShowRegistrationModal(false);
+    setShowLoginModal(true);
+  };
+
   const handleExampleQuery = async (query: string) => {
     const userMessage: ChatMessage = {
       role: 'user',
@@ -222,10 +265,18 @@ const App: React.FC = () => {
             </div>
             
             <div className="flex items-center space-x-4">
-              {/* Usage Counter */}
+              {/* Usage Counter and Register Button */}
               {usageStats && !usageStats.is_registered && (
-                <div className="text-sm text-gray-600">
-                  Trial: {usageStats.trial_remaining} interactions left
+                <div className="flex items-center gap-3">
+                  <div className="text-sm text-gray-600">
+                    Trial: {usageStats.trial_remaining} interactions left
+                  </div>
+                  <button
+                    onClick={() => setShowRegistrationModal(true)}
+                    className="text-sm bg-primary-600 text-white px-3 py-1 rounded-md hover:bg-primary-700 transition-colors"
+                  >
+                    Register
+                  </button>
                 </div>
               )}
               
@@ -288,9 +339,27 @@ const App: React.FC = () => {
           <div className="lg:col-span-3">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-[700px] flex flex-col">
               <div className="p-4 border-b border-gray-200">
-                <div className="flex items-center space-x-2">
-                  <MessageCircle className="w-5 h-5 text-primary-500" />
-                  <h2 className="text-lg font-semibold text-gray-900">Chat with Assistant</h2>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <MessageCircle className="w-5 h-5 text-primary-500" />
+                    <h2 className="text-lg font-semibold text-gray-900">Chat with Assistant</h2>
+                  </div>
+                  {!usageStats?.is_registered && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setShowLoginModal(true)}
+                        className="text-sm text-primary-600 px-3 py-1.5 rounded-md border border-primary-600 hover:bg-primary-50 transition-colors"
+                      >
+                        Sign In
+                      </button>
+                      <button
+                        onClick={() => setShowRegistrationModal(true)}
+                        className="text-sm bg-primary-600 text-white px-3 py-1.5 rounded-md hover:bg-primary-700 transition-colors"
+                      >
+                        Register
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
               
@@ -314,6 +383,28 @@ const App: React.FC = () => {
               onLocationChange={handleLocationChange}
               initialLocation={userLocation}
             />
+
+            {/* Registration/Login Section */}
+            {!usageStats?.is_registered && (
+              <div className="bg-gradient-to-r from-primary-50 to-blue-50 rounded-lg border border-primary-200 p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Get Full Access</h3>
+                <p className="text-sm text-gray-600 mb-3">
+                  Register to save your conversations and get unlimited access!
+                </p>
+                <button
+                  onClick={() => setShowRegistrationModal(true)}
+                  className="w-full bg-primary-600 text-white py-2 px-4 rounded-md hover:bg-primary-700 transition-colors text-sm font-medium mb-2"
+                >
+                  Register Now
+                </button>
+                <button
+                  onClick={() => setShowLoginModal(true)}
+                  className="w-full text-primary-600 py-2 px-4 rounded-md border border-primary-300 hover:bg-primary-50 transition-colors text-sm font-medium"
+                >
+                  Already have an account? Sign In
+                </button>
+              </div>
+            )}
 
             {/* Quick Examples */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
@@ -361,13 +452,22 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Registration Modal */}
-      <RegistrationModal
-        isOpen={showRegistrationModal}
-        onClose={() => setShowRegistrationModal(false)}
-        onRegister={handleRegister}
-        trialRemaining={usageStats?.trial_remaining || 0}
-      />
+              {/* Registration Modal */}
+              <RegistrationModal
+                isOpen={showRegistrationModal}
+                onClose={() => setShowRegistrationModal(false)}
+                onRegister={handleRegister}
+                trialRemaining={usageStats?.trial_remaining || 0}
+                onSwitchToLogin={handleSwitchToLogin}
+              />
+
+              {/* Login Modal */}
+              <LoginModal
+                isOpen={showLoginModal}
+                onClose={() => setShowLoginModal(false)}
+                onLogin={handleLogin}
+                onSwitchToRegister={handleSwitchToRegister}
+              />
     </div>
   );
 };

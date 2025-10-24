@@ -7,6 +7,7 @@ Combines real-time fetching with intelligent city-based caching
 import logging
 import os
 from typing import Dict, Any, List, Optional
+from datetime import datetime
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -20,6 +21,7 @@ from .search_service import SearchService
 from .extraction_service import ExtractionService, UserPreferences
 from .usage_tracker import UsageTracker
 from .conversation_storage import ConversationStorage
+from .user_manager import UserManager
 
 # Load environment variables from .env file
 load_dotenv('../.env') or load_dotenv('.env') or load_dotenv('/app/.env')
@@ -135,6 +137,7 @@ search_service = SearchService()
 extraction_service = ExtractionService()
 usage_tracker = UsageTracker()
 conversation_storage = ConversationStorage()
+user_manager = UserManager()
 
 # Cache configuration
 CACHE_TTL_HOURS = 6  # Cache events for 6 hours
@@ -143,6 +146,11 @@ CACHE_TTL_HOURS = 6  # Cache events for 6 hours
 CONVERSATIONS_DIR = "backend/conversations"
 os.makedirs(CONVERSATIONS_DIR, exist_ok=True)
 logger.info(f"Conversations directory: {CONVERSATIONS_DIR}")
+
+# Create users directory on startup
+USERS_DIR = "backend/users"
+os.makedirs(USERS_DIR, exist_ok=True)
+logger.info(f"Users directory: {USERS_DIR}")
 
 # Routes
 @app.get("/health")
@@ -403,64 +411,50 @@ async def register_user(
     password: str,
     name: Optional[str] = None
 ):
-    """
-    Register a new user and migrate their anonymous data
+    """Register a new user and migrate their conversation history"""
     
-    This is a placeholder - you'll want to add:
-    - Password hashing (bcrypt)
-    - Email validation
-    - Real user database (SQLite, PostgreSQL, etc.)
-    """
-    # TODO: Implement real user registration
-    # 1. Validate email format
-    # 2. Hash password
-    # 3. Create user in database
-    # 4. Generate real user ID
-    # 5. Migrate conversations from anonymous_user_id to real_user_id
-    # 6. Mark anonymous user as registered
-    
-    # Placeholder response
-    from datetime import datetime
-    real_user_id = f"registered_{datetime.now().timestamp()}"
-    
-    # Migrate conversations from anonymous to registered user
-    migrated_count = conversation_storage.migrate_user_conversations(
-        anonymous_user_id,
-        real_user_id
-    )
-    
-    # Mark as registered
-    usage_tracker.mark_registered(anonymous_user_id, real_user_id)
-    
-    return {
-        "success": True,
-        "user_id": real_user_id,
-        "migrated_conversations": migrated_count,
-        "message": f"Registration successful! {migrated_count} conversations migrated."
-    }
+    try:
+        # Generate registered user ID
+        real_user_id = f"registered_{int(datetime.now().timestamp())}"
+        
+        # Register user in user manager (persistent file storage)
+        user_manager.register_user(email, password, real_user_id, name)
+        
+        # Migrate conversations from anonymous to registered user
+        migrated_count = conversation_storage.migrate_user_conversations(
+            anonymous_user_id,
+            real_user_id
+        )
+        
+        # Mark as registered in usage tracker
+        usage_tracker.mark_registered(anonymous_user_id, real_user_id)
+        
+        return {
+            "success": True,
+            "user_id": real_user_id,
+            "migrated_conversations": migrated_count,
+            "message": f"Registration successful! {migrated_count} conversations migrated."
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/users/login")
 async def login_user(email: str, password: str):
-    """
-    User login endpoint
+    """User login endpoint"""
     
-    This is a placeholder - you'll want to add:
-    - Password verification
-    - JWT token generation
-    - Session management
-    """
-    # TODO: Implement real login
-    # 1. Find user by email
-    # 2. Verify password
-    # 3. Generate JWT token
-    # 4. Return token and user info
-    
-    return {
-        "success": True,
-        "user_id": "registered_user_123",
-        "token": "jwt_token_here",
-        "message": "Login successful!"
-    }
+    try:
+        # Authenticate user with file-based storage
+        user = user_manager.login_user(email, password)
+        
+        return {
+            "success": True,
+            "user_id": user["user_id"],
+            "email": user["email"],
+            "name": user.get("name"),
+            "message": "Login successful!"
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
 
 @app.post("/api/users/migrate-conversations")
 async def migrate_conversations(
