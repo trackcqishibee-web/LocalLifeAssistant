@@ -299,36 +299,17 @@ class EventbriteCrawler:
             List of normalized event dictionaries
         """
         logger.info(f"Fetching real events for {city_name}")
+
+        # Map city name to Eventbrite location ID
+        location_id = self._get_eventbrite_location_id(city_name)
         
-        try:
-            # Try to get real events from the working Eventbrite crawler
-            import sys
-            import os
-            sys.path.append(os.path.join(os.path.dirname(__file__), 'app'))
-            
-            # Map city name to Eventbrite location ID
-            location_id = self._get_eventbrite_location_id(city_name)
-            
-            crawler = EventbriteCrawler()
-            real_events = crawler.fetch_events(location_id=location_id, max_pages=3)
-            
-            if real_events and len(real_events) > 0:
-                logger.info(f"Retrieved {len(real_events)} real events for {city_name}")
-                return real_events
-            else:
-                logger.warning(f"No real events found for {city_name}, falling back to mock data")
-                mock_events = self._generate_mock_events(city_name)
-                logger.info(f"Generated {len(mock_events)} mock events for {city_name}")
-                return mock_events
-                
-        except Exception as e:
-            logger.error(f"Error fetching real events for {city_name}: {e}")
-            logger.info(f"Falling back to mock events for {city_name}")
-            
-            # Generate diverse mock events for the city as fallback
-            mock_events = self._generate_mock_events(city_name)
-            logger.info(f"Generated {len(mock_events)} mock events for {city_name}")
-            return mock_events
+        real_events = self.fetch_events(location_id=location_id, max_pages=3)
+        
+        if real_events and len(real_events) > 0:
+            logger.info(f"Retrieved {len(real_events)} real events for {city_name}")
+            return real_events
+        else:
+            return []
     
     def _get_eventbrite_location_id(self, city_name: str) -> str:
         """
