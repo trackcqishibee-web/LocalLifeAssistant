@@ -20,8 +20,29 @@ if [ -z "$DOMAIN_NAME" ]; then
     fi
 fi
 
-# Create Nginx configuration (force overwrite)
 echo "📝 Creating Nginx configuration for $DOMAIN_NAME..."
+
+# Check if configuration already exists and has the same domain
+if [ -f /etc/nginx/sites-available/locallifeassistant ]; then
+    EXISTING_DOMAIN=$(grep -o 'server_name [^;]*' /etc/nginx/sites-available/locallifeassistant 2>/dev/null | awk '{print $2}' | head -1)
+    
+    if [ "$EXISTING_DOMAIN" = "$DOMAIN_NAME" ]; then
+        echo "ℹ️  Nginx configuration already exists for $DOMAIN_NAME"
+        echo "🧪 Testing existing Nginx configuration..."
+        if sudo nginx -t 2>&1; then
+            echo "✅ Nginx configuration is valid!"
+            echo "ℹ️  Skipping configuration update"
+            exit 0
+        else
+            echo "⚠️  Existing configuration has errors, will recreate it"
+        fi
+    else
+        echo "ℹ️  Domain changed from $EXISTING_DOMAIN to $DOMAIN_NAME, updating configuration..."
+    fi
+else
+    echo "ℹ️  No existing Nginx configuration found"
+fi
+
 # Remove existing configuration if it exists
 sudo rm -f /etc/nginx/sites-available/locallifeassistant
 sudo rm -f /etc/nginx/sites-enabled/locallifeassistant
