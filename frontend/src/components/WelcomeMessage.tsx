@@ -1,11 +1,10 @@
 import React from 'react';
-import { MessageCircle, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 
 interface WelcomeMessageProps {
-  onDismiss?: () => void;
 }
 
-const WelcomeMessage: React.FC<WelcomeMessageProps> = ({ onDismiss }) => {
+const WelcomeMessage: React.FC<WelcomeMessageProps> = () => {
   return (
     <div className="chat-message assistant">
       <div className="flex items-start space-x-2">
