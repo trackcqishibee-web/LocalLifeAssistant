@@ -1,6 +1,9 @@
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+console.log('🔧 Frontend API Base URL:', API_BASE_URL);
+console.log('🌐 Current origin:', window.location.origin);
+console.log('📡 VITE_API_BASE_URL env:', import.meta.env.VITE_API_BASE_URL);
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -38,6 +41,8 @@ export interface ChatRequest {
   location?: LocationCoordinates | null;
   user_preferences?: UserPreferences;
   is_initial_response?: boolean;
+  user_id: string;  // NEW - Required anonymous user ID
+  conversation_id?: string | null;  // Optional conversation ID for continuing conversations
 }
 
 export interface RecommendationItem {
@@ -55,6 +60,9 @@ export interface ChatResponse {
   cache_age_hours?: number;
   extracted_preferences?: UserPreferences;
   extraction_summary?: string;
+  usage_stats?: any;  // NEW - Trial info
+  trial_exceeded?: boolean;  // NEW - Flag to show registration prompt
+  conversation_id: string;  // NEW
 }
 
 export interface RecommendationRequest {
@@ -73,7 +81,9 @@ class APIClient {
   }
 
   async chat(request: ChatRequest): Promise<ChatResponse> {
-    const response = await axios.post(`${this.baseURL}/api/chat`, request);
+    const url = `${this.baseURL}/api/chat`;
+    console.log('🔗 Chat API Call:', url);
+    const response = await axios.post(url, request);
     return response.data;
   }
 
@@ -132,6 +142,58 @@ class APIClient {
     } else {
       throw new Error(response.data.error_message || 'Failed to geocode location');
     }
+  }
+
+  async getUserUsage(userId: string): Promise<any> {
+    const response = await axios.get(`${this.baseURL}/api/usage/${userId}`);
+    return response.data;
+  }
+
+  async registerWithToken(anonymousUserId: string, token: string): Promise<any> {
+    const url = `${this.baseURL}/api/auth/register`;
+    console.log('🔗 Register API Call:', url);
+    const response = await axios.post(url, {
+      anonymous_user_id: anonymousUserId,
+      token
+    });
+    return response.data;
+  }
+
+  async verifyToken(token: string): Promise<any> {
+    const url = `${this.baseURL}/api/auth/verify`;
+    console.log('🔗 Verify API Call:', url);
+    const response = await axios.post(url, {
+      token
+    });
+    return response.data;
+  }
+
+  async createConversation(userId: string, metadata: any = {}): Promise<string> {
+    const response = await axios.post(`${this.baseURL}/api/conversations/create`, {
+      user_id: userId,
+      ...metadata
+    });
+    return response.data.conversation_id;
+  }
+
+  async getConversation(userId: string, conversationId: string): Promise<any> {
+    const response = await axios.get(
+      `${this.baseURL}/api/conversations/${userId}/${conversationId}`
+    );
+    return response.data;
+  }
+
+  async listUserConversations(userId: string, limit: number = 50): Promise<any[]> {
+    const response = await axios.get(
+      `${this.baseURL}/api/conversations/${userId}/list?limit=${limit}`
+    );
+    return response.data.conversations;
+  }
+
+  async deleteConversation(userId: string, conversationId: string): Promise<void> {
+    await axios.delete(
+      `${this.baseURL}/api/conversations/${userId}/${conversationId}`
+    );
   }
 }
 
