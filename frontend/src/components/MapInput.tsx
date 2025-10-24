@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents, Popup } from 'react-leaflet';
-import { LatLng, Icon } from 'leaflet';
+import { Icon } from 'leaflet';
 import { LocationCoordinates } from '../api/client';
 import 'leaflet/dist/leaflet.css';
 

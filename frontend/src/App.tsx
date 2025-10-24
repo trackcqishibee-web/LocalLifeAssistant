@@ -179,7 +179,7 @@ const App: React.FC = () => {
     initializeConversation();
   }, [userId, llmProvider]);
 
-  const handleRegister = async (anonymousUserId: string, email: string, password: string, name: string, idToken: string) => {
+  const handleRegister = async (anonymousUserId: string, _email: string, _password: string, _name: string, idToken: string) => {
     try {
       // The Firebase user is already created, now register with our backend using token
       const response = await apiClient.registerWithToken(anonymousUserId, idToken);
@@ -204,7 +204,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogin = async (user: User, token: string) => {
+  const handleLogin = async (_user: User, token: string) => {
     try {
       // Firebase authentication is already handled, just verify with backend
       const response = await apiClient.verifyToken(token);

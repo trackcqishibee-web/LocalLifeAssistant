@@ -39,6 +39,7 @@ export interface ChatRequest {
   user_preferences?: UserPreferences;
   is_initial_response?: boolean;
   user_id: string;  // NEW - Required anonymous user ID
+  conversation_id?: string | null;  // Optional conversation ID for continuing conversations
 }
 
 export interface RecommendationItem {
