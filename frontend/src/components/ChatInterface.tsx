@@ -26,7 +26,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [extractionSummary, setExtractionSummary] = useState<string | null>(null);
-  const [currentUserInput, setCurrentUserInput] = useState<string>('');
   const [messagesWithRecommendations, setMessagesWithRecommendations] = useState<ChatMessageWithRecommendations[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -64,11 +63,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     onNewMessage(userMessage);
     setMessagesWithRecommendations(prev => [...prev, userMessage]);
-    const userInput = message.trim();
     setMessage('');
     setIsLoading(true);
     setExtractionSummary(null);
-    setCurrentUserInput(userInput);
 
     try {
       // Detect if this is the first user message (initial response to welcome message)
@@ -106,7 +103,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           // Clear loading state
           setIsLoading(false);
           setExtractionSummary(null);
-          setCurrentUserInput('');
         }, 1500); // Show extraction summary for 1.5 seconds
       } else {
         // No extraction summary, proceed normally
@@ -127,7 +123,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         // Clear loading state
         setIsLoading(false);
         setExtractionSummary(null);
-        setCurrentUserInput('');
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -139,7 +134,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       onNewMessage(errorMessage);
       setIsLoading(false);
       setExtractionSummary(null);
-      setCurrentUserInput('');
     }
   };
 
