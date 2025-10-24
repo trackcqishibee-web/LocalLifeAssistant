@@ -2,7 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Settings, MessageCircle, MapPin } from 'lucide-react';
 import ChatInterface from './components/ChatInterface';
 import LocationInput from './components/LocationInput';
+import RegistrationModal from './components/RegistrationModal';
 import { ChatMessage, apiClient, LocationCoordinates } from './api/client';
+import { getOrCreateUserId, setUserId } from './utils/userIdManager';
+import { getUsageStats, updateUsageStats, shouldShowRegistrationPrompt, markRegistrationPrompted, getTrialWarningMessage } from './utils/usageTracker';
 
 const App: React.FC = () => {
   const [conversationHistory, setConversationHistory] = useState<ChatMessage[]>([]);
@@ -10,6 +13,10 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [userLocation, setUserLocation] = useState<LocationCoordinates | null>(null);
+  const [userId, setUserIdState] = useState<string>('');
+  const [usageStats, setUsageStats] = useState<any>(null);
+  const [showRegistrationModal, setShowRegistrationModal] = useState(false);
+  const [trialWarning, setTrialWarning] = useState('');
 
   const availableProviders = [
     { value: 'openai', label: 'OpenAI (GPT-3.5)' },
@@ -20,6 +27,41 @@ const App: React.FC = () => {
   useEffect(() => {
     checkConnection();
   }, []);
+
+  // Initialize user ID
+  useEffect(() => {
+    const uid = getOrCreateUserId();
+    setUserIdState(uid);
+    console.log('User ID initialized:', uid);
+  }, []);
+
+  // Check usage stats for anonymous users
+  useEffect(() => {
+    if (userId && userId.startsWith('user_')) {
+      // Fetch usage stats from backend
+      apiClient.getUserUsage(userId).then(stats => {
+        setUsageStats(stats);
+        updateUsageStats({
+          anonymous_user_id: userId,
+          interaction_count: stats.interaction_count,
+          trial_remaining: stats.trial_remaining,
+          is_registered: stats.is_registered
+        });
+        
+        // Show warning if trial is running low
+        const warning = getTrialWarningMessage(stats.trial_remaining);
+        setTrialWarning(warning);
+        
+        // Show registration modal if needed
+        if (shouldShowRegistrationPrompt()) {
+          setShowRegistrationModal(true);
+          markRegistrationPrompted();
+        }
+      }).catch(error => {
+        console.error('Failed to fetch usage stats:', error);
+      });
+    }
+  }, [userId]);
 
   const checkConnection = async () => {
     try {
@@ -45,6 +87,27 @@ const App: React.FC = () => {
     setUserLocation(location);
   }, []);
 
+  const handleRegister = async (email: string, password: string, name: string) => {
+    try {
+      const response = await apiClient.register(userId, email, password, name);
+      
+      if (response.success) {
+        // Update user ID to registered user
+        setUserIdState(response.user_id);
+        setUserId(response.user_id);
+        
+        // Update usage stats
+        updateUsageStats({ is_registered: true });
+        
+        // Show success message
+        alert('Registration successful! Your conversation history has been preserved.');
+      }
+    } catch (error) {
+      console.error('Registration failed:', error);
+      throw error;
+    }
+  };
+
   const handleExampleQuery = async (query: string) => {
     const userMessage: ChatMessage = {
       role: 'user',
@@ -62,7 +125,8 @@ const App: React.FC = () => {
         conversation_history: conversationHistory,
         llm_provider: llmProvider,
         location: userLocation,
-        is_initial_response: conversationHistory.length === 0
+        is_initial_response: conversationHistory.length === 0,
+        user_id: userId
       };
       
       const response = await apiClient.chat(request);
@@ -119,6 +183,13 @@ const App: React.FC = () => {
             </div>
             
             <div className="flex items-center space-x-4">
+              {/* Usage Counter */}
+              {usageStats && !usageStats.is_registered && (
+                <div className="text-sm text-gray-600">
+                  Trial: {usageStats.trial_remaining} interactions left
+                </div>
+              )}
+              
               <div className="flex items-center space-x-2">
                 <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
                 <span className="text-sm text-gray-600">
@@ -190,6 +261,8 @@ const App: React.FC = () => {
                 llmProvider={llmProvider}
                 conversationHistory={conversationHistory}
                 userLocation={userLocation}
+                userId={userId}
+                onTrialExceeded={() => setShowRegistrationModal(true)}
               />
             </div>
           </div>
@@ -232,6 +305,29 @@ const App: React.FC = () => {
           </div>
         </div>
       </footer>
+
+      {/* Trial Warning Banner */}
+      {trialWarning && (
+        <div className="fixed top-0 left-0 right-0 bg-amber-50 border-l-4 border-amber-500 p-4 z-40">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <p className="text-amber-700">{trialWarning}</p>
+            <button
+              onClick={() => setShowRegistrationModal(true)}
+              className="text-amber-900 font-semibold hover:underline ml-4"
+            >
+              Register Now →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Registration Modal */}
+      <RegistrationModal
+        isOpen={showRegistrationModal}
+        onClose={() => setShowRegistrationModal(false)}
+        onRegister={handleRegister}
+        trialRemaining={usageStats?.trial_remaining || 0}
+      />
     </div>
   );
 };

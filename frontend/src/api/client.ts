@@ -38,6 +38,7 @@ export interface ChatRequest {
   location?: LocationCoordinates | null;
   user_preferences?: UserPreferences;
   is_initial_response?: boolean;
+  user_id: string;  // NEW - Required anonymous user ID
 }
 
 export interface RecommendationItem {
@@ -55,6 +56,8 @@ export interface ChatResponse {
   cache_age_hours?: number;
   extracted_preferences?: UserPreferences;
   extraction_summary?: string;
+  usage_stats?: any;  // NEW - Trial info
+  trial_exceeded?: boolean;  // NEW - Flag to show registration prompt
 }
 
 export interface RecommendationRequest {
@@ -132,6 +135,29 @@ class APIClient {
     } else {
       throw new Error(response.data.error_message || 'Failed to geocode location');
     }
+  }
+
+  async getUserUsage(userId: string): Promise<any> {
+    const response = await axios.get(`${this.baseURL}/api/usage/${userId}`);
+    return response.data;
+  }
+
+  async register(anonymousUserId: string, email: string, password: string, name?: string): Promise<any> {
+    const response = await axios.post(`${this.baseURL}/api/users/register`, {
+      anonymous_user_id: anonymousUserId,
+      email,
+      password,
+      name
+    });
+    return response.data;
+  }
+
+  async login(email: string, password: string): Promise<any> {
+    const response = await axios.post(`${this.baseURL}/api/users/login`, {
+      email,
+      password
+    });
+    return response.data;
   }
 }
 

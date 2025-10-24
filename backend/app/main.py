@@ -18,6 +18,7 @@ from .cache_manager import CacheManager
 from .geocoding import GeocodingService, GeocodeRequest, GeocodeResponse, LocationCoordinates
 from .search_service import SearchService
 from .extraction_service import ExtractionService, UserPreferences
+from .usage_tracker import UsageTracker
 
 # Load environment variables from .env file
 load_dotenv('../.env') or load_dotenv('.env') or load_dotenv('/app/.env')
@@ -110,6 +111,7 @@ class ChatRequest(BaseModel):
     location: Optional[LocationCoordinates] = None
     user_preferences: Optional[UserPreferences] = None
     is_initial_response: bool = False  # Flag for welcome message response
+    user_id: str  # NEW - Required anonymous user ID
 
 class ChatResponse(BaseModel):
     message: str
@@ -119,6 +121,8 @@ class ChatResponse(BaseModel):
     cache_age_hours: Optional[float] = None
     extracted_preferences: Optional[UserPreferences] = None  # NEW
     extraction_summary: Optional[str] = None  # NEW
+    usage_stats: Optional[Dict[str, Any]] = None  # NEW - Trial info
+    trial_exceeded: bool = False  # NEW - Flag to show registration prompt
 
 # Initialize services
 event_crawler = EventbriteCrawler()
@@ -126,6 +130,7 @@ cache_manager = CacheManager()
 geocoding_service = GeocodingService()
 search_service = SearchService()
 extraction_service = ExtractionService()
+usage_tracker = UsageTracker()
 
 # Cache configuration
 CACHE_TTL_HOURS = 6  # Cache events for 6 hours
@@ -163,6 +168,28 @@ async def smart_cached_chat(request: ChatRequest):
     """
     try:
         logger.info(f"Smart cached chat request: {request.message}")
+        user_id = request.user_id
+        
+        # Check trial limit for anonymous users
+        if user_id.startswith("user_"):  # Anonymous user
+            if usage_tracker.check_trial_limit(user_id):
+                # Trial exceeded - return prompt to register
+                trial_limit = usage_tracker.trial_limit
+                return ChatResponse(
+                    message=f"🔒 You've reached your free trial limit of {trial_limit} interactions! Please register to continue using our service and keep your conversation history.",
+                    recommendations=[],
+                    llm_provider_used=request.llm_provider,
+                    cache_used=False,
+                    trial_exceeded=True,
+                    usage_stats=usage_tracker.get_usage(user_id),
+                    conversation_id="temp"
+                )
+        
+        # Increment usage for anonymous users
+        if user_id.startswith("user_"):
+            usage_stats = usage_tracker.increment_usage(user_id)
+        else:
+            usage_stats = None
         
         # Step 1: Extract user preferences if this is an initial response
         extracted_preferences = None
@@ -313,12 +340,108 @@ async def smart_cached_chat(request: ChatRequest):
             cache_used=cache_used,
             cache_age_hours=cache_age_hours,
             extracted_preferences=extracted_preferences,
-            extraction_summary=extraction_summary
+            extraction_summary=extraction_summary,
+            usage_stats=usage_stats,  # NEW
+            trial_exceeded=False
         )
         
     except Exception as e:
         logger.error(f"Error in smart cached chat: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing chat request: {str(e)}")
+
+@app.get("/api/usage/{user_id}")
+async def get_user_usage(user_id: str):
+    """Get usage statistics for a user"""
+    usage = usage_tracker.get_usage(user_id)
+    return usage
+
+@app.post("/api/users/register")
+async def register_user(
+    anonymous_user_id: str,
+    email: str,
+    password: str,
+    name: Optional[str] = None
+):
+    """
+    Register a new user and migrate their anonymous data
+    
+    This is a placeholder - you'll want to add:
+    - Password hashing (bcrypt)
+    - Email validation
+    - Real user database (SQLite, PostgreSQL, etc.)
+    """
+    # TODO: Implement real user registration
+    # 1. Validate email format
+    # 2. Hash password
+    # 3. Create user in database
+    # 4. Generate real user ID
+    # 5. Migrate conversations from anonymous_user_id to real_user_id
+    # 6. Mark anonymous user as registered
+    
+    # Placeholder response
+    from datetime import datetime
+    real_user_id = f"registered_{datetime.now().timestamp()}"
+    
+    # Mark as registered
+    usage_tracker.mark_registered(anonymous_user_id, real_user_id)
+    
+    return {
+        "success": True,
+        "user_id": real_user_id,
+        "message": "Registration successful! Your conversation history has been preserved."
+    }
+
+@app.post("/api/users/login")
+async def login_user(email: str, password: str):
+    """
+    User login endpoint
+    
+    This is a placeholder - you'll want to add:
+    - Password verification
+    - JWT token generation
+    - Session management
+    """
+    # TODO: Implement real login
+    # 1. Find user by email
+    # 2. Verify password
+    # 3. Generate JWT token
+    # 4. Return token and user info
+    
+    return {
+        "success": True,
+        "user_id": "registered_user_123",
+        "token": "jwt_token_here",
+        "message": "Login successful!"
+    }
+
+@app.post("/api/users/migrate-conversations")
+async def migrate_conversations(
+    anonymous_user_id: str,
+    real_user_id: str
+):
+    """Migrate conversations from anonymous user to registered user"""
+    # This will be used by the file storage system
+    # Move all conversations from anonymous folder to registered user folder
+    
+    import shutil
+    anonymous_dir = os.path.join("backend/conversations", anonymous_user_id)
+    registered_dir = os.path.join("backend/conversations", real_user_id)
+    
+    if os.path.exists(anonymous_dir):
+        os.makedirs(registered_dir, exist_ok=True)
+        
+        # Copy all conversations
+        for filename in os.listdir(anonymous_dir):
+            src = os.path.join(anonymous_dir, filename)
+            dst = os.path.join(registered_dir, filename)
+            shutil.copy2(src, dst)
+        
+        return {
+            "success": True,
+            "migrated_conversations": len(os.listdir(anonymous_dir))
+        }
+    
+    return {"success": False, "error": "No conversations to migrate"}
 
 @app.post("/api/geocode", response_model=GeocodeResponse)
 async def geocode_location(request: GeocodeRequest):
