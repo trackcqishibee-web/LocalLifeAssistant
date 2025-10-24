@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Loader2, User } from 'lucide-react';
 import { ChatMessage, apiClient, ChatRequest, LocationCoordinates } from '../api/client';
 import RecommendationCard from './RecommendationCard';
+import WelcomeMessage from './WelcomeMessage';
 
 interface ChatMessageWithRecommendations extends ChatMessage {
   recommendations?: any[];
@@ -24,12 +25,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 }) => {
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [extractionSummary, setExtractionSummary] = useState<string | null>(null);
+  const [currentUserInput, setCurrentUserInput] = useState<string>('');
   const [messagesWithRecommendations, setMessagesWithRecommendations] = useState<ChatMessageWithRecommendations[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
+
 
   useEffect(() => {
     scrollToBottom();
@@ -60,32 +64,71 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     onNewMessage(userMessage);
     setMessagesWithRecommendations(prev => [...prev, userMessage]);
+    const userInput = message.trim();
     setMessage('');
     setIsLoading(true);
+    setExtractionSummary(null);
+    setCurrentUserInput(userInput);
 
     try {
+      // Detect if this is the first user message (initial response to welcome message)
+      const isInitialResponse = conversationHistory.length === 0;
+      
       const request: ChatRequest = {
         message: message.trim(),
         conversation_history: conversationHistory,
         llm_provider: llmProvider,
-        location: userLocation
+        location: userLocation,
+        is_initial_response: isInitialResponse
       };
 
       const response = await apiClient.chat(request);
       
-      const assistantMessage: ChatMessageWithRecommendations = {
-        role: 'assistant',
-        content: response.message,
-        timestamp: new Date().toISOString(),
-        recommendations: response.recommendations || []
-      };
+      // Set extraction summary if available and keep loading state to show it
+      if (response.extraction_summary) {
+        setExtractionSummary(response.extraction_summary);
+        // Keep loading state for a moment to show the extraction summary
+        setTimeout(() => {
+          const assistantMessage: ChatMessageWithRecommendations = {
+            role: 'assistant',
+            content: response.message,
+            timestamp: new Date().toISOString(),
+            recommendations: response.recommendations || []
+          };
 
-      onNewMessage(assistantMessage);
-      console.log('Received recommendations:', response.recommendations);
-      onRecommendations(response.recommendations || []);
-      
-      // Update local state with recommendations
-      setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
+          onNewMessage(assistantMessage);
+          console.log('Received recommendations:', response.recommendations);
+          onRecommendations(response.recommendations || []);
+          
+          // Update local state with recommendations
+          setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
+          
+          // Clear loading state
+          setIsLoading(false);
+          setExtractionSummary(null);
+          setCurrentUserInput('');
+        }, 1500); // Show extraction summary for 1.5 seconds
+      } else {
+        // No extraction summary, proceed normally
+        const assistantMessage: ChatMessageWithRecommendations = {
+          role: 'assistant',
+          content: response.message,
+          timestamp: new Date().toISOString(),
+          recommendations: response.recommendations || []
+        };
+
+        onNewMessage(assistantMessage);
+        console.log('Received recommendations:', response.recommendations);
+        onRecommendations(response.recommendations || []);
+        
+        // Update local state with recommendations
+        setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
+        
+        // Clear loading state
+        setIsLoading(false);
+        setExtractionSummary(null);
+        setCurrentUserInput('');
+      }
     } catch (error) {
       console.error('Error sending message:', error);
       const errorMessage: ChatMessage = {
@@ -94,8 +137,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         timestamp: new Date().toISOString()
       };
       onNewMessage(errorMessage);
-    } finally {
       setIsLoading(false);
+      setExtractionSummary(null);
+      setCurrentUserInput('');
     }
   };
 
@@ -103,6 +147,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     <div className="flex flex-col h-full">
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Show welcome message when conversation is empty */}
+        {messagesWithRecommendations.length === 0 && (
+          <WelcomeMessage />
+        )}
+        
         {messagesWithRecommendations.map((msg, index) => (
           <div
             key={index}
@@ -146,9 +195,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         
         {isLoading && (
           <div className="chat-message assistant">
-            <div className="flex items-center space-x-2">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Thinking...</span>
+            <div className="flex items-start space-x-2">
+              <div className="flex-shrink-0">
+                <div className="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                  AI
+                </div>
+              </div>
+              <div className="flex-1">
+                <div className="text-sm text-gray-500 mb-1">
+                  Assistant
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>
+                    {extractionSummary || 'Processing your request...'}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         )}

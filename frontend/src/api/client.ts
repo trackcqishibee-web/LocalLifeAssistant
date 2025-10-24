@@ -24,11 +24,20 @@ export interface GeocodeResponse {
   error_message: string | null;
 }
 
+export interface UserPreferences {
+  location?: string;
+  date?: string;
+  time?: string;
+  event_type?: string;
+}
+
 export interface ChatRequest {
   message: string;
   conversation_history: ChatMessage[];
   llm_provider?: string;
   location?: LocationCoordinates | null;
+  user_preferences?: UserPreferences;
+  is_initial_response?: boolean;
 }
 
 export interface RecommendationItem {
@@ -42,6 +51,10 @@ export interface ChatResponse {
   message: string;
   recommendations: RecommendationItem[];
   llm_provider_used: string;
+  cache_used?: boolean;
+  cache_age_hours?: number;
+  extracted_preferences?: UserPreferences;
+  extraction_summary?: string;
 }
 
 export interface RecommendationRequest {
