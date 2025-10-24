@@ -14,6 +14,8 @@ interface ChatInterfaceProps {
   llmProvider: string;
   conversationHistory: ChatMessage[];
   userLocation: LocationCoordinates | null;
+  userId: string;
+  onTrialExceeded: () => void;
 }
 
 const ChatInterface: React.FC<ChatInterfaceProps> = ({
@@ -21,7 +23,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onRecommendations,
   llmProvider,
   conversationHistory,
-  userLocation
+  userLocation,
+  userId,
+  onTrialExceeded
 }) => {
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -76,10 +80,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         conversation_history: conversationHistory,
         llm_provider: llmProvider,
         location: userLocation,
-        is_initial_response: isInitialResponse
+        is_initial_response: isInitialResponse,
+        user_id: userId
       };
 
       const response = await apiClient.chat(request);
+      
+      // Check if trial exceeded
+      if (response.trial_exceeded) {
+        onTrialExceeded();
+      }
       
       // Set extraction summary if available and keep loading state to show it
       if (response.extraction_summary) {
