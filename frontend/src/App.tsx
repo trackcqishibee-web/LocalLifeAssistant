@@ -17,6 +17,7 @@ const App: React.FC = () => {
   const [usageStats, setUsageStats] = useState<any>(null);
   const [showRegistrationModal, setShowRegistrationModal] = useState(false);
   const [trialWarning, setTrialWarning] = useState('');
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
 
   const availableProviders = [
     { value: 'openai', label: 'OpenAI (GPT-3.5)' },
@@ -86,6 +87,44 @@ const App: React.FC = () => {
   const handleLocationChange = useCallback((location: LocationCoordinates | null) => {
     setUserLocation(location);
   }, []);
+
+  // Initialize conversation
+  useEffect(() => {
+    if (!userId) return;
+    
+    const initializeConversation = async () => {
+      // Check localStorage for current conversation
+      const savedConversationId = localStorage.getItem('current_conversation_id');
+      
+      if (savedConversationId) {
+        try {
+          // Try to load existing conversation
+          const conversation = await apiClient.getConversation(userId, savedConversationId);
+          setCurrentConversationId(savedConversationId);
+          setConversationHistory(conversation.messages);
+          console.log('Loaded existing conversation:', savedConversationId);
+        } catch (error) {
+          // Conversation not found, create new one
+          console.log('Conversation not found, creating new one');
+          const newId = await apiClient.createConversation(userId, { 
+            llm_provider: llmProvider 
+          });
+          setCurrentConversationId(newId);
+          localStorage.setItem('current_conversation_id', newId);
+        }
+      } else {
+        // Create new conversation
+        const newId = await apiClient.createConversation(userId, { 
+          llm_provider: llmProvider 
+        });
+        setCurrentConversationId(newId);
+        localStorage.setItem('current_conversation_id', newId);
+        console.log('Created new conversation:', newId);
+      }
+    };
+    
+    initializeConversation();
+  }, [userId, llmProvider]);
 
   const handleRegister = async (email: string, password: string, name: string) => {
     try {
@@ -255,15 +294,16 @@ const App: React.FC = () => {
                 </div>
               </div>
               
-              <ChatInterface
-                onNewMessage={handleNewMessage}
-                onRecommendations={handleRecommendations}
-                llmProvider={llmProvider}
-                conversationHistory={conversationHistory}
-                userLocation={userLocation}
-                userId={userId}
-                onTrialExceeded={() => setShowRegistrationModal(true)}
-              />
+        <ChatInterface
+          onNewMessage={handleNewMessage}
+          onRecommendations={handleRecommendations}
+          llmProvider={llmProvider}
+          conversationHistory={conversationHistory}
+          userLocation={userLocation}
+          userId={userId}
+          onTrialExceeded={() => setShowRegistrationModal(true)}
+          conversationId={currentConversationId}
+        />
             </div>
           </div>
 

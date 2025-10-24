@@ -58,6 +58,7 @@ export interface ChatResponse {
   extraction_summary?: string;
   usage_stats?: any;  // NEW - Trial info
   trial_exceeded?: boolean;  // NEW - Flag to show registration prompt
+  conversation_id: string;  // NEW
 }
 
 export interface RecommendationRequest {
@@ -158,6 +159,34 @@ class APIClient {
       password
     });
     return response.data;
+  }
+
+  async createConversation(userId: string, metadata: any = {}): Promise<string> {
+    const response = await axios.post(`${this.baseURL}/api/conversations/create`, {
+      user_id: userId,
+      ...metadata
+    });
+    return response.data.conversation_id;
+  }
+
+  async getConversation(userId: string, conversationId: string): Promise<any> {
+    const response = await axios.get(
+      `${this.baseURL}/api/conversations/${userId}/${conversationId}`
+    );
+    return response.data;
+  }
+
+  async listUserConversations(userId: string, limit: number = 50): Promise<any[]> {
+    const response = await axios.get(
+      `${this.baseURL}/api/conversations/${userId}/list?limit=${limit}`
+    );
+    return response.data.conversations;
+  }
+
+  async deleteConversation(userId: string, conversationId: string): Promise<void> {
+    await axios.delete(
+      `${this.baseURL}/api/conversations/${userId}/${conversationId}`
+    );
   }
 }
 
