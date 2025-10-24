@@ -301,18 +301,31 @@ class EventbriteCrawler:
         logger.info(f"Fetching real events for {city_name}")
         
         try:
-            # For now, we'll use mock events since the real Eventbrite API integration
-            # requires more complex setup. This can be enhanced later.
-            logger.info(f"Generating mock events for {city_name}")
-            mock_events = self._generate_mock_events(city_name)
-            logger.info(f"Generated {len(mock_events)} mock events for {city_name}")
-            return mock_events
+            # Try to get real events from the working Eventbrite crawler
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), 'app'))
+            
+            # Map city name to Eventbrite location ID
+            location_id = self._get_eventbrite_location_id(city_name)
+            
+            crawler = EventbriteCrawler()
+            real_events = crawler.fetch_events(location_id=location_id, max_pages=3)
+            
+            if real_events and len(real_events) > 0:
+                logger.info(f"Retrieved {len(real_events)} real events for {city_name}")
+                return real_events
+            else:
+                logger.warning(f"No real events found for {city_name}, falling back to mock data")
+                mock_events = self._generate_mock_events(city_name)
+                logger.info(f"Generated {len(mock_events)} mock events for {city_name}")
+                return mock_events
                 
         except Exception as e:
-            logger.error(f"Error generating events for {city_name}: {e}")
-            logger.info(f"Falling back to basic mock events for {city_name}")
+            logger.error(f"Error fetching real events for {city_name}: {e}")
+            logger.info(f"Falling back to mock events for {city_name}")
             
-            # Generate basic mock events for the city as fallback
+            # Generate diverse mock events for the city as fallback
             mock_events = self._generate_mock_events(city_name)
             logger.info(f"Generated {len(mock_events)} mock events for {city_name}")
             return mock_events
@@ -372,193 +385,7 @@ class EventbriteCrawler:
         
         # Return mapped ID or default to NYC
         return location_mapping.get(clean_city, "85977539")
-    
-    def _generate_mock_events(self, city_name: str) -> List[Dict[str, Any]]:
-        """Generate diverse mock events for testing"""
-        
-        city_display = city_name.replace('_', ' ').title()
-        
-        base_events = [
-            {
-                "title": f"Jazz Night at {city_display} Jazz Club",
-                "description": f"Live jazz performance featuring local artists in {city_display}",
-                "venue_name": f"{city_display} Jazz Club",
-                "start_datetime": "2025-01-20T20:00:00",
-                "end_datetime": "2025-01-20T23:00:00",
-                "timezone": "America/Los_Angeles",
-                "venue_city": city_display,
-                "venue_country": "US",
-                "latitude": "37.7749",
-                "longitude": "-122.4194",
-                "organizer_name": f"{city_display} Jazz Society",
-                "organizer_id": "12345",
-                "ticket_min_price": "25.00",
-                "ticket_max_price": "45.00",
-                "is_free": False,
-                "categories": ["Music", "Jazz", "Live Performance"],
-                "image_url": "https://example.com/jazz.jpg",
-                "event_url": f"https://demo.eventbrite.com/e/jazz-night-{city_name}-demo",
-                "attendee_count": 0,
-                "source": "mock"
-            },
-            {
-                "title": f"Art Gallery Opening in {city_display}",
-                "description": f"Contemporary art exhibition opening reception in {city_display}",
-                "venue_name": f"{city_display} Modern Art Gallery",
-                "start_datetime": "2025-01-21T18:00:00",
-                "end_datetime": "2025-01-21T21:00:00",
-                "timezone": "America/Los_Angeles",
-                "venue_city": city_display,
-                "venue_country": "US",
-                "latitude": "37.7749",
-                "longitude": "-122.4194",
-                "organizer_name": f"{city_display} Art Foundation",
-                "organizer_id": "12346",
-                "ticket_min_price": "Free",
-                "ticket_max_price": "Free",
-                "is_free": True,
-                "categories": ["Art", "Exhibition", "Culture"],
-                "image_url": "https://example.com/art.jpg",
-                "event_url": f"https://demo.eventbrite.com/e/art-gallery-opening-{city_name}-demo",
-                "attendee_count": 0,
-                "source": "mock"
-            },
-            {
-                "title": f"Tech Meetup: AI & Machine Learning in {city_display}",
-                "description": f"Networking event for tech professionals in {city_display}",
-                "venue_name": f"{city_display} Tech Hub",
-                "start_datetime": "2025-01-22T19:00:00",
-                "end_datetime": "2025-01-22T22:00:00",
-                "timezone": "America/Los_Angeles",
-                "venue_city": city_display,
-                "venue_country": "US",
-                "latitude": "37.7749",
-                "longitude": "-122.4194",
-                "organizer_name": f"{city_display} Tech Community",
-                "organizer_id": "12347",
-                "ticket_min_price": "15.00",
-                "ticket_max_price": "25.00",
-                "is_free": False,
-                "categories": ["Technology", "Networking", "Professional"],
-                "image_url": "https://example.com/tech.jpg",
-                "event_url": f"https://demo.eventbrite.com/e/tech-meetup-ai-ml-{city_name}-demo",
-                "attendee_count": 0,
-                "source": "mock"
-            },
-            {
-                "title": f"Romantic Dinner & Wine Tasting in {city_display}",
-                "description": f"Intimate dinner with wine pairings in {city_display}",
-                "venue_name": f"{city_display} Vineyard Restaurant",
-                "start_datetime": "2025-01-23T19:30:00",
-                "end_datetime": "2025-01-23T22:30:00",
-                "timezone": "America/Los_Angeles",
-                "venue_city": city_display,
-                "venue_country": "US",
-                "latitude": "37.7749",
-                "longitude": "-122.4194",
-                "organizer_name": f"{city_display} Wine Society",
-                "organizer_id": "12348",
-                "ticket_min_price": "85.00",
-                "ticket_max_price": "120.00",
-                "is_free": False,
-                "categories": ["Food", "Wine", "Romantic"],
-                "image_url": "https://example.com/wine.jpg",
-                "event_url": f"https://demo.eventbrite.com/e/romantic-dinner-wine-tasting-{city_name}-demo",
-                "attendee_count": 0,
-                "source": "mock"
-            },
-            {
-                "title": f"Family Fun Day in {city_display}",
-                "description": f"Activities for kids and families in {city_display}",
-                "venue_name": f"{city_display} Community Center",
-                "start_datetime": "2025-01-24T10:00:00",
-                "end_datetime": "2025-01-24T16:00:00",
-                "timezone": "America/Los_Angeles",
-                "venue_city": city_display,
-                "venue_country": "US",
-                "latitude": "37.7749",
-                "longitude": "-122.4194",
-                "organizer_name": f"{city_display} Parks & Recreation",
-                "organizer_id": "12349",
-                "ticket_min_price": "Free",
-                "ticket_max_price": "Free",
-                "is_free": True,
-                "categories": ["Family", "Kids", "Activities"],
-                "image_url": "https://example.com/family.jpg",
-                "event_url": f"https://demo.eventbrite.com/e/family-fun-day-{city_name}-demo",
-                "attendee_count": 0,
-                "source": "mock"
-            },
-            {
-                "title": f"Comedy Night in {city_display}",
-                "description": f"Stand-up comedy show with local comedians in {city_display}",
-                "venue_name": f"{city_display} Laugh Track Comedy Club",
-                "start_datetime": "2025-01-25T20:30:00",
-                "end_datetime": "2025-01-25T23:00:00",
-                "timezone": "America/Los_Angeles",
-                "venue_city": city_display,
-                "venue_country": "US",
-                "latitude": "37.7749",
-                "longitude": "-122.4194",
-                "organizer_name": f"{city_display} Comedy Club",
-                "organizer_id": "12350",
-                "ticket_min_price": "20.00",
-                "ticket_max_price": "35.00",
-                "is_free": False,
-                "categories": ["Comedy", "Entertainment", "Nightlife"],
-                "image_url": "https://example.com/comedy.jpg",
-                "event_url": f"https://demo.eventbrite.com/e/comedy-night-{city_name}-demo",
-                "attendee_count": 0,
-                "source": "mock"
-            },
-            {
-                "title": f"Yoga Workshop in {city_display}",
-                "description": f"Beginner-friendly yoga session in {city_display}",
-                "venue_name": f"{city_display} Zen Studio",
-                "start_datetime": "2025-01-26T09:00:00",
-                "end_datetime": "2025-01-26T11:00:00",
-                "timezone": "America/Los_Angeles",
-                "venue_city": city_display,
-                "venue_country": "US",
-                "latitude": "37.7749",
-                "longitude": "-122.4194",
-                "organizer_name": f"{city_display} Yoga Center",
-                "organizer_id": "12351",
-                "ticket_min_price": "30.00",
-                "ticket_max_price": "45.00",
-                "is_free": False,
-                "categories": ["Health", "Fitness", "Wellness"],
-                "image_url": "https://example.com/yoga.jpg",
-                "event_url": f"https://demo.eventbrite.com/e/yoga-workshop-{city_name}-demo",
-                "attendee_count": 0,
-                "source": "mock"
-            },
-            {
-                "title": f"Book Reading in {city_display}",
-                "description": f"Author reading and book signing in {city_display}",
-                "venue_name": f"{city_display} Local Bookstore",
-                "start_datetime": "2025-01-27T15:00:00",
-                "end_datetime": "2025-01-27T17:00:00",
-                "timezone": "America/Los_Angeles",
-                "venue_city": city_display,
-                "venue_country": "US",
-                "latitude": "37.7749",
-                "longitude": "-122.4194",
-                "organizer_name": f"{city_display} Book Club",
-                "organizer_id": "12352",
-                "ticket_min_price": "Free",
-                "ticket_max_price": "Free",
-                "is_free": True,
-                "categories": ["Literature", "Books", "Education"],
-                "image_url": "https://example.com/books.jpg",
-                "event_url": f"https://demo.eventbrite.com/e/book-reading-{city_name}-demo",
-                "attendee_count": 0,
-                "source": "mock"
-            }
-        ]
-        
-        return base_events
-    
+
     def fetch_events_multiple_cities(self, cities: List[str], max_pages_per_city: int = 2) -> Dict[str, List[Dict[str, Any]]]:
         """
         Fetch events from multiple cities
@@ -582,43 +409,99 @@ class EventbriteCrawler:
                 results[city] = []
         
         return results
-
-# Global instance
-event_crawler = EventbriteCrawler()
-
-def fetch_events_by_city(city_name: str, max_pages: int = 3) -> List[Dict[str, Any]]:
-    """Convenience function to fetch events by city"""
-    return event_crawler.fetch_events_by_city(city_name, max_pages)
-
-def get_supported_cities() -> List[str]:
-    """Get list of supported cities"""
-    return event_crawler.get_supported_cities()
-
-def test_location_aware_crawler():
-    """Test the location-aware crawler"""
-    logging.basicConfig(level=logging.INFO)
     
-    print("Testing Location-Aware Eventbrite Crawler")
-    print("=" * 50)
-    
-    # Test 1: Show supported cities
-    cities = get_supported_cities()
-    print(f"Supported cities: {cities[:10]}...")  # Show first 10
-    
-    # Test 2: Fetch events from different cities
-    test_cities = ["san francisco", "london", "tokyo"]
-    
-    for city in test_cities:
-        print(f"\nFetching events for {city}...")
-        events = fetch_events_by_city(city, max_pages=1)  # Just 1 page for testing
+    def fetch_events(self, location_id: str = "85977539", max_pages: int = 5) -> List[Dict[str, Any]]:
+        """
+        Fetch events from Eventbrite API
         
-        if events:
-            print(f"Found {len(events)} events")
-            sample_event = events[0]
-            print(f"Sample event: {sample_event['title']}")
-            print(f"Venue: {sample_event['venue_name']}, {sample_event['venue_city']}")
-        else:
-            print("No events found")
+        Args:
+            location_id: Eventbrite location ID (85977539 for NYC, 85922351 for Palo Alto)
+            max_pages: Maximum number of pages to fetch
+        
+        Returns:
+            List of normalized event dictionaries
+        """
+        all_events = []
+        
+        try:
+            for page in range(1, max_pages + 1):
+                logger.info(f"Fetching Eventbrite events - page {page}")
+                
+                payload = self._create_search_payload(location_id, page, 20)
+                params = {"stable_id": "3eff2ab4-0f8b-48c5-bae5-fa33a68f2342"}
+                
+                response = self.session.post(
+                    self.base_url,
+                    params=params,
+                    json=payload,
+                    timeout=30
+                )
+                response.raise_for_status()
+                
+                data = response.json()
+                events = (data.get("events", {}).get("results")) or []
+                
+                if not events:
+                    logger.info(f"No more events found on page {page}")
+                    break
+                
+                # Normalize events
+                normalized_events = [self._normalize_event(event) for event in events]
+                all_events.extend(normalized_events)
+                
+                logger.info(f"Fetched {len(normalized_events)} events from page {page}")
+                
+                # Small delay to be respectful to the API
+                import time
+                time.sleep(1)
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error fetching events from Eventbrite: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error while fetching events: {e}")
+            raise
+        
+        logger.info(f"Total events fetched: {len(all_events)}")
+        return all_events
+
 
 if __name__ == "__main__":
+    # Global instance
+    location_crawler = EventbriteCrawler()
+
+    def fetch_events_by_city(city_name: str, max_pages: int = 3) -> List[Dict[str, Any]]:
+        """Convenience function to fetch events by city"""
+        return location_crawler.fetch_events_by_city(city_name, max_pages)
+
+    def get_supported_cities() -> List[str]:
+        """Get list of supported cities"""
+        return location_crawler.get_supported_cities()
+
+    def test_location_aware_crawler():
+        """Test the location-aware crawler"""
+        logging.basicConfig(level=logging.INFO)
+        
+        print("Testing Location-Aware Eventbrite Crawler")
+        print("=" * 50)
+        
+        # Test 1: Show supported cities
+        cities = get_supported_cities()
+        print(f"Supported cities: {cities[:10]}...")  # Show first 10
+        
+        # Test 2: Fetch events from different cities
+        test_cities = ["san francisco", "london", "tokyo"]
+        
+        for city in test_cities:
+            print(f"\nFetching events for {city}...")
+            events = fetch_events_by_city(city, max_pages=1)  # Just 1 page for testing
+            
+            if events:
+                print(f"Found {len(events)} events")
+                sample_event = events[0]
+                print(f"Sample event: {sample_event['title']}")
+                print(f"Venue: {sample_event['venue_name']}, {sample_event['venue_city']}")
+            else:
+                print("No events found")
+
     test_location_aware_crawler()
