@@ -61,7 +61,8 @@ const App: React.FC = () => {
         message: query,
         conversation_history: conversationHistory,
         llm_provider: llmProvider,
-        location: userLocation
+        location: userLocation,
+        is_initial_response: conversationHistory.length === 0
       };
       
       const response = await apiClient.chat(request);
