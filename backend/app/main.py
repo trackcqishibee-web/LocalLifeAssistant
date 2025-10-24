@@ -7,7 +7,7 @@ Combines real-time fetching with intelligent city-based caching
 import logging
 import os
 from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
@@ -17,6 +17,7 @@ from .event_service import EventbriteCrawler
 from .cache_manager import CacheManager
 from .geocoding import GeocodingService, GeocodeRequest, GeocodeResponse, LocationCoordinates
 from .search_service import SearchService
+from .extraction_service import ExtractionService, UserPreferences
 
 # Load environment variables from .env file
 load_dotenv('../.env') or load_dotenv('.env') or load_dotenv('/app/.env')
@@ -29,6 +30,8 @@ app = FastAPI(title="Smart Cached RAG Local Life Assistant", version="2.1.0")
 
 # Add CORS middleware
 domain_name = os.getenv("DOMAIN_NAME")
+logger.info(f"DOMAIN_NAME environment variable: '{domain_name}'")
+
 if domain_name and domain_name not in ["your-domain.com", "localhost", ""]:
     # Production: Allow the actual domain and www subdomain
     allow_origins = [
@@ -36,17 +39,50 @@ if domain_name and domain_name not in ["your-domain.com", "localhost", ""]:
         f"https://{domain_name}",
         f"https://www.{domain_name}",
     ]
+    logger.info(f"Production CORS configured for domain: {domain_name}")
 else:
-    # Development: Allow localhost
-    allow_origins = ["http://localhost:3000"]
+    # Development: Allow localhost origins (cannot use * with credentials)
+    allow_origins = [
+        "http://localhost:3000",
+        "http://localhost:8000", 
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000",
+        "http://localhost:5173",  # Vite default port
+        "http://127.0.0.1:5173"
+    ]
+    logger.info("Development CORS configured for localhost")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allow_origins,  # Dynamic CORS configuration based on domain
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+logger.info(f"Allowed origins: {allow_origins}")
+
+# Manual CORS middleware - simplified and more explicit
+@app.middleware("http")
+async def cors_middleware(request, call_next):
+    origin = request.headers.get("origin")
+    logger.info(f"CORS middleware - Origin: {origin}, Allowed origins: {allow_origins}")
+    
+    # Handle preflight requests
+    if request.method == "OPTIONS":
+        response = Response()
+        # Always set the origin header for localhost:3000 in development
+        if origin == "http://localhost:3000":
+            response.headers["Access-Control-Allow-Origin"] = origin
+            logger.info(f"OPTIONS: Set Access-Control-Allow-Origin to {origin}")
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Access-Control-Max-Age"] = "600"
+        return response
+    
+    # Handle actual requests
+    response = await call_next(request)
+    # Always set the origin header for localhost:3000 in development
+    if origin == "http://localhost:3000":
+        response.headers["Access-Control-Allow-Origin"] = origin
+        logger.info(f"GET/POST: Set Access-Control-Allow-Origin to {origin}")
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
 
 # Pydantic models
 class ChatRequest(BaseModel):
@@ -54,6 +90,8 @@ class ChatRequest(BaseModel):
     conversation_history: List[Dict[str, Any]] = []
     llm_provider: str = "openai"
     location: Optional[LocationCoordinates] = None
+    user_preferences: Optional[UserPreferences] = None
+    is_initial_response: bool = False  # Flag for welcome message response
 
 class ChatResponse(BaseModel):
     message: str
@@ -61,12 +99,15 @@ class ChatResponse(BaseModel):
     llm_provider_used: str
     cache_used: bool = False
     cache_age_hours: Optional[float] = None
+    extracted_preferences: Optional[UserPreferences] = None  # NEW
+    extraction_summary: Optional[str] = None  # NEW
 
 # Initialize services
 event_crawler = EventbriteCrawler()
 cache_manager = CacheManager()
 geocoding_service = GeocodingService()
 search_service = SearchService()
+extraction_service = ExtractionService()
 
 # Cache configuration
 CACHE_TTL_HOURS = 6  # Cache events for 6 hours
@@ -105,32 +146,61 @@ async def smart_cached_chat(request: ChatRequest):
     try:
         logger.info(f"Smart cached chat request: {request.message}")
         
-        # Step 1: Try to extract city from query first (highest priority)
-        query_city = geocoding_service.extract_city_from_query(request.message)
-        logger.info(f"Extracted city from query: '{query_city}'")
+        # Step 1: Extract user preferences if this is an initial response
+        extracted_preferences = None
+        if request.is_initial_response:
+            logger.info("Initial response detected, extracting user preferences")
+            extracted_preferences = extraction_service.extract_user_preferences(request.message)
+            logger.info(f"Extracted preferences: {extracted_preferences}")
         
-        # Step 2: Extract city from location (fallback)
-        location_city = None
-        if request.location:
-            # Simple fallback: try to extract city from formatted address
+        # Step 2: Determine city to use (prioritize extracted preferences)
+        city = None
+        location_provided = False
+        
+        # Priority 1: Use extracted location from preferences
+        if extracted_preferences and extracted_preferences.location and extracted_preferences.location != "none":
+            city = extracted_preferences.location.lower()
+            location_provided = True
+            logger.info(f"Using city from extracted preferences: {city}")
+        
+        # Priority 2: Try to extract city from query using existing method
+        if not city:
+            query_city = extraction_service.extract_location_from_query(request.message)
+            if query_city:
+                city = query_city.lower()
+                location_provided = True
+                logger.info(f"Using city from query extraction: {city}")
+        
+        # Priority 3: Extract city from location coordinates (fallback)
+        if not city and request.location:
             address = request.location.formatted_address
             if address:
-                # Extract city from "City, State, Country" format
                 parts = address.split(',')
                 if len(parts) >= 1:
-                    location_city = parts[0].strip()
+                    city = parts[0].strip().lower()
+                    location_provided = True
+                    logger.info(f"Using city from location coordinates: {city}")
         
-        # Step 3: Determine which city to use
-        logger.info(f"Query city: '{query_city}', Location city: '{location_city}'")
-        if query_city:
-            city = query_city
-            logger.info(f"Using city from query: {city}")
-        elif location_city:
-            city = location_city
-            logger.info(f"Using city from location: {city}")
-        else:
-            city = "new york"  # Default fallback
-            logger.info("No city found in query or location, defaulting to New York")
+        # Step 3: Handle missing location for initial responses
+        if request.is_initial_response and not location_provided:
+            logger.info("No location provided in initial response, asking user for location")
+            return ChatResponse(
+                message="I'd be happy to help you find events! To give you the best recommendations, could you please tell me which city or area you're interested in? (e.g., 'New York', 'Los Angeles', 'Chicago', or a zipcode)",
+                recommendations=[],
+                llm_provider_used=request.llm_provider,
+                cache_used=False,
+                cache_age_hours=None,
+                extracted_preferences=extracted_preferences,
+                extraction_summary=None
+            )
+        
+        # Step 4: Default fallback for non-initial responses or when location still missing
+        if not city:
+            city = "new york"
+            logger.info("No city found, defaulting to New York")
+            # If this is not an initial response and we're defaulting, inform the user
+            if not request.is_initial_response:
+                logger.info("Informing user that we're defaulting to New York")
         
         logger.info(f"Final city decision: {city}")
         
@@ -153,9 +223,24 @@ async def smart_cached_chat(request: ChatRequest):
             cache_used = False
             cache_age_hours = 0
         
-        # Step 4: LLM-powered intelligent event search
+        # Step 4: LLM-powered intelligent event search with preferences
         logger.info(f"Starting LLM search for query: '{request.message}' with {len(events)} events")
-        top_events = await search_service.intelligent_event_search(request.message, events)
+        
+        # Convert UserPreferences object to dict for search service
+        user_preferences_dict = None
+        if extracted_preferences:
+            user_preferences_dict = {
+                'location': extracted_preferences.location,
+                'date': extracted_preferences.date,
+                'time': extracted_preferences.time,
+                'event_type': extracted_preferences.event_type
+            }
+        
+        top_events = await search_service.intelligent_event_search(
+            request.message, 
+            events, 
+            user_preferences=user_preferences_dict
+        )
         logger.info(f"LLM search returned {len(top_events)} events")
         
         # Debug: Check if events have LLM scores
@@ -178,17 +263,39 @@ async def smart_cached_chat(request: ChatRequest):
             })
         
         # Step 6: Generate response message
+        location_note = ""
+        if not location_provided and city == "new york":
+            location_note = " (I couldn't determine your location, so I'm defaulting to New York)"
+        
         if top_events:
-            response_message = f"🎉 Found {len(top_events)} events in {city.title()} that match your search! Check out the recommendations below ↓"
+            response_message = f"🎉 Found {len(top_events)} events in {city.title()} that match your search!{location_note} Check out the recommendations below ↓"
         else:
-            response_message = f"😔 I couldn't find any events in {city.title()} matching your query. Try asking about 'fashion events', 'music concerts', 'halloween parties', or 'free events'."
+            response_message = f"😔 I couldn't find any events in {city.title()} matching your query.{location_note} Try asking about 'fashion events', 'music concerts', 'halloween parties', or 'free events'."
+        
+        # Step 7: Create extraction summary if preferences were extracted
+        extraction_summary = None
+        if extracted_preferences:
+            summary_parts = []
+            if extracted_preferences.location and extracted_preferences.location != "none":
+                summary_parts.append(f"📍 {extracted_preferences.location}")
+            if extracted_preferences.date and extracted_preferences.date != "none":
+                summary_parts.append(f"📅 {extracted_preferences.date}")
+            if extracted_preferences.time and extracted_preferences.time != "none":
+                summary_parts.append(f"🕐 {extracted_preferences.time}")
+            if extracted_preferences.event_type and extracted_preferences.event_type != "none":
+                summary_parts.append(f"🎭 {extracted_preferences.event_type}")
+            
+            if summary_parts:
+                extraction_summary = " • ".join(summary_parts)
         
         return ChatResponse(
             message=response_message,
             recommendations=formatted_recommendations,
             llm_provider_used=request.llm_provider,
             cache_used=cache_used,
-            cache_age_hours=cache_age_hours
+            cache_age_hours=cache_age_hours,
+            extracted_preferences=extracted_preferences,
+            extraction_summary=extraction_summary
         )
         
     except Exception as e:
