@@ -73,8 +73,8 @@ async def cors_middleware(request, call_next):
     # Handle preflight requests
     if request.method == "OPTIONS":
         response = Response()
-        # Always set the origin header for localhost:3000 in development
-        if origin == "http://localhost:3000":
+        # Set the origin header if it's in the allowed origins
+        if origin in allow_origins:
             response.headers["Access-Control-Allow-Origin"] = origin
             logger.info(f"OPTIONS: Set Access-Control-Allow-Origin to {origin}")
         response.headers["Access-Control-Allow-Credentials"] = "true"
@@ -85,8 +85,8 @@ async def cors_middleware(request, call_next):
     
     # Handle actual requests
     response = await call_next(request)
-    # Always set the origin header for localhost:3000 in development
-    if origin == "http://localhost:3000":
+    # Set the origin header if it's in the allowed origins
+    if origin in allow_origins:
         response.headers["Access-Control-Allow-Origin"] = origin
         logger.info(f"GET/POST: Set Access-Control-Allow-Origin to {origin}")
     response.headers["Access-Control-Allow-Credentials"] = "true"
