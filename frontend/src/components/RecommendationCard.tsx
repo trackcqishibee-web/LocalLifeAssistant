@@ -46,10 +46,10 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
   return (
     <div className="recommendation-card">
       <div className="mb-4">
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">
+        <h3 className="text-xl font-semibold text-amber-900/90 mb-2">
           {type === 'event' ? data.title : data.name}
         </h3>
-        <div className="flex items-center space-x-4 text-sm text-gray-600 mb-2">
+        <div className="flex items-center space-x-4 text-sm text-amber-700/80 mb-2">
           <div className="flex items-center space-x-1">
             <MapPin className="w-4 h-4" />
             <span>{data.venue_name || data.name}, {data.venue_city}</span>
@@ -63,7 +63,7 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
         </div>
       </div>
 
-      <p className="text-gray-700 mb-4 line-clamp-3">
+      <p className="text-amber-800/90 mb-4 line-clamp-3">
         {data.description}
       </p>
 
@@ -71,7 +71,7 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
         {data.categories?.map((category: string, index: number) => (
           <span
             key={index}
-            className="px-2 py-1 bg-primary-100 text-primary-800 text-xs rounded-full"
+            className="px-2 py-1 bg-amber-100 text-amber-800 text-xs rounded-full"
           >
             {category}
           </span>
@@ -84,7 +84,7 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
           
           
           {type === 'restaurant' && data.is_open_now !== undefined && (
-            <div className="flex items-center space-x-1 text-sm text-gray-600">
+            <div className="flex items-center space-x-1 text-sm text-amber-700/80">
               <Clock className="w-4 h-4" />
               <span className={data.is_open_now ? 'text-green-600' : 'text-red-600'}>
                 {data.is_open_now ? 'Open now' : 'Closed'}
@@ -101,7 +101,7 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
               href={data.event_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center space-x-1 px-3 py-1 bg-primary-500 text-white text-sm rounded hover:bg-primary-600 transition-colors"
+              className="inline-flex items-center space-x-1 px-3 py-1 bg-amber-600 text-white text-sm rounded hover:bg-amber-700 transition-colors"
             >
               <ExternalLink className="w-4 h-4" />
               <span>View on Eventbrite</span>
@@ -123,8 +123,8 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
       </div>
 
       {explanation && (
-        <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-          <div className="text-sm text-blue-800">
+        <div className="mt-4 p-3 bg-amber-50/50 rounded-lg border border-amber-200/30">
+          <div className="text-sm text-amber-800">
             <strong>Why this recommendation:</strong> {explanation}
           </div>
         </div>

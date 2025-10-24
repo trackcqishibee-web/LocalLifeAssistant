@@ -9,7 +9,7 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = () => {
     <div className="chat-message assistant">
       <div className="flex items-start space-x-2">
         <div className="flex-shrink-0">
-          <div className="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
+          <div className="w-8 h-8 bg-amber-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
             AI
           </div>
         </div>
@@ -19,7 +19,7 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = () => {
           </div>
           <div className="whitespace-pre-wrap mb-3">
             <div className="flex items-center space-x-2 mb-3">
-              <Sparkles className="w-5 h-5 text-primary-500" />
+              <Sparkles className="w-5 h-5 text-amber-600" />
               <span className="font-semibold text-gray-900">Welcome to Local Life Assistant!</span>
             </div>
             
@@ -30,22 +30,22 @@ const WelcomeMessage: React.FC<WelcomeMessageProps> = () => {
             
             <div className="mt-4 space-y-2 text-sm">
               <div className="flex items-center space-x-2">
-                <span className="w-2 h-2 bg-primary-500 rounded-full"></span>
+                <span className="w-2 h-2 bg-amber-600 rounded-full"></span>
                 <span><strong>Where are you located?</strong> (e.g., "New York", "San Francisco", "Chicago")</span>
               </div>
               <div className="flex items-center space-x-2">
-                <span className="w-2 h-2 bg-primary-500 rounded-full"></span>
+                <span className="w-2 h-2 bg-amber-600 rounded-full"></span>
                 <span><strong>What date/time works for you?</strong> (e.g., "this weekend", "tomorrow evening", "next Friday")</span>
               </div>
               <div className="flex items-center space-x-2">
-                <span className="w-2 h-2 bg-primary-500 rounded-full"></span>
+                <span className="w-2 h-2 bg-amber-600 rounded-full"></span>
                 <span><strong>What type of events interest you?</strong> (e.g., "music", "food", "art", "sports", "networking")</span>
               </div>
             </div>
             
-            <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-              <div className="text-sm text-blue-800">
-                <strong>💡 Example:</strong> "I'm in Brooklyn, looking for jazz concerts this weekend"
+            <div className="mt-4 p-3 bg-amber-50/50 rounded-lg border border-amber-200 backdrop-blur-sm">
+              <div className="text-sm text-amber-800">
+                <strong className="text-amber-900">💡 Example:</strong> <span className="text-amber-900 font-medium">"I'm in Brooklyn, looking for jazz concerts this weekend"</span>
               </div>
             </div>
             
