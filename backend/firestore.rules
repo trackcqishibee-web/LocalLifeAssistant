@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users can read/write their own data
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      // Conversations are subcollections of users
+      match /conversations/{conversationId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // Event cache is publicly readable but only writable by authenticated users
+    match /event_cache/{cityId} {
+      allow read: if true;  // Public read access for cached events
+      allow write: if request.auth != null;  // Only authenticated users can write
+    }
+
+    // User usage tracking - server-side only (no direct client access)
+    match /user_usage/{userId} {
+      allow read, write: if false;  // Server-side only via Firebase Admin SDK
+    }
+  }
+}

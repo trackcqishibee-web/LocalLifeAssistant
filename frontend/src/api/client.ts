@@ -143,20 +143,17 @@ class APIClient {
     return response.data;
   }
 
-  async register(anonymousUserId: string, email: string, password: string, name?: string): Promise<any> {
-    const response = await axios.post(`${this.baseURL}/api/users/register`, {
+  async registerWithToken(anonymousUserId: string, token: string): Promise<any> {
+    const response = await axios.post(`${this.baseURL}/api/auth/register`, {
       anonymous_user_id: anonymousUserId,
-      email,
-      password,
-      name
+      token
     });
     return response.data;
   }
 
-  async login(email: string, password: string): Promise<any> {
-    const response = await axios.post(`${this.baseURL}/api/users/login`, {
-      email,
-      password
+  async verifyToken(token: string): Promise<any> {
+    const response = await axios.post(`${this.baseURL}/api/auth/verify`, {
+      token
     });
     return response.data;
   }

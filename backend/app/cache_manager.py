@@ -1,141 +1,141 @@
 #!/usr/bin/env python3
 """
-Cache management for city-based event storage
+Firebase-based cache management for city-based event storage
 """
 
-import os
-import json
 import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
+from firebase_admin import firestore
+from .firebase_config import db
 
 logger = logging.getLogger(__name__)
 
 class CacheManager:
-    """Intelligent cache manager for city-based event storage"""
-    
-    def __init__(self, cache_dir: str = "./event_cache", ttl_hours: int = 6, max_size_mb: int = 100):
-        self.cache_dir = cache_dir
+    """Firebase-based cache manager for city-based event storage"""
+
+    def __init__(self, ttl_hours: int = 6):
         self.ttl_hours = ttl_hours
-        self.max_size_mb = max_size_mb
-        
-        # Create cache directory if it doesn't exist
-        os.makedirs(cache_dir, exist_ok=True)
-        
-        logger.info(f"Cache manager initialized: {cache_dir}, TTL: {ttl_hours}h")
-    
-    def _get_cache_file(self, city: str) -> str:
-        """Get cache file path for a city"""
-        # Sanitize city name for filename
-        safe_city = city.lower().replace(" ", "_").replace("/", "_")
-        return os.path.join(self.cache_dir, f"{safe_city}.json")
-    
-    def _is_cache_valid(self, cache_file: str) -> bool:
-        """Check if cache file is still valid (not expired)"""
-        if not os.path.exists(cache_file):
-            return False
-        
+        self.db = db
+        logger.info(f"Firebase Cache manager initialized, TTL: {ttl_hours}h")
+
+    def _is_cache_valid(self, cached_at: str) -> bool:
+        """Check if cache entry is still valid (not expired)"""
         try:
-            # Check file modification time
-            mod_time = datetime.fromtimestamp(os.path.getmtime(cache_file))
-            age = datetime.now() - mod_time
-            
+            cache_time = datetime.fromisoformat(cached_at)
+            age = datetime.now() - cache_time
             return age < timedelta(hours=self.ttl_hours)
         except Exception as e:
             logger.warning(f"Error checking cache validity: {e}")
             return False
-    
+
     def get_cached_events(self, city: str) -> Optional[List[Dict[str, Any]]]:
         """Get cached events for a city if valid"""
-        cache_file = self._get_cache_file(city)
-        
-        if not self._is_cache_valid(cache_file):
-            logger.info(f"Cache for {city} is expired or doesn't exist")
-            return None
-        
         try:
-            with open(cache_file, 'r', encoding='utf-8') as f:
-                cache_data = json.load(f)
-            
+            # Sanitize city name for document ID
+            safe_city = city.lower().replace(" ", "_").replace("/", "_")
+
+            cache_doc = self.db.collection('event_cache').document(safe_city).get()
+
+            if not cache_doc.exists:
+                logger.info(f"Cache for {city} doesn't exist")
+                return None
+
+            cache_data = cache_doc.to_dict()
+
+            if not self._is_cache_valid(cache_data.get('cached_at', '')):
+                logger.info(f"Cache for {city} is expired")
+                return None
+
             events = cache_data.get('events', [])
             logger.info(f"Retrieved {len(events)} cached events for {city}")
             return events
-            
+
         except Exception as e:
             logger.error(f"Error reading cache for {city}: {e}")
             return None
-    
+
     def cache_events(self, city: str, events: List[Dict[str, Any]]) -> bool:
         """Cache events for a city"""
-        cache_file = self._get_cache_file(city)
-        
         try:
+            # Sanitize city name for document ID
+            safe_city = city.lower().replace(" ", "_").replace("/", "_")
+
             cache_data = {
                 'city': city,
                 'events': events,
                 'cached_at': datetime.now().isoformat(),
                 'count': len(events)
             }
-            
-            with open(cache_file, 'w', encoding='utf-8') as f:
-                json.dump(cache_data, f, indent=2, ensure_ascii=False)
-            
+
+            self.db.collection('event_cache').document(safe_city).set(cache_data)
+
             logger.info(f"Cached {len(events)} events for {city}")
             return True
-            
+
         except Exception as e:
             logger.error(f"Error caching events for {city}: {e}")
             return False
-    
+
     def get_cache_age(self, city: str) -> Optional[float]:
         """Get cache age in hours for a city"""
-        cache_file = self._get_cache_file(city)
-        
-        if not os.path.exists(cache_file):
-            return None
-        
         try:
-            mod_time = datetime.fromtimestamp(os.path.getmtime(cache_file))
-            age = datetime.now() - mod_time
+            safe_city = city.lower().replace(" ", "_").replace("/", "_")
+            cache_doc = self.db.collection('event_cache').document(safe_city).get()
+
+            if not cache_doc.exists:
+                return None
+
+            cache_data = cache_doc.to_dict()
+            cached_at = cache_data.get('cached_at')
+
+            if not cached_at:
+                return None
+
+            cache_time = datetime.fromisoformat(cached_at)
+            age = datetime.now() - cache_time
             return age.total_seconds() / 3600  # Convert to hours
+
         except Exception:
             return None
-    
+
     def cleanup_old_cache(self):
-        """Remove expired cache files to save space"""
+        """Remove expired cache entries to save space"""
         try:
-            for filename in os.listdir(self.cache_dir):
-                if filename.endswith('.json'):
-                    cache_file = os.path.join(self.cache_dir, filename)
-                    if not self._is_cache_valid(cache_file):
-                        os.remove(cache_file)
-                        logger.info(f"Removed expired cache: {filename}")
+            # Get all cache documents
+            cache_docs = self.db.collection('event_cache').get()
+
+            for doc in cache_docs:
+                cache_data = doc.to_dict()
+                if not self._is_cache_valid(cache_data.get('cached_at', '')):
+                    doc.reference.delete()
+                    logger.info(f"Removed expired cache: {doc.id}")
+
         except Exception as e:
             logger.error(f"Error cleaning up cache: {e}")
-    
+
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get cache statistics"""
         try:
             total_files = 0
-            total_size_mb = 0
             valid_files = 0
-            
-            for filename in os.listdir(self.cache_dir):
-                if filename.endswith('.json'):
-                    cache_file = os.path.join(self.cache_dir, filename)
-                    total_files += 1
-                    total_size_mb += os.path.getsize(cache_file) / (1024 * 1024)
-                    
-                    if self._is_cache_valid(cache_file):
-                        valid_files += 1
-            
+
+            # Get all cache documents
+            cache_docs = self.db.collection('event_cache').get()
+
+            for doc in cache_docs:
+                total_files += 1
+                cache_data = doc.to_dict()
+                if self._is_cache_valid(cache_data.get('cached_at', '')):
+                    valid_files += 1
+
             return {
                 'total_files': total_files,
                 'valid_files': valid_files,
-                'total_size_mb': round(total_size_mb, 2),
-                'cache_dir': self.cache_dir,
-                'ttl_hours': self.ttl_hours
+                'ttl_hours': self.ttl_hours,
+                'storage_type': 'firestore'
             }
+
         except Exception as e:
             logger.error(f"Error getting cache stats: {e}")
             return {'error': str(e)}

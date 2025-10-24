@@ -174,7 +174,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             <div className="flex items-start space-x-2">
               <div className="flex-shrink-0">
                 {msg.role === 'user' ? (
-                  <div className="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center text-white">
+                  <div className="w-8 h-8 bg-amber-600 rounded-full flex items-center justify-center text-white">
                     <User className="w-4 h-4" />
                   </div>
                 ) : (
@@ -192,11 +192,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 {/* Display recommendations inline */}
                 {msg.recommendations && msg.recommendations.length > 0 && (
                   <div className="mt-4 space-y-3">
-                    <div className="text-sm font-medium text-gray-700 mb-2">
+                    <div className="text-sm font-medium text-amber-800/80 mb-2">
                       📋 Recommendations ({msg.recommendations.length})
                     </div>
                     {msg.recommendations.map((rec, recIndex) => (
-                      <div key={recIndex} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                      <div key={recIndex} className="border border-amber-200/50 rounded-lg p-3 bg-amber-50/30">
                         <RecommendationCard recommendation={rec} />
                       </div>
                     ))}
@@ -211,7 +211,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           <div className="chat-message assistant">
             <div className="flex items-start space-x-2">
               <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                <div className="w-8 h-8 bg-amber-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
                   AI
                 </div>
               </div>
@@ -241,13 +241,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Ask me about events, restaurants, or anything local..."
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
             disabled={isLoading}
           />
           <button
             type="submit"
             disabled={!message.trim() || isLoading}
-            className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
           >
             {isLoading ? (
               <Loader2 className="w-4 h-4 animate-spin" />

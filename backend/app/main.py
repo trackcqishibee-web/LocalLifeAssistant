@@ -8,12 +8,13 @@ import logging
 import os
 from typing import Dict, Any, List, Optional
 from datetime import datetime
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
 from dotenv import load_dotenv
 
+from .firebase_config import db
 from .event_service import EventbriteCrawler
 from .cache_manager import CacheManager
 from .geocoding import GeocodingService, GeocodeRequest, GeocodeResponse, LocationCoordinates
@@ -73,7 +74,7 @@ logger.info(f"Allowed origins: {allow_origins}")
 async def cors_middleware(request, call_next):
     origin = request.headers.get("origin")
     logger.info(f"CORS middleware - Origin: {origin}, Allowed origins: {allow_origins}")
-    
+
     # Handle preflight requests
     if request.method == "OPTIONS":
         response = Response()
@@ -85,17 +86,24 @@ async def cors_middleware(request, call_next):
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "*"
         response.headers["Access-Control-Max-Age"] = "600"
+        # Add headers to help with Firebase Auth popups
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
+        response.headers["Cross-Origin-Embedder-Policy"] = "credentialless"
         return response
-    
-    # Handle actual requests
+
+    # Handle actual requests - ALWAYS call next first to get response
     response = await call_next(request)
-    # Set the origin header if it's in the allowed origins
+
+    # Set CORS headers on the response
     if origin in allow_origins:
         response.headers["Access-Control-Allow-Origin"] = origin
         logger.info(f"GET/POST: Set Access-Control-Allow-Origin to {origin}")
     response.headers["Access-Control-Allow-Credentials"] = "true"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "*"
+    # Add headers to help with Firebase Auth popups
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
+    response.headers["Cross-Origin-Embedder-Policy"] = "credentialless"
     return response
 
 # Add middleware to log CORS requests for debugging
@@ -129,9 +137,22 @@ class ChatResponse(BaseModel):
     trial_exceeded: bool = False  # NEW - Flag to show registration prompt
     conversation_id: str  # NEW
 
+class CreateConversationRequest(BaseModel):
+    """Request model for creating a conversation"""
+    user_id: str
+    metadata: Optional[Dict[str, Any]] = None
+
+# Cache configuration
+CACHE_TTL_HOURS = 6  # Cache events for 6 hours
+
+class MigrateConversationsRequest(BaseModel):
+    """Request model for migrating conversations"""
+    anonymous_user_id: str
+    real_user_id: str
+
 # Initialize services
 event_crawler = EventbriteCrawler()
-cache_manager = CacheManager()
+cache_manager = CacheManager(ttl_hours=CACHE_TTL_HOURS)
 geocoding_service = GeocodingService()
 search_service = SearchService()
 extraction_service = ExtractionService()
@@ -139,18 +160,11 @@ usage_tracker = UsageTracker()
 conversation_storage = ConversationStorage()
 user_manager = UserManager()
 
-# Cache configuration
-CACHE_TTL_HOURS = 6  # Cache events for 6 hours
+# Conversations are now stored in Firestore
+logger.info("Conversations storage: Firestore")
 
-# Create conversations directory on startup
-CONVERSATIONS_DIR = "backend/conversations"
-os.makedirs(CONVERSATIONS_DIR, exist_ok=True)
-logger.info(f"Conversations directory: {CONVERSATIONS_DIR}")
-
-# Create users directory on startup
-USERS_DIR = "backend/users"
-os.makedirs(USERS_DIR, exist_ok=True)
-logger.info(f"Users directory: {USERS_DIR}")
+# Users are now stored in Firestore
+logger.info("Users storage: Firestore")
 
 # Routes
 @app.get("/health")
@@ -404,31 +418,36 @@ async def get_user_usage(user_id: str):
     usage = usage_tracker.get_usage(user_id)
     return usage
 
-@app.post("/api/users/register")
-async def register_user(
-    anonymous_user_id: str,
-    email: str,
-    password: str,
-    name: Optional[str] = None
-):
-    """Register a new user and migrate their conversation history"""
-    
+
+@app.post("/api/auth/register")
+async def register_with_token(request: dict = Body(...)):
+    """Register a Firebase-authenticated user and migrate their conversation history"""
+
+    token = request.get("token")
+    anonymous_user_id = request.get("anonymous_user_id")
+
+    if not token:
+        raise HTTPException(status_code=400, detail="Firebase token required")
+
     try:
-        # Generate registered user ID
-        real_user_id = f"registered_{int(datetime.now().timestamp())}"
-        
-        # Register user in user manager (persistent file storage)
-        user_manager.register_user(email, password, real_user_id, name)
-        
+        # Verify the Firebase token
+        user_data = user_manager.authenticate_with_token(token)
+
+        # The user is already created in Firebase Auth, now we just need to
+        # migrate conversations and mark as registered
+        real_user_id = user_data["user_id"]
+
         # Migrate conversations from anonymous to registered user
         migrated_count = conversation_storage.migrate_user_conversations(
             anonymous_user_id,
             real_user_id
         )
-        
+
         # Mark as registered in usage tracker
         usage_tracker.mark_registered(anonymous_user_id, real_user_id)
-        
+
+        logger.info(f"User registered with Firebase: {user_data['email']} -> {real_user_id}")
+
         return {
             "success": True,
             "user_id": real_user_id,
@@ -436,59 +455,54 @@ async def register_user(
             "message": f"Registration successful! {migrated_count} conversations migrated."
         }
     except ValueError as e:
+        logger.error(f"Firebase registration error: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Firebase registration error (Unexpected): {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-@app.post("/api/users/login")
-async def login_user(email: str, password: str):
-    """User login endpoint"""
-    
+@app.post("/api/auth/verify")
+async def verify_auth_token(request: dict = Body(...)):
+    """Verify Firebase Auth token"""
+
+    token = request.get("token")
+    if not token:
+        raise HTTPException(status_code=401, detail="No authentication token provided")
+
     try:
-        # Authenticate user with file-based storage
-        user = user_manager.login_user(email, password)
-        
+        user_data = user_manager.authenticate_with_token(token)
         return {
             "success": True,
-            "user_id": user["user_id"],
-            "email": user["email"],
-            "name": user.get("name"),
-            "message": "Login successful!"
+            "user_id": user_data.get("user_id"),
+            "email": user_data.get("email"),
+            "name": user_data.get("name")
         }
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
 
+
 @app.post("/api/users/migrate-conversations")
-async def migrate_conversations(
-    anonymous_user_id: str,
-    real_user_id: str
-):
+async def migrate_conversations(request: MigrateConversationsRequest = Body(...)):
     """Migrate conversations from anonymous user to registered user"""
-    # This will be used by the file storage system
-    # Move all conversations from anonymous folder to registered user folder
-    
-    import shutil
-    anonymous_dir = os.path.join("backend/conversations", anonymous_user_id)
-    registered_dir = os.path.join("backend/conversations", real_user_id)
-    
-    if os.path.exists(anonymous_dir):
-        os.makedirs(registered_dir, exist_ok=True)
-        
-        # Copy all conversations
-        for filename in os.listdir(anonymous_dir):
-            src = os.path.join(anonymous_dir, filename)
-            dst = os.path.join(registered_dir, filename)
-            shutil.copy2(src, dst)
-        
+    # Now uses Firebase conversation storage
+    try:
+        migrated_count = conversation_storage.migrate_user_conversations(
+            request.anonymous_user_id,
+            request.real_user_id
+        )
+
         return {
             "success": True,
-            "migrated_conversations": len(os.listdir(anonymous_dir))
+            "migrated_conversations": migrated_count
         }
-    
-        return {"success": False, "error": "No conversations to migrate"}
+    except Exception as e:
+        logger.error(f"Conversation migration failed: {e}")
+        return {"success": False, "error": str(e)}
 
 @app.post("/api/conversations/create")
-async def create_conversation(user_id: str, metadata: Dict[str, Any] = {}):
+async def create_conversation(request: CreateConversationRequest = Body(...)):
     """Create a new conversation for a user"""
-    conversation_id = conversation_storage.create_conversation(user_id, metadata)
+    conversation_id = conversation_storage.create_conversation(request.user_id, request.metadata)
     return {"conversation_id": conversation_id}
 
 @app.get("/api/conversations/{user_id}/{conversation_id}")
@@ -558,7 +572,6 @@ if __name__ == "__main__":
     logger.info("Starting Smart Cached RAG Local Life Assistant...")
     logger.info("Features: City-based caching + Real-time events + Rate limit protection")
     logger.info(f"Cache TTL: {CACHE_TTL_HOURS} hours")
-    logger.info(f"Cache directory: {cache_manager.cache_dir}")
     
     # Clean up old cache on startup
     cache_manager.cleanup_old_cache()

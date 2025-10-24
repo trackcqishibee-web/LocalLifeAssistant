@@ -7,6 +7,8 @@ import LoginModal from './components/LoginModal';
 import { ChatMessage, apiClient, LocationCoordinates } from './api/client';
 import { getOrCreateUserId, setUserId } from './utils/userIdManager';
 import { updateUsageStats, shouldShowRegistrationPrompt, markRegistrationPrompted, getTrialWarningMessage } from './utils/usageTracker';
+import { auth } from './firebase/config';
+import { onAuthStateChanged, User } from 'firebase/auth';
 
 const App: React.FC = () => {
   const [conversationHistory, setConversationHistory] = useState<ChatMessage[]>([]);
@@ -21,6 +23,10 @@ const App: React.FC = () => {
   const [trialWarning, setTrialWarning] = useState('');
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
 
+  // Firebase authentication state
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
   const availableProviders = [
     { value: 'openai', label: 'OpenAI (GPT-3.5)' },
     { value: 'anthropic', label: 'Anthropic Claude' },
@@ -29,6 +35,51 @@ const App: React.FC = () => {
 
   useEffect(() => {
     checkConnection();
+
+    // Prevent browser scroll restoration on page load
+    if ('scrollRestoration' in history) {
+      history.scrollRestoration = 'manual';
+    }
+
+    // Scroll to top on initial load
+    window.scrollTo(0, 0);
+  }, []);
+
+  // Firebase authentication state listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      setAuthLoading(false);
+
+      if (user) {
+        // User is signed in, verify token with backend
+        try {
+          const token = await user.getIdToken();
+          const response = await apiClient.verifyToken(token);
+
+          // Update user ID to the authenticated user's ID
+          const authenticatedUserId = response.user_id || user.uid;
+          setUserIdState(authenticatedUserId);
+          setUserId(authenticatedUserId);
+
+          // Update usage stats for registered user
+          updateUsageStats({ is_registered: true });
+
+          console.log('User authenticated:', authenticatedUserId);
+        } catch (error) {
+          console.error('Token verification failed:', error);
+          // If token verification fails, sign out
+          await auth.signOut();
+        }
+      } else {
+        // User is signed out, use anonymous user ID
+        const uid = getOrCreateUserId();
+        setUserIdState(uid);
+        console.log('User not authenticated, using anonymous ID:', uid);
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   // Initialize user ID
@@ -128,39 +179,40 @@ const App: React.FC = () => {
     initializeConversation();
   }, [userId, llmProvider]);
 
-  const handleRegister = async (email: string, password: string, name: string) => {
+  const handleRegister = async (anonymousUserId: string, email: string, password: string, name: string, idToken: string) => {
     try {
-      const response = await apiClient.register(userId, email, password, name);
-      
+      // The Firebase user is already created, now register with our backend using token
+      const response = await apiClient.registerWithToken(anonymousUserId, idToken);
+
       if (response.success) {
         // Update user ID to registered user
-        setUserIdState(response.user_id);
-        setUserId(response.user_id);
-        
+        const registeredUserId = response.user_id;
+        setUserIdState(registeredUserId);
+        setUserId(registeredUserId);
+
         // Update usage stats
         updateUsageStats({ is_registered: true });
-        
+
         // Show success message
         alert('Registration successful! Your conversation history has been preserved.');
       }
     } catch (error) {
-      console.error('Registration failed:', error);
+      console.error('Backend registration failed:', error);
+      // If backend registration fails, we should sign out from Firebase
+      await auth.signOut();
       throw error;
     }
   };
 
-  const handleLogin = async (email: string, password: string) => {
+  const handleLogin = async (user: User, token: string) => {
     try {
-      const response = await apiClient.login(email, password);
-      
+      // Firebase authentication is already handled, just verify with backend
+      const response = await apiClient.verifyToken(token);
+
       if (response.success) {
-        // Update user ID to logged-in user
-        setUserIdState(response.user_id);
-        setUserId(response.user_id);
-        
         // Load user's conversations
         const conversations = await apiClient.listUserConversations(response.user_id);
-        
+
         // Load most recent conversation if exists
         if (conversations.length > 0) {
           const mostRecent = conversations[0];
@@ -169,25 +221,39 @@ const App: React.FC = () => {
           setConversationHistory(conversation.messages);
           localStorage.setItem('current_conversation_id', mostRecent.conversation_id);
         }
-        
+
         setShowLoginModal(false);
         alert('Login successful! Welcome back!');
       }
     } catch (error: any) {
-      console.error('Login failed:', error);
+      console.error('Login verification failed:', error);
+      // If verification fails, sign out from Firebase
+      await auth.signOut();
       throw error;
     }
   };
 
-  // Add switch modal handlers
-  const handleSwitchToRegister = () => {
-    setShowLoginModal(false);
-    setShowRegistrationModal(true);
-  };
 
-  const handleSwitchToLogin = () => {
-    setShowRegistrationModal(false);
-    setShowLoginModal(true);
+  const handleLogout = async () => {
+    try {
+      await auth.signOut();
+      // Clear conversation and reset to anonymous user
+      setConversationHistory([]);
+      setCurrentConversationId(null);
+      localStorage.removeItem('current_conversation_id');
+
+      // Reset to anonymous user ID
+      const anonymousId = getOrCreateUserId();
+      setUserIdState(anonymousId);
+      setUserId(anonymousId);
+
+      // Update usage stats for anonymous user
+      updateUsageStats({ is_registered: false });
+
+      console.log('Signed out, switched to anonymous user:', anonymousId);
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
 
   const handleExampleQuery = async (query: string) => {
@@ -249,13 +315,22 @@ const App: React.FC = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div
+      className="min-h-screen"
+      style={{
+        backgroundImage: 'linear-gradient(rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.1)), url("https://raw.githubusercontent.com/LijieTu/local-moco/main/landing.png")',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundAttachment: 'fixed'
+      }}
+    >
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-primary-500 rounded-lg flex items-center justify-center">
+                <div className="w-8 h-8 bg-amber-600 rounded-lg flex items-center justify-center">
                 <MapPin className="w-5 h-5 text-white" />
               </div>
               <div>
@@ -265,17 +340,33 @@ const App: React.FC = () => {
             </div>
             
             <div className="flex items-center space-x-4">
-              {/* Usage Counter and Register Button */}
-              {usageStats && !usageStats.is_registered && (
+              {/* Authentication Status */}
+              {authLoading ? (
+                <div className="text-sm text-gray-600">Loading...</div>
+              ) : currentUser ? (
                 <div className="flex items-center gap-3">
-                  <div className="text-sm text-gray-600">
-                    Trial: {usageStats.trial_remaining} interactions left
+                  <div className="text-sm text-gray-700">
+                    Welcome, {currentUser.displayName || currentUser.email?.split('@')[0] || 'User'}
                   </div>
                   <button
-                    onClick={() => setShowRegistrationModal(true)}
-                    className="text-sm bg-primary-600 text-white px-3 py-1 rounded-md hover:bg-primary-700 transition-colors"
+                    onClick={handleLogout}
+                    className="text-sm bg-amber-600/80 text-white px-3 py-1 rounded-md hover:bg-amber-700/80 transition-colors"
                   >
-                    Register
+                    Sign Out
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  {usageStats && !usageStats.is_registered && (
+                    <div className="text-sm text-gray-600">
+                      Trial: {usageStats.trial_remaining} interactions left
+                    </div>
+                  )}
+                  <button
+                    onClick={() => setShowRegistrationModal(true)}
+                    className="text-sm bg-amber-600 text-white px-3 py-1 rounded-md hover:bg-amber-700 transition-colors"
+                  >
+                    Sign in / Register
                   </button>
                 </div>
               )}
@@ -310,7 +401,7 @@ const App: React.FC = () => {
                 <select
                   value={llmProvider}
                   onChange={(e) => setLlmProvider(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
                 >
                   {availableProviders.map(provider => (
                     <option key={provider.value} value={provider.value}>
@@ -339,27 +430,9 @@ const App: React.FC = () => {
           <div className="lg:col-span-3">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-[700px] flex flex-col">
               <div className="p-4 border-b border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <MessageCircle className="w-5 h-5 text-primary-500" />
-                    <h2 className="text-lg font-semibold text-gray-900">Chat with Assistant</h2>
-                  </div>
-                  {!usageStats?.is_registered && (
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setShowLoginModal(true)}
-                        className="text-sm text-primary-600 px-3 py-1.5 rounded-md border border-primary-600 hover:bg-primary-50 transition-colors"
-                      >
-                        Sign In
-                      </button>
-                      <button
-                        onClick={() => setShowRegistrationModal(true)}
-                        className="text-sm bg-primary-600 text-white px-3 py-1.5 rounded-md hover:bg-primary-700 transition-colors"
-                      >
-                        Register
-                      </button>
-                    </div>
-                  )}
+                <div className="flex items-center space-x-2">
+                  <MessageCircle className="w-5 h-5 text-amber-600" />
+                  <h2 className="text-lg font-semibold text-gray-900">Chat with Assistant</h2>
                 </div>
               </div>
               
@@ -384,39 +457,18 @@ const App: React.FC = () => {
               initialLocation={userLocation}
             />
 
-            {/* Registration/Login Section */}
-            {!usageStats?.is_registered && (
-              <div className="bg-gradient-to-r from-primary-50 to-blue-50 rounded-lg border border-primary-200 p-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Get Full Access</h3>
-                <p className="text-sm text-gray-600 mb-3">
-                  Register to save your conversations and get unlimited access!
-                </p>
-                <button
-                  onClick={() => setShowRegistrationModal(true)}
-                  className="w-full bg-primary-600 text-white py-2 px-4 rounded-md hover:bg-primary-700 transition-colors text-sm font-medium mb-2"
-                >
-                  Register Now
-                </button>
-                <button
-                  onClick={() => setShowLoginModal(true)}
-                  className="w-full text-primary-600 py-2 px-4 rounded-md border border-primary-300 hover:bg-primary-50 transition-colors text-sm font-medium"
-                >
-                  Already have an account? Sign In
-                </button>
-              </div>
-            )}
 
             {/* Quick Examples */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Try asking:</h3>
-              <div className="space-y-2">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Try asking:</h3>
+              <div className="max-h-64 overflow-y-auto space-y-1">
                 {exampleQueries.map((query, index) => (
                   <button
                     key={index}
                     onClick={() => handleExampleQuery(query)}
-                    className="w-full text-left p-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                    className="w-full text-left p-2 text-xs text-amber-800 hover:bg-amber-50/50 rounded-md transition-colors border border-transparent hover:border-amber-200 backdrop-blur-sm"
                   >
-                    "{query}"
+                    <span className="text-amber-900 font-medium">"{query}"</span>
                   </button>
                 ))}
               </div>
@@ -425,29 +477,12 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Footer */}
-      <footer className="bg-white border-t border-gray-200 mt-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="text-center text-gray-500">
-            <p>Local Life Assistant - Powered by AI and RAG technology</p>
-            <p className="text-sm mt-2">
-              Built with FastAPI, React, ChromaDB, and multiple LLM providers
-            </p>
-          </div>
-        </div>
-      </footer>
 
       {/* Trial Warning Banner */}
       {trialWarning && (
         <div className="fixed top-0 left-0 right-0 bg-amber-50 border-l-4 border-amber-500 p-4 z-40">
-          <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="max-w-7xl mx-auto">
             <p className="text-amber-700">{trialWarning}</p>
-            <button
-              onClick={() => setShowRegistrationModal(true)}
-              className="text-amber-900 font-semibold hover:underline ml-4"
-            >
-              Register Now →
-            </button>
           </div>
         </div>
       )}
@@ -458,7 +493,6 @@ const App: React.FC = () => {
                 onClose={() => setShowRegistrationModal(false)}
                 onRegister={handleRegister}
                 trialRemaining={usageStats?.trial_remaining || 0}
-                onSwitchToLogin={handleSwitchToLogin}
               />
 
               {/* Login Modal */}
@@ -466,7 +500,6 @@ const App: React.FC = () => {
                 isOpen={showLoginModal}
                 onClose={() => setShowLoginModal(false)}
                 onLogin={handleLogin}
-                onSwitchToRegister={handleSwitchToRegister}
               />
     </div>
   );

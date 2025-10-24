@@ -1,38 +1,24 @@
 #!/usr/bin/env python3
 """
-File-based conversation storage organized by user folders
+Firebase-based conversation storage
 """
 
-import os
-import json
-import uuid
 import logging
-import shutil
+import uuid
 from typing import Dict, Any, List, Optional
 from datetime import datetime
-from filelock import FileLock
+from firebase_admin import firestore
+from .firebase_config import db
 
 logger = logging.getLogger(__name__)
 
 class ConversationStorage:
-    """File-based conversation storage organized by user folders"""
-    
-    def __init__(self, base_dir="backend/conversations"):
-        self.base_dir = base_dir
-        os.makedirs(base_dir, exist_ok=True)
-        logger.info(f"ConversationStorage initialized at {base_dir}")
-    
-    def _get_user_dir(self, user_id: str) -> str:
-        """Get or create user's conversation directory"""
-        user_dir = os.path.join(self.base_dir, user_id)
-        os.makedirs(user_dir, exist_ok=True)
-        return user_dir
-    
-    def _get_conversation_file(self, user_id: str, conversation_id: str) -> str:
-        """Get path to a conversation file"""
-        user_dir = self._get_user_dir(user_id)
-        return os.path.join(user_dir, f"{conversation_id}.json")
-    
+    """Firebase-based conversation storage"""
+
+    def __init__(self):
+        self.db = db
+        logger.info("Firebase ConversationStorage initialized")
+
     def create_conversation(self, user_id: str, metadata: Dict[str, Any]) -> str:
         """Create a new conversation for a user"""
         conversation_id = str(uuid.uuid4())
@@ -44,144 +30,126 @@ class ConversationStorage:
             "metadata": metadata,
             "messages": []
         }
-        
-        file_path = self._get_conversation_file(user_id, conversation_id)
-        with open(file_path, 'w') as f:
-            json.dump(conversation, f, indent=2)
-        
+
+        self.db.collection('users').document(user_id).collection('conversations').document(conversation_id).set(conversation)
+
         logger.info(f"Created conversation {conversation_id} for user {user_id}")
         return conversation_id
-    
+
     def save_message(self, user_id: str, conversation_id: str, message_data: Dict[str, Any]):
         """Append a message to a conversation"""
-        file_path = self._get_conversation_file(user_id, conversation_id)
-        lock_path = file_path + ".lock"
-        
-        # Use file locking to prevent concurrent writes
-        with FileLock(lock_path, timeout=10):
-            try:
-                with open(file_path, 'r') as f:
-                    conversation = json.load(f)
-                
-                # Add message ID if not present
-                if "message_id" not in message_data:
-                    message_data["message_id"] = f"msg_{len(conversation['messages']) + 1}"
-                
-                conversation["messages"].append(message_data)
-                conversation["last_message_at"] = datetime.now().isoformat()
-                
-                with open(file_path, 'w') as f:
-                    json.dump(conversation, f, indent=2)
-                
-                logger.info(f"Saved message to conversation {conversation_id}")
-            except FileNotFoundError:
-                logger.error(f"Conversation {conversation_id} not found for user {user_id}")
-                raise
-    
+        try:
+            conv_ref = self.db.collection('users').document(user_id).collection('conversations').document(conversation_id)
+
+            # Add message ID if not present
+            if "message_id" not in message_data:
+                # Get current conversation to count messages
+                conv_doc = conv_ref.get()
+                if conv_doc.exists:
+                    current_messages = conv_doc.to_dict().get('messages', [])
+                    message_data["message_id"] = f"msg_{len(current_messages) + 1}"
+                else:
+                    message_data["message_id"] = "msg_1"
+
+            # Add message to array
+            conv_ref.update({
+                'messages': firestore.ArrayUnion([message_data]),
+                'last_message_at': datetime.now().isoformat()
+            })
+
+            logger.info(f"Saved message to conversation {conversation_id}")
+
+        except Exception as e:
+            logger.error(f"Error saving message: {e}")
+            raise
+
     def get_conversation(self, user_id: str, conversation_id: str) -> Dict[str, Any]:
         """Load a specific conversation"""
-        file_path = self._get_conversation_file(user_id, conversation_id)
-        
         try:
-            with open(file_path, 'r') as f:
-                return json.load(f)
-        except FileNotFoundError:
-            logger.error(f"Conversation {conversation_id} not found for user {user_id}")
+            conv_doc = self.db.collection('users').document(user_id).collection('conversations').document(conversation_id).get()
+
+            if conv_doc.exists:
+                return conv_doc.to_dict()
+            else:
+                raise FileNotFoundError(f"Conversation {conversation_id} not found")
+
+        except Exception as e:
+            logger.error(f"Error getting conversation: {e}")
             raise
-    
+
     def list_user_conversations(self, user_id: str, limit: int = 50) -> List[Dict[str, Any]]:
         """List all conversations for a user (summary only)"""
-        user_dir = self._get_user_dir(user_id)
-        
-        if not os.path.exists(user_dir):
+        try:
+            conversations = []
+            conv_docs = self.db.collection('users').document(user_id).collection('conversations') \
+                .order_by('last_message_at', direction=firestore.Query.DESCENDING) \
+                .limit(limit).get()
+
+            for doc in conv_docs:
+                conv = doc.to_dict()
+                messages = conv.get('messages', [])
+
+                # Create summary
+                conversations.append({
+                    "conversation_id": conv["conversation_id"],
+                    "created_at": conv["created_at"],
+                    "last_message_at": conv["last_message_at"],
+                    "message_count": len(messages),
+                    "preview": messages[0]["content"][:100] if messages else ""
+                })
+
+            return conversations
+
+        except Exception as e:
+            logger.error(f"Error listing conversations: {e}")
             return []
-        
-        conversations = []
-        files = sorted(
-            os.listdir(user_dir),
-            key=lambda x: os.path.getmtime(os.path.join(user_dir, x)),
-            reverse=True
-        )[:limit]
-        
-        for filename in files:
-            if filename.endswith('.json') and not filename.endswith('.lock'):
-                file_path = os.path.join(user_dir, filename)
-                try:
-                    with open(file_path, 'r') as f:
-                        conv = json.load(f)
-                        # Return summary without full messages
-                        conversations.append({
-                            "conversation_id": conv["conversation_id"],
-                            "created_at": conv["created_at"],
-                            "last_message_at": conv["last_message_at"],
-                            "message_count": len(conv["messages"]),
-                            "preview": conv["messages"][0]["content"][:100] if conv["messages"] else ""
-                        })
-                except Exception as e:
-                    logger.error(f"Error reading conversation {filename}: {e}")
-        
-        return conversations
-    
+
     def delete_conversation(self, user_id: str, conversation_id: str):
         """Delete a conversation"""
-        file_path = self._get_conversation_file(user_id, conversation_id)
-        
         try:
-            os.remove(file_path)
+            self.db.collection('users').document(user_id).collection('conversations').document(conversation_id).delete()
             logger.info(f"Deleted conversation {conversation_id} for user {user_id}")
-        except FileNotFoundError:
-            logger.error(f"Conversation {conversation_id} not found for user {user_id}")
+        except Exception as e:
+            logger.error(f"Error deleting conversation: {e}")
             raise
-    
+
     def update_metadata(self, user_id: str, conversation_id: str, metadata: Dict[str, Any]):
         """Update conversation metadata"""
-        file_path = self._get_conversation_file(user_id, conversation_id)
-        lock_path = file_path + ".lock"
-        
-        with FileLock(lock_path, timeout=10):
-            try:
-                with open(file_path, 'r') as f:
-                    conversation = json.load(f)
-                
-                conversation["metadata"].update(metadata)
-                conversation["last_message_at"] = datetime.now().isoformat()
-                
-                with open(file_path, 'w') as f:
-                    json.dump(conversation, f, indent=2)
-                
-                logger.info(f"Updated metadata for conversation {conversation_id}")
-            except FileNotFoundError:
-                logger.error(f"Conversation {conversation_id} not found for user {user_id}")
-                raise
-    
+        try:
+            conv_ref = self.db.collection('users').document(user_id).collection('conversations').document(conversation_id)
+
+            conv_ref.update({
+                'metadata': metadata,
+                'last_message_at': datetime.now().isoformat()
+            })
+
+            logger.info(f"Updated metadata for conversation {conversation_id}")
+
+        except Exception as e:
+            logger.error(f"Error updating metadata: {e}")
+            raise
+
     def migrate_user_conversations(self, old_user_id: str, new_user_id: str) -> int:
         """Migrate all conversations from anonymous user to registered user"""
-        old_dir = os.path.join(self.base_dir, old_user_id)
-        new_dir = self._get_user_dir(new_user_id)
-        
-        if not os.path.exists(old_dir):
-            logger.warning(f"No conversations found for user {old_user_id}")
+        try:
+            count = 0
+            conv_docs = self.db.collection('users').document(old_user_id).collection('conversations').get()
+
+            for doc in conv_docs:
+                conv_data = doc.to_dict()
+                conv_data['user_id'] = new_user_id
+
+                # Create in new user's collection
+                new_conv_ref = self.db.collection('users').document(new_user_id).collection('conversations').document(doc.id)
+                new_conv_ref.set(conv_data)
+
+                # Delete from old collection
+                doc.reference.delete()
+                count += 1
+
+            logger.info(f"Migrated {count} conversations from {old_user_id} to {new_user_id}")
+            return count
+
+        except Exception as e:
+            logger.error(f"Error migrating conversations: {e}")
             return 0
-        
-        count = 0
-        for filename in os.listdir(old_dir):
-            if filename.endswith('.json') and not filename.endswith('.lock'):
-                src = os.path.join(old_dir, filename)
-                dst = os.path.join(new_dir, filename)
-                
-                # Update user_id in the conversation file
-                try:
-                    with open(src, 'r') as f:
-                        conversation = json.load(f)
-                    
-                    conversation["user_id"] = new_user_id
-                    
-                    with open(dst, 'w') as f:
-                        json.dump(conversation, f, indent=2)
-                    
-                    count += 1
-                except Exception as e:
-                    logger.error(f"Error migrating conversation {filename}: {e}")
-        
-        logger.info(f"Migrated {count} conversations from {old_user_id} to {new_user_id}")
-        return count
