@@ -7,7 +7,7 @@ import os
 import json
 import openai
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class SearchService:
         if not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY environment variable is required")
     
-    async def intelligent_event_search(self, query: str, events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    async def intelligent_event_search(self, query: str, events: List[Dict[str, Any]], user_preferences: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
         Use LLM to intelligently search and rank events based on user query
         """
@@ -44,12 +44,24 @@ class SearchService:
             }
             event_summaries.append(summary)
         
-        # Create enhanced prompt for LLM with detailed scoring
+        # Create enhanced prompt for LLM with detailed scoring and user preferences
+        preferences_text = ""
+        if user_preferences:
+            preferences_text = f"""
+User Preferences:
+- Location: {user_preferences.get('location', 'Not specified')}
+- Date: {user_preferences.get('date', 'Not specified')}
+- Time: {user_preferences.get('time', 'Not specified')}
+- Event Type: {user_preferences.get('event_type', 'Not specified')}
+
+Consider these preferences when ranking events. Give higher scores to events that match the user's preferences.
+"""
+        
         prompt = f"""
 You are an expert event recommendation system. Given a user query and a list of events, analyze and score each event.
 
 User Query: "{query}"
-
+{preferences_text}
 Available Events:
 {json.dumps(event_summaries, indent=2)}
 
