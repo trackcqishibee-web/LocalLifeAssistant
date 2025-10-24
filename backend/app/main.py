@@ -368,4 +368,8 @@ if __name__ == "__main__":
     # Clean up old cache on startup
     cache_manager.cleanup_old_cache()
     
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Use PORT environment variable for Render deployment, fallback to 8000 for local development
+    port = int(os.getenv("PORT", 8000))
+    logger.info(f"Starting server on port {port}")
+    
+    uvicorn.run(app, host="0.0.0.0", port=port)
