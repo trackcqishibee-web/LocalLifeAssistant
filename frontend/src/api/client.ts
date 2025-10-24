@@ -1,6 +1,9 @@
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+console.log('🔧 Frontend API Base URL:', API_BASE_URL);
+console.log('🌐 Current origin:', window.location.origin);
+console.log('📡 VITE_API_BASE_URL env:', import.meta.env.VITE_API_BASE_URL);
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -78,7 +81,9 @@ class APIClient {
   }
 
   async chat(request: ChatRequest): Promise<ChatResponse> {
-    const response = await axios.post(`${this.baseURL}/api/chat`, request);
+    const url = `${this.baseURL}/api/chat`;
+    console.log('🔗 Chat API Call:', url);
+    const response = await axios.post(url, request);
     return response.data;
   }
 
@@ -145,7 +150,9 @@ class APIClient {
   }
 
   async registerWithToken(anonymousUserId: string, token: string): Promise<any> {
-    const response = await axios.post(`${this.baseURL}/api/auth/register`, {
+    const url = `${this.baseURL}/api/auth/register`;
+    console.log('🔗 Register API Call:', url);
+    const response = await axios.post(url, {
       anonymous_user_id: anonymousUserId,
       token
     });
@@ -153,7 +160,9 @@ class APIClient {
   }
 
   async verifyToken(token: string): Promise<any> {
-    const response = await axios.post(`${this.baseURL}/api/auth/verify`, {
+    const url = `${this.baseURL}/api/auth/verify`;
+    console.log('🔗 Verify API Call:', url);
+    const response = await axios.post(url, {
       token
     });
     return response.data;
