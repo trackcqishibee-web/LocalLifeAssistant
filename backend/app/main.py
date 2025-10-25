@@ -10,8 +10,11 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Request, Response, Body
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import uvicorn
+import json
+import asyncio
 from dotenv import load_dotenv
 
 from .firebase_config import db
@@ -403,6 +406,252 @@ async def smart_cached_chat(request: ChatRequest):
     except Exception as e:
         logger.error(f"Error in smart cached chat: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error processing chat request: {str(e)}")
+
+async def stream_chat_response(request: ChatRequest):
+    """Generator function for streaming chat responses"""
+    try:
+        logger.info(f"Streaming chat request: {request.message}")
+        user_id = request.user_id
+        
+        # Check trial limit for anonymous users
+        if user_id.startswith("user_"):  # Anonymous user
+            if usage_tracker.check_trial_limit(user_id):
+                # Trial exceeded - return prompt to register
+                trial_limit = usage_tracker.trial_limit
+                trial_message = f"🔒 You've reached your free trial limit of {trial_limit} interactions! Please register to continue using our service and keep your conversation history."
+                yield f"data: {json.dumps({'type': 'message', 'content': trial_message, 'trial_exceeded': True})}\n\n"
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                return
+        
+        # Increment usage for anonymous users
+        if user_id.startswith("user_"):
+            usage_stats = usage_tracker.increment_usage(user_id)
+        else:
+            usage_stats = None
+        
+        # Get or create conversation
+        conversation_id = request.conversation_id
+        if not conversation_id:
+            conversation_id = conversation_storage.create_conversation(user_id, {
+                "location": request.location.dict() if request.location else None,
+                "llm_provider": request.llm_provider
+            })
+
+        # Save user message
+        conversation_storage.save_message(user_id, conversation_id, {
+            "role": "user",
+            "content": request.message,
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        # Step 1: Extract user preferences if this is an initial response
+        extracted_preferences = None
+        if request.is_initial_response:
+            yield f"data: {json.dumps({'type': 'status', 'content': 'Analyzing your preferences...'})}\n\n"
+            await asyncio.sleep(0.5)  # Small delay for UX
+            logger.info("Initial response detected, extracting user preferences")
+            extracted_preferences = extraction_service.extract_user_preferences(request.message)
+            logger.info(f"Extracted preferences: {extracted_preferences}")
+        
+        # Step 2: Determine city to use (prioritize extracted preferences)
+        city = None
+        location_provided = False
+        
+        # Priority 1: Use extracted location from preferences
+        if extracted_preferences and extracted_preferences.location and extracted_preferences.location != "none":
+            city = extracted_preferences.location.lower()
+            location_provided = True
+            logger.info(f"Using city from extracted preferences: {city}")
+        
+        # Priority 2: Try to extract city from query using existing method
+        if not city:
+            query_city = extraction_service.extract_location_from_query(request.message)
+            if query_city:
+                city = query_city.lower()
+                location_provided = True
+                logger.info(f"Using city from query extraction: {city}")
+        
+        # Priority 3: Extract city from location coordinates (fallback)
+        if not city and request.location:
+            address = request.location.formatted_address
+            if address:
+                parts = address.split(',')
+                if len(parts) >= 1:
+                    city = parts[0].strip().lower()
+                    location_provided = True
+                    logger.info(f"Using city from location coordinates: {city}")
+        
+        # Step 3: Handle missing location for initial responses
+        if request.is_initial_response and not location_provided:
+            logger.info("No location provided in initial response, asking user for location")
+            location_message = "I'd be happy to help you find events! To give you the best recommendations, could you please tell me which city or area you're interested in? (e.g., 'New York', 'Los Angeles', 'Chicago', or a zipcode)"
+            yield f"data: {json.dumps({'type': 'message', 'content': location_message})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            return
+        
+        # Step 4: Default fallback for non-initial responses or when location still missing
+        if not city:
+            city = "new york"
+            logger.info("No city found, defaulting to New York")
+            # If this is not an initial response and we're defaulting, inform the user
+            if not request.is_initial_response:
+                logger.info("Informing user that we're defaulting to New York")
+        
+        logger.info(f"Final city decision: {city}")
+        
+        # Step 1: Try to get cached events
+        yield f"data: {json.dumps({'type': 'status', 'content': f'Searching for events in {city.title()}...'})}\n\n"
+        await asyncio.sleep(0.3)
+        
+        cached_events = cache_manager.get_cached_events(city)
+        cache_age_hours = cache_manager.get_cache_age(city)
+        
+        if cached_events:
+            logger.info(f"Using cached events for {city} (age: {cache_age_hours:.1f}h)")
+            events = cached_events
+            cache_used = True
+            yield f"data: {json.dumps({'type': 'status', 'content': f'Found cached events for {city.title()} (from {cache_age_hours:.1f}h ago)'})}\n\n"
+        else:
+            logger.info(f"No valid cache for {city}, fetching fresh events")
+            yield f"data: {json.dumps({'type': 'status', 'content': f'Fetching fresh events for {city.title()}...'})}\n\n"
+            await asyncio.sleep(0.5)
+            # Step 2: Fetch fresh events if no cache
+            events = event_crawler.fetch_events_by_city(city, max_pages=2)
+            logger.info(f"Fetched {len(events)} fresh events for {city}")
+            
+            # Step 3: Cache the fresh events
+            cache_manager.cache_events(city, events)
+            cache_used = False
+            cache_age_hours = 0
+            yield f"data: {json.dumps({'type': 'status', 'content': f'Found {len(events)} fresh events for {city.title()}'})}\n\n"
+        
+        # Step 4: LLM-powered intelligent event search with preferences
+        # Alternate between two similar messages to keep users engaged
+        analysis_messages = [
+            "Analyzing events with AI to find the best matches...",
+            "Using AI to rank and filter the most relevant events..."
+        ]
+        
+        # Show alternating messages during AI analysis
+        for i in range(3):  # Show 3 status updates during analysis
+            message = analysis_messages[i % 2]  # Alternate between the two messages
+            yield f"data: {json.dumps({'type': 'status', 'content': message})}\n\n"
+            await asyncio.sleep(2)  # Slightly longer delay between messages
+        
+        logger.info(f"Starting LLM search for query: '{request.message}' with {len(events)} events")
+        
+        # Convert UserPreferences object to dict for search service
+        user_preferences_dict = None
+        if extracted_preferences:
+            user_preferences_dict = {
+                'location': extracted_preferences.location,
+                'date': extracted_preferences.date,
+                'time': extracted_preferences.time,
+                'event_type': extracted_preferences.event_type
+            }
+        
+        top_events = await search_service.intelligent_event_search(
+            request.message, 
+            events, 
+            user_preferences=user_preferences_dict
+        )
+        logger.info(f"LLM search returned {len(top_events)} events")
+        
+        # Debug: Check if events have LLM scores
+        if top_events:
+            first_event = top_events[0]
+            logger.info(f"First event has llm_scores: {first_event.get('llm_scores', 'None')}")
+            logger.info(f"First event relevance_score: {first_event.get('relevance_score', 'None')}")
+        
+        # Step 5: Create extraction summary if preferences were extracted
+        extraction_summary = None
+        if extracted_preferences:
+            summary_parts = []
+            if extracted_preferences.location and extracted_preferences.location != "none":
+                summary_parts.append(f"📍 {extracted_preferences.location}")
+            if extracted_preferences.date and extracted_preferences.date != "none":
+                summary_parts.append(f"📅 {extracted_preferences.date}")
+            if extracted_preferences.time and extracted_preferences.time != "none":
+                summary_parts.append(f"🕐 {extracted_preferences.time}")
+            if extracted_preferences.event_type and extracted_preferences.event_type != "none":
+                summary_parts.append(f"🎭 {extracted_preferences.event_type}")
+            
+            if summary_parts:
+                extraction_summary = " • ".join(summary_parts)
+        
+        # Step 6: Generate and send main response message first
+        location_note = ""
+        if not location_provided and city == "new york":
+            location_note = " (I couldn't determine your location, so I'm defaulting to New York)"
+        
+        if top_events:
+            response_message = f"🎉 Found {len(top_events)} events in {city.title()} that match your search!{location_note} Check out the recommendations below ↓"
+        else:
+            response_message = f"😔 I couldn't find any events in {city.title()} matching your query.{location_note} Try asking about 'fashion events', 'music concerts', 'halloween parties', or 'free events'."
+        
+        # Send the main message first
+        yield f"data: {json.dumps({'type': 'message', 'content': response_message, 'extraction_summary': extraction_summary, 'usage_stats': usage_stats, 'trial_exceeded': False, 'conversation_id': conversation_id})}\n\n"
+        
+        # Step 7: Format recommendations and stream them one by one
+        yield f"data: {json.dumps({'type': 'status', 'content': f'Preparing {len(top_events)} recommendations...'})}\n\n"
+        await asyncio.sleep(0.3)
+        
+        formatted_recommendations = []
+        for i, event in enumerate(top_events):
+            formatted_rec = {
+                "type": "event",
+                "data": {
+                    **event,  # This includes llm_scores and relevance_score
+                    "source": "cached" if cache_used else "realtime"
+                },
+                "relevance_score": event.get('relevance_score', 0.5),  # Keep for backward compatibility
+                "explanation": f"Event in {city.title()}: {event.get('title', 'Unknown Event')}"
+            }
+            formatted_recommendations.append(formatted_rec)
+            
+            # Stream each recommendation
+            yield f"data: {json.dumps({'type': 'recommendation', 'data': formatted_rec})}\n\n"
+            await asyncio.sleep(0.2)  # Small delay between recommendations
+        
+        # Save assistant response
+        conversation_storage.save_message(user_id, conversation_id, {
+            "role": "assistant",
+            "content": response_message,
+            "timestamp": datetime.now().isoformat(),
+            "recommendations": formatted_recommendations,
+            "extracted_preferences": extracted_preferences.dict() if extracted_preferences else None,
+            "cache_used": cache_used,
+            "cache_age_hours": cache_age_hours
+        })
+
+        # Update conversation metadata
+        conversation_storage.update_metadata(user_id, conversation_id, {
+            "last_message_at": datetime.now().isoformat()
+        })
+        
+        # Signal completion
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        
+    except Exception as e:
+        logger.error(f"Error in streaming chat: {e}", exc_info=True)
+        yield f"data: {json.dumps({'type': 'error', 'content': f'Error processing chat request: {str(e)}'})}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+@app.post("/api/chat/stream")
+async def stream_chat(request: ChatRequest):
+    """
+    Streaming chat endpoint using Server-Sent Events
+    """
+    return StreamingResponse(
+        stream_chat_response(request),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
 
 @app.get("/api/usage/{user_id}")
 async def get_user_usage(user_id: str):

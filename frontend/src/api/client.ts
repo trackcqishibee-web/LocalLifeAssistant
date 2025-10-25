@@ -87,6 +87,89 @@ class APIClient {
     return response.data;
   }
 
+  async chatStream(
+    request: ChatRequest,
+    onStatus: (status: string) => void,
+    onMessage: (message: string, metadata?: any) => void,
+    onRecommendation: (recommendation: any) => void,
+    onError: (error: string) => void,
+    onDone: () => void
+  ): Promise<void> {
+    const url = `${this.baseURL}/api/chat/stream`;
+    console.log('🔗 Streaming Chat API Call:', url);
+    
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body reader available');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              switch (data.type) {
+                case 'status':
+                  onStatus(data.content);
+                  break;
+                case 'message':
+                  onMessage(data.content, {
+                    extraction_summary: data.extraction_summary,
+                    usage_stats: data.usage_stats,
+                    trial_exceeded: data.trial_exceeded,
+                    conversation_id: data.conversation_id
+                  });
+                  break;
+                case 'recommendation':
+                  onRecommendation(data.data);
+                  break;
+                case 'error':
+                  onError(data.content);
+                  break;
+                case 'done':
+                  onDone();
+                  return;
+              }
+            } catch (parseError) {
+              console.error('Error parsing SSE data:', parseError, 'Line:', line);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Streaming chat error:', error);
+      onError(error instanceof Error ? error.message : 'Unknown error occurred');
+      onDone();
+    }
+  }
+
   async getRecommendations(request: RecommendationRequest): Promise<any> {
     const params = new URLSearchParams();
     params.append('query', request.query);
