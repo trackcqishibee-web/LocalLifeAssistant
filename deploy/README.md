@@ -140,7 +140,7 @@ cd docker && docker-compose up -d
 OPENAI_API_KEY=your_openai_api_key
 SSH_PRIVATE_KEY=your_server_ssh_private_key
 SERVER_IP=your_server_ip_address
-FIREBASE_CREDENTIALS_PATH=/opt/locallifeassistant/backend/firebase-service-account.json
+FIREBASE_CREDENTIALS_PATH=/home/appuser/firebase-service-account.json
 ```
 
 ### Firebase 凭据设置
