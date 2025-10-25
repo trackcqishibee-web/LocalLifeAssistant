@@ -513,10 +513,30 @@ async def stream_chat_response(request: ChatRequest):
             yield f"data: {json.dumps({'type': 'status', 'content': f'Found cached events for {city.title()} (from {cache_age_hours:.1f}h ago)'})}\n\n"
         else:
             logger.info(f"No valid cache for {city}, fetching fresh events")
-            yield f"data: {json.dumps({'type': 'status', 'content': f'Fetching fresh events for {city.title()}...'})}\n\n"
-            await asyncio.sleep(0.5)
-            # Step 2: Fetch fresh events if no cache
-            events = event_crawler.fetch_events_by_city(city, max_pages=2)
+            
+            # Alternate between two similar messages while fetching fresh events
+            fetching_messages = [
+                f"Fetching fresh events for {city.title()}...",
+                f"Searching for the latest events in {city.title()}..."
+            ]
+            
+            # Create a task for the event fetching
+            async def fetch_events():
+                return event_crawler.fetch_events_by_city(city, max_pages=2)
+            
+            # Start the event fetching task
+            fetch_task = asyncio.create_task(fetch_events())
+            
+            # Show alternating messages while fetching events
+            i = 0
+            while not fetch_task.done():
+                message = fetching_messages[i % 2]  # Alternate between the two messages
+                yield f"data: {json.dumps({'type': 'status', 'content': message})}\n\n"
+                await asyncio.sleep(1.0)  # 1 second delay between messages
+                i += 1
+            
+            # Wait for event fetching to complete
+            events = await fetch_task
             logger.info(f"Fetched {len(events)} fresh events for {city}")
             
             # Step 3: Cache the fresh events
@@ -532,12 +552,6 @@ async def stream_chat_response(request: ChatRequest):
             "Using AI to rank and filter the most relevant events..."
         ]
         
-        # Show alternating messages during AI analysis
-        for i in range(2):  # Show 2 status updates during analysis
-            message = analysis_messages[i % 2]  # Alternate between the two messages
-            yield f"data: {json.dumps({'type': 'status', 'content': message})}\n\n"
-            await asyncio.sleep(2)  # Slightly longer delay between messages
-        
         logger.info(f"Starting LLM search for query: '{request.message}' with {len(events)} events")
         
         # Convert UserPreferences object to dict for search service
@@ -550,11 +564,27 @@ async def stream_chat_response(request: ChatRequest):
                 'event_type': extracted_preferences.event_type
             }
         
-        top_events = await search_service.intelligent_event_search(
-            request.message, 
-            events, 
-            user_preferences=user_preferences_dict
-        )
+        # Create a task for the AI processing
+        async def ai_processing():
+            return await search_service.intelligent_event_search(
+                request.message, 
+                events, 
+                user_preferences=user_preferences_dict
+            )
+        
+        # Start the AI processing task
+        ai_task = asyncio.create_task(ai_processing())
+        
+        # Show alternating messages while AI is processing
+        i = 0
+        while not ai_task.done():
+            message = analysis_messages[i % 2]  # Alternate between the two messages
+            yield f"data: {json.dumps({'type': 'status', 'content': message})}\n\n"
+            await asyncio.sleep(1.5)  # 1.5 second delay between messages
+            i += 1
+        
+        # Wait for AI processing to complete
+        top_events = await ai_task
         logger.info(f"LLM search returned {len(top_events)} events")
         
         # Debug: Check if events have LLM scores

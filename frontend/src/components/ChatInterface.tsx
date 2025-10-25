@@ -115,9 +115,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setIsLoading(true);
     setExtractionSummary(null);
     setCurrentStatus('');
-    // Clear previous streaming state when starting new message
-    setCurrentAssistantMessage(null);
-    setCurrentRecommendations([]);
 
     try {
       // Detect if this is the first user message (initial response to welcome message)
@@ -154,8 +151,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
           
           // Clear the streaming state to prevent re-rendering
-          setCurrentAssistantMessage(null);
-          setCurrentRecommendations([]);
           
           // Check if trial exceeded
           if (metadata?.trial_exceeded) {
@@ -187,12 +182,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           onNewMessage(recommendationMessage);
           setMessagesWithRecommendations(prev => [...prev, recommendationMessage]);
           
-          // Update current recommendations for tracking
-          setCurrentRecommendations(prev => {
-            const newRecommendations = [...prev, recommendation];
-            onRecommendations(newRecommendations);
-            return newRecommendations;
-          });
+          // Update recommendations tracking
+          onRecommendations([recommendation]);
         },
         // onError
         (error: string) => {
@@ -209,8 +200,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           // Clear loading state and reset streaming state
           setIsLoading(false);
           setCurrentStatus('');
-          setCurrentAssistantMessage(null);
-          setCurrentRecommendations([]);
           setExtractionSummary(null);
         }
       );
@@ -224,8 +213,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       onNewMessage(errorMessage);
       setIsLoading(false);
       setCurrentStatus('');
-      setCurrentAssistantMessage(null);
-      setCurrentRecommendations([]);
       setExtractionSummary(null);
     }
   };
