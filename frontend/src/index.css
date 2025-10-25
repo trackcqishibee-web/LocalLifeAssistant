@@ -22,6 +22,6 @@
   }
 
   .recommendation-card {
-    @apply bg-amber-50/50 rounded-lg shadow-md p-6 border border-amber-200/50 hover:shadow-lg transition-shadow;
+    @apply bg-white rounded-lg shadow-sm p-6 hover:shadow-md transition-shadow;
   }
 }

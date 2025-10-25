@@ -326,7 +326,7 @@ const App: React.FC = () => {
       }}
     >
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
+      <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
@@ -391,7 +391,7 @@ const App: React.FC = () => {
 
       {/* Settings Panel */}
       {showSettings && (
-        <div className="bg-white border-b border-gray-200 p-4">
+        <div className="bg-white shadow-sm p-4">
           <div className="max-w-7xl mx-auto">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
@@ -428,8 +428,8 @@ const App: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Chat Interface */}
           <div className="lg:col-span-3">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 h-[700px] flex flex-col">
-              <div className="p-4 border-b border-gray-200">
+            <div className="bg-white rounded-lg shadow-sm h-[700px] flex flex-col">
+              <div className="p-4 bg-gray-50/50">
                 <div className="flex items-center space-x-2">
                   <MessageCircle className="w-5 h-5 text-amber-600" />
                   <h2 className="text-lg font-semibold text-gray-900">Chat with Assistant</h2>
@@ -459,14 +459,14 @@ const App: React.FC = () => {
 
 
             {/* Quick Examples */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+            <div className="bg-white rounded-lg shadow-sm p-4">
               <h3 className="text-sm font-semibold text-gray-900 mb-3">Try asking:</h3>
               <div className="max-h-64 overflow-y-auto space-y-1">
                 {exampleQueries.map((query, index) => (
                   <button
                     key={index}
                     onClick={() => handleExampleQuery(query)}
-                    className="w-full text-left p-2 text-xs text-amber-800 hover:bg-amber-50/50 rounded-md transition-colors border border-transparent hover:border-amber-200 backdrop-blur-sm"
+                    className="w-full text-left p-2 text-xs text-amber-800 hover:bg-amber-50/50 rounded-md transition-colors"
                   >
                     <span className="text-amber-900 font-medium">"{query}"</span>
                   </button>
