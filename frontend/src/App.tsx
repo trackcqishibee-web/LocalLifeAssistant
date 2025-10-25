@@ -316,7 +316,7 @@ const App: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen"
+      className={`min-h-screen ${trialWarning ? 'pt-20' : ''}`}
       style={{
         backgroundImage: 'linear-gradient(rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.1)), url("https://raw.githubusercontent.com/LijieTu/local-moco/main/landing.png")',
         backgroundSize: 'cover',
@@ -326,7 +326,7 @@ const App: React.FC = () => {
       }}
     >
       {/* Header */}
-      <header className="bg-white shadow-sm">
+      <header className="bg-white shadow-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
