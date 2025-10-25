@@ -35,7 +35,6 @@ app = FastAPI(title="Smart Cached RAG Local Life Assistant", version="2.1.0")
 
 # Add CORS middleware
 domain_name = os.getenv("DOMAIN_NAME")
-render_frontend_url = os.getenv("RENDER_FRONTEND_URL")
 logger.info(f"DOMAIN_NAME environment variable: '{domain_name}'")
 
 
@@ -47,9 +46,6 @@ if domain_name and domain_name not in ["your-domain.com", "localhost", ""]:
         f"https://www.{domain_name}",
     ]
     logger.info(f"Production CORS configured for domain: {domain_name}")
-elif render_frontend_url:
-    # Render deployment: Allow the frontend URL
-    allow_origins = [render_frontend_url]
 else:
     # Development: Allow localhost and common dev ports
     allow_origins = [
@@ -63,10 +59,6 @@ else:
 
 # Log CORS configuration for debugging
 logger.info(f"DOMAIN_NAME environment variable: '{domain_name}'")
-logger.info(f"RENDER_FRONTEND_URL environment variable: '{render_frontend_url}'")
-logger.info(f"Allowed origins: {allow_origins}")
-
-
 logger.info(f"Allowed origins: {allow_origins}")
 
 # Manual CORS middleware - simplified and more explicit

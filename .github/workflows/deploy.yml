@@ -47,8 +47,10 @@ jobs:
           export GITHUB_REPO="${{ vars.DEPLOY_GITHUB_REPO || 'wjshku/LocalLifeAssistant' }}"
           export GITHUB_BRANCH="${{ vars.DEPLOY_GITHUB_BRANCH || 'main' }}"
           export OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
+          export FIREBASE_CREDENTIALS_PATH="${{ secrets.FIREBASE_CREDENTIALS_PATH || '/home/appuser/firebase-service-account.json' }}"
           export EMAIL="admin@$DOMAIN_NAME"
-          
+
+
           # Run automated deployment
           ./auto-deploy.sh
         EOF

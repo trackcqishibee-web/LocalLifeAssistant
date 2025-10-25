@@ -140,7 +140,21 @@ cd docker && docker-compose up -d
 OPENAI_API_KEY=your_openai_api_key
 SSH_PRIVATE_KEY=your_server_ssh_private_key
 SERVER_IP=your_server_ip_address
+FIREBASE_CREDENTIALS_PATH=/home/appuser/firebase-service-account.json
 ```
+
+### Firebase 凭据设置
+
+**1. 上传 Firebase 凭据到服务器：**
+```bash
+# 上传 Firebase 服务账户密钥到服务器
+scp firebase-service-account.json ubuntu@your-server:/home/ubuntu/
+```
+
+**2. 自动部署处理：**
+- 部署过程中，`configure_environment` 步骤会将凭据从 `/home/ubuntu/firebase-service-account.json` 复制到 `FIREBASE_CREDENTIALS_PATH`
+- 设置正确的文件权限（`appuser:appuser`, `chmod 600`）
+- 后端服务使用 `FIREBASE_CREDENTIALS_PATH` 环境变量定位凭据文件
 
 ### 触发部署
 
