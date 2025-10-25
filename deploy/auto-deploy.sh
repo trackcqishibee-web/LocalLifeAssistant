@@ -118,15 +118,25 @@ CHROMA_PERSIST_DIRECTORY=/opt/locallifeassistant/backend/chroma_db
 
 # Logging Configuration
 LOG_LEVEL=INFO
+
+# Firebase Configuration
+FIREBASE_CREDENTIALS_PATH=$FIREBASE_CREDENTIALS_PATH
 EOF"
 
         print_success "Environment variables saved to .env file"
 
         # Verify configuration
         if sudo -u appuser grep -q "OPENAI_API_KEY=sk-" "$ENV_FILE" 2>/dev/null; then
-            print_success "Environment configuration completed successfully"
+            print_success "OpenAI API key configured"
         else
-            print_warning "Environment configuration may have issues"
+            print_warning "OpenAI API key configuration may have issues"
+        fi
+
+        # Verify Firebase credentials path
+        if sudo -u appuser grep -q "FIREBASE_CREDENTIALS_PATH=" "$ENV_FILE" 2>/dev/null; then
+            print_success "Firebase credentials path configured"
+        else
+            print_warning "Firebase credentials path configuration may have issues"
         fi
 }
 
@@ -148,12 +158,12 @@ setup_ssl_certificates() {
 
 # Start services
 start_services() {
-    print_step "Starting services..."
-    sudo systemctl start locallifeassistant-backend
+    print_step "Starting/restarting services..."
+    sudo systemctl restart locallifeassistant-backend  # ✅ Works always
     sudo systemctl enable locallifeassistant-backend
-    sudo systemctl start nginx
+    sudo systemctl restart nginx
     sudo systemctl enable nginx
-    print_success "Services started"
+    print_success "Services started/restarted"
 }
 
 # Health check
