@@ -34,8 +34,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [extractionSummary, setExtractionSummary] = useState<string | null>(null);
   const [messagesWithRecommendations, setMessagesWithRecommendations] = useState<ChatMessageWithRecommendations[]>([]);
   const [currentStatus, setCurrentStatus] = useState<string>('');
-  const [currentAssistantMessage, setCurrentAssistantMessage] = useState<ChatMessageWithRecommendations | null>(null);
-  const [currentRecommendations, setCurrentRecommendations] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -253,7 +251,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               {isRecommendationOnly ? (
                 // For recommendation-only messages, just show the recommendation card
                 <div className="space-y-3">
-                  {msg.recommendations.map((rec, recIndex) => (
+                  {msg.recommendations?.map((rec, recIndex) => (
                     <div key={recIndex} className="mb-6 animate-fadeIn">
                       <RecommendationCard recommendation={rec} />
                     </div>
