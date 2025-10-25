@@ -533,7 +533,7 @@ async def stream_chat_response(request: ChatRequest):
         ]
         
         # Show alternating messages during AI analysis
-        for i in range(3):  # Show 3 status updates during analysis
+        for i in range(2):  # Show 2 status updates during analysis
             message = analysis_messages[i % 2]  # Alternate between the two messages
             yield f"data: {json.dumps({'type': 'status', 'content': message})}\n\n"
             await asyncio.sleep(2)  # Slightly longer delay between messages
