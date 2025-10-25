@@ -40,7 +40,11 @@ You are a preference extraction assistant. Extract the following information fro
 User message: "{user_message}"
 
 Extract and return a JSON object with these fields:
-1. "location": City name (e.g., "New York", "Los Angeles", "Chicago") or "none" if not mentioned
+1. "location": Major city name or "none". For suburbs/smaller cities, return the nearest major metro area:
+   - Palo Alto, Mountain View, Sunnyvale, San Jose → "San Francisco"
+   - Brooklyn, Queens, Manhattan → "New York"
+   - Cambridge, Somerville → "Boston"
+   - Only return cities we support: New York, Los Angeles, San Francisco, Chicago, Boston, Seattle, Miami, Austin, Denver, Portland, Phoenix, Las Vegas, Atlanta
 2. "date": Specific date, relative date, or "none" (e.g., "today", "tomorrow", "this weekend", "next Friday", "December 15th")
 3. "time": Time preference or "none" (e.g., "morning", "afternoon", "evening", "night", "7pm", "lunch time")
 4. "event_type": Type of event or "none" (e.g., "music", "food", "art", "sports", "networking", "comedy", "theater")
@@ -126,6 +130,12 @@ Return only the JSON object:
             r'\bla\b': 'los angeles',
             r'\bsan francisco\b': 'san francisco',
             r'\bsf\b': 'san francisco',
+            r'\bpalo alto\b': 'san francisco',
+            r'\bredwood city\b': 'san francisco',
+            r'\bcupertino\b': 'san francisco',
+            r'\bsunnyvale\b': 'san francisco',
+            r'\bmountain view\b': 'san francisco',
+            r'\bsan jose\b': 'san francisco',
             r'\bchicago\b': 'chicago',
             r'\bboston\b': 'boston',
             r'\bseattle\b': 'seattle',
@@ -158,12 +168,15 @@ You are a location extraction assistant. Your task is to identify if the user's 
 User query: "{query}"
 
 Instructions:
-1. Look for explicit city names, neighborhoods, or regions in the query
-2. Only return a city name if it's clearly mentioned
-3. If no specific location is mentioned, return "none"
-4. Return the city name in lowercase format
-5. For neighborhoods like "Brooklyn", "Manhattan", "Queens", return "new york"
-6. For regions like "Bay Area", return "san francisco"
+1. Look for explicit city names, neighborhoods, regions, or suburbs in the query
+2. Normalize to the nearest MAJOR city from this list: new york, los angeles, san francisco, chicago, boston, seattle, miami, austin, denver, portland, phoenix, las vegas, atlanta
+3. Examples of normalization:
+   - Palo Alto, Mountain View, Sunnyvale, San Jose, Cupertino → "san francisco"
+   - Brooklyn, Manhattan, Queens, Bronx → "new york"
+   - Cambridge, Somerville → "boston"
+   - Pasadena, Santa Monica, Beverly Hills → "los angeles"
+4. If no specific location is mentioned, return "none"
+5. Return the MAJOR city name in lowercase format
 
 Examples:
 - "Show me free events in Brooklyn" → "new york"
@@ -202,10 +215,20 @@ Return only the city name or "none", nothing else.
                 'new york city': 'New York',
                 'los angeles': 'Los Angeles',
                 'la': 'Los Angeles',
+                'pasadena': 'Los Angeles',
+                'santa monica': 'Los Angeles',
                 'san francisco': 'San Francisco',
                 'sf': 'San Francisco',
+                'palo alto': 'San Francisco',
+                'mountain view': 'San Francisco',
+                'sunnyvale': 'San Francisco',
+                'san jose': 'San Francisco',
+                'cupertino': 'San Francisco',
+                'redwood city': 'San Francisco',
                 'chicago': 'Chicago',
                 'boston': 'Boston',
+                'cambridge': 'Boston',
+                'somerville': 'Boston',
                 'seattle': 'Seattle',
                 'miami': 'Miami',
                 'austin': 'Austin',
