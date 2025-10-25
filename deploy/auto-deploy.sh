@@ -119,18 +119,31 @@ EOF"
 
         # Setup Firebase credentials
         print_step "Setting up Firebase credentials..."
-        sudo cp /home/ubuntu/firebase-service-account.json "$FIREBASE_CREDENTIALS_PATH"
-        sudo chown appuser:appuser "$FIREBASE_CREDENTIALS_PATH"
-        sudo chmod 600 "$FIREBASE_CREDENTIALS_PATH"
 
-        # Verify Firebase credentials
-        if [ -f "$FIREBASE_CREDENTIALS_PATH" ]; then
-            print_success "Firebase credentials copied and secured"
-        else
-            print_error "Failed to copy Firebase credentials"
+        # Check if source file exists
+        if [ ! -f "/home/ubuntu/firebase-service-account.json" ]; then
+            print_error "Firebase credentials not found at /home/ubuntu/firebase-service-account.json"
             exit 1
         fi
 
+        # Ensure destination directory exists
+        sudo mkdir -p "$(dirname "$FIREBASE_CREDENTIALS_PATH")"
+
+        # Copy credentials
+        sudo cp "/home/ubuntu/firebase-service-account.json" "$FIREBASE_CREDENTIALS_PATH"
+
+        # Set correct permissions
+        sudo chown appuser:appuser "$FIREBASE_CREDENTIALS_PATH"
+        sudo chmod 600 "$FIREBASE_CREDENTIALS_PATH"
+
+        # Verify appuser can read the file
+        if sudo -u appuser test -r "$FIREBASE_CREDENTIALS_PATH"; then
+            print_success "Firebase credentials copied and accessible by appuser"
+        else
+            print_error "appuser cannot read Firebase credentials"
+            exit 1
+        fi
+        
         # Verify configuration
         if sudo -u appuser grep -q "OPENAI_API_KEY=sk-" "$ENV_FILE" 2>/dev/null; then
             print_success "OpenAI API key configured"
