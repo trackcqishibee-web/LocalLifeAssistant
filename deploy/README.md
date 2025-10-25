@@ -152,7 +152,7 @@ scp firebase-service-account.json ubuntu@your-server:/home/ubuntu/
 ```
 
 **2. 自动部署处理：**
-- GitHub Actions 会自动将凭据从 `/home/ubuntu/firebase-service-account.json` 复制到正确位置
+- 部署过程中，`configure_environment` 步骤会将凭据从 `/home/ubuntu/firebase-service-account.json` 复制到 `FIREBASE_CREDENTIALS_PATH`
 - 设置正确的文件权限（`appuser:appuser`, `chmod 600`）
 - 后端服务使用 `FIREBASE_CREDENTIALS_PATH` 环境变量定位凭据文件
 

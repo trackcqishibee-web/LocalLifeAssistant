@@ -50,23 +50,6 @@ jobs:
           export FIREBASE_CREDENTIALS_PATH="${{ secrets.FIREBASE_CREDENTIALS_PATH || '/home/appuser/firebase-service-account.json' }}"
           export EMAIL="admin@$DOMAIN_NAME"
 
-          echo "🔐 Setting up Firebase credentials..."
-
-          # Copy from ubuntu user's home to the target location BEFORE deployment
-          sudo cp /home/ubuntu/firebase-service-account.json "$FIREBASE_CREDENTIALS_PATH"
-
-          # Set correct ownership and permissions for appuser
-          sudo chown appuser:appuser "$FIREBASE_CREDENTIALS_PATH"
-          sudo chmod 600 "$FIREBASE_CREDENTIALS_PATH"
-
-          # Verify the file exists and has correct permissions
-          if [ -f "$FIREBASE_CREDENTIALS_PATH" ]; then
-            echo "✅ Firebase credentials file copied and secured"
-            ls -la "$FIREBASE_CREDENTIALS_PATH"
-          else
-            echo "❌ Failed to copy Firebase credentials"
-            exit 1
-          fi
 
           # Run automated deployment
           ./auto-deploy.sh

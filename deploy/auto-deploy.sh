@@ -80,14 +80,6 @@ setup_server() {
     print_success "Server setup completed"
 }
 
-# Deploy application
-deploy_application() {
-    print_step "Deploying application..."
-    chmod +x 02-app-deploy.sh
-    ./02-app-deploy.sh
-    print_success "Application deployment completed"
-}
-
 # Configure environment variables
 configure_environment() {
     print_step "Configuring environment variables..."
@@ -125,6 +117,20 @@ EOF"
 
         print_success "Environment variables saved to .env file"
 
+        # Setup Firebase credentials
+        print_step "Setting up Firebase credentials..."
+        sudo cp /home/ubuntu/firebase-service-account.json "$FIREBASE_CREDENTIALS_PATH"
+        sudo chown appuser:appuser "$FIREBASE_CREDENTIALS_PATH"
+        sudo chmod 600 "$FIREBASE_CREDENTIALS_PATH"
+
+        # Verify Firebase credentials
+        if [ -f "$FIREBASE_CREDENTIALS_PATH" ]; then
+            print_success "Firebase credentials copied and secured"
+        else
+            print_error "Failed to copy Firebase credentials"
+            exit 1
+        fi
+
         # Verify configuration
         if sudo -u appuser grep -q "OPENAI_API_KEY=sk-" "$ENV_FILE" 2>/dev/null; then
             print_success "OpenAI API key configured"
@@ -138,6 +144,14 @@ EOF"
         else
             print_warning "Firebase credentials path configuration may have issues"
         fi
+}
+
+# Deploy application
+deploy_application() {
+    print_step "Deploying application..."
+    chmod +x 02-app-deploy.sh
+    ./02-app-deploy.sh
+    print_success "Application deployment completed"
 }
 
 # Configure web server
