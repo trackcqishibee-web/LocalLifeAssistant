@@ -192,11 +192,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 {/* Display recommendations inline */}
                 {msg.recommendations && msg.recommendations.length > 0 && (
                   <div className="mt-4 space-y-3">
-                    <div className="text-sm font-medium text-amber-800/80 mb-2">
+                    <div className="text-sm font-medium text-gray-600 mb-4">
                       📋 Recommendations ({msg.recommendations.length})
                     </div>
                     {msg.recommendations.map((rec, recIndex) => (
-                      <div key={recIndex} className="border border-amber-200/50 rounded-lg p-3 bg-amber-50/30">
+                      <div key={recIndex} className="mb-6">
                         <RecommendationCard recommendation={rec} />
                       </div>
                     ))}
@@ -234,7 +234,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       </div>
 
       {/* Input Area */}
-      <div className="border-t border-gray-200 p-4">
+      <div className="bg-gray-50/50 p-4 shadow-sm">
         <form onSubmit={handleSubmit} className="flex space-x-2">
           <input
             type="text"
