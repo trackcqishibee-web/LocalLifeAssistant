@@ -62,8 +62,8 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # Set up environment variables
-cp ../.env.example .env
-# Edit .env with your OpenAI API key
+cp .env.example .env
+# Edit .env with your actual values
 ```
 
 ### 3. Frontend Setup
@@ -78,19 +78,29 @@ npm install
 
 ### 4. Environment Configuration
 
-Create a `.env` file in the project root directory (copy from `.env.example`):
+**Note:** The `.env.example` file is primarily for **local development and testing**. For production deployments, environment variables are set through GitHub Actions secrets and systemd service configuration.
 
-```env
-# Required: OpenAI API Configuration
-OPENAI_API_KEY=your_openai_api_key_here
+Create a `.env` file in the project root directory by copying the example file:
 
-# Optional: Eventbrite API Configuration
-EVENTBRITE_API_KEY=your_eventbrite_api_key_here
-
-# Optional: Server Configuration
-PORT=8000
-HOST=0.0.0.0
+```bash
+cp .env.example .env
 ```
+
+Then edit the `.env` file with your actual values:
+
+```bash
+# Edit with your OpenAI API key (required)
+nano .env
+```
+
+**Required Variables:**
+- `OPENAI_API_KEY` - Your OpenAI API key (get from https://platform.openai.com/api-keys)
+- **`FIREBASE_CREDENTIALS_PATH`** - Points to your Firebase service account JSON file location.
+
+**Important Configuration Notes:**
+
+- **`VITE_API_BASE_URL`** - This should typically remain as `http://localhost:8000` for local development. In production, this is automatically set to your domain through GitHub Actions.
+- **`DOMAIN_NAME`** - This should typically remain as `localhost` for local development. In production, this is set through GitHub Actions.
 
 **Important**: You must set your OpenAI API key for the application to work!
 
@@ -350,6 +360,15 @@ npm run dev
    ```
 
 2. **Required environment variables**:
+   ```bash
+   # Copy the example file
+   cp .env.example .env
+
+   # Edit with your actual values
+   nano .env
+   ```
+
+   **At minimum, you need:**
    ```env
    OPENAI_API_KEY=your_openai_api_key_here
    ```
