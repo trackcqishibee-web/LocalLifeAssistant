@@ -94,6 +94,13 @@ configure_environment() {
         # Remove old .env if exists to avoid permission issues
         sudo rm -f "$ENV_FILE"
         
+        # Determine protocol based on whether domain is an IP address
+        if [[ "$DOMAIN_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            API_PROTOCOL="http"
+        else
+            API_PROTOCOL="https"
+        fi
+        
         # Use tee to write as appuser (redirect happens inside sudo context)
         cat << EOF | sudo -u appuser tee "$ENV_FILE" > /dev/null
 # OpenAI API Configuration
@@ -104,7 +111,7 @@ PORT=8000
 HOST=0.0.0.0
 
 # Frontend Configuration
-VITE_API_BASE_URL=https://$DOMAIN_NAME
+VITE_API_BASE_URL=${API_PROTOCOL}://$DOMAIN_NAME
 
 # Domain Configuration (for CORS auto-generation)
 DOMAIN_NAME=$DOMAIN_NAME
