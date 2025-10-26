@@ -112,7 +112,7 @@ cd docker && docker-compose up -d
 
 | 文件 | 用途 | 说明 |
 |------|------|------|
-| `.env.example` | 生产环境配置模板 | 设置 DOMAIN_NAME，CORS 自动生成 |
+| `.env.example` | 环境变量配置模板 | 包含所有必需和可选的环境变量 |
 | `.env.docker.example` | Docker 环境配置 | Docker 特有配置 + DOMAIN_NAME |
 
 ### Nginx 配置
