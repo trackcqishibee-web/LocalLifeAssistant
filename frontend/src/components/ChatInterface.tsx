@@ -88,13 +88,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   // Sync with conversation history
   useEffect(() => {
-    const syncedMessages = conversationHistory.map(msg => {
-      const existing = messagesWithRecommendations.find(m => m.timestamp === msg.timestamp);
-      return {
+    const syncedMessages: ChatMessageWithRecommendations[] = [];
+    
+    conversationHistory.forEach(msg => {
+      // Add the original message
+      syncedMessages.push({
         ...msg,
-        recommendations: existing?.recommendations || (msg as any).recommendations || []
-      };
+        recommendations: []
+      });
+      
+      // If this message has recommendations, create separate messages for each recommendation
+      if ((msg as any).recommendations && (msg as any).recommendations.length > 0) {
+        (msg as any).recommendations.forEach((rec: any) => {
+          syncedMessages.push({
+            role: 'assistant',
+            content: '', // Empty content - just show the recommendation card
+            timestamp: new Date().toISOString(),
+            recommendations: [rec]
+          });
+        });
+      }
     });
+    
     setMessagesWithRecommendations(syncedMessages);
   }, [conversationHistory]);
 
