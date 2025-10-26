@@ -565,6 +565,7 @@ async def stream_chat_response(request: ChatRequest):
             message = analysis_messages[i % 2]  # Alternate between the two messages
             yield f"data: {json.dumps({'type': 'status', 'content': message})}\n\n"
             await asyncio.sleep(1.5)  # 1.5 second delay between messages
+            logger.info(f"AI processing message: {message}")
             i += 1
         
         # Wait for AI processing to complete
@@ -658,7 +659,7 @@ async def stream_chat(request: ChatRequest):
     """
     return StreamingResponse(
         stream_chat_response(request),
-        media_type="text/plain",
+        media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
