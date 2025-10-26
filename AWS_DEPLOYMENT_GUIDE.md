@@ -19,7 +19,7 @@ Add these secrets:
 
 | Secret Name | Value | Required |
 |------------|-------|----------|
-| `AWS_EC2_SSH_KEY` | Contents of your `locomock_key.pem` file | ✅ Yes |
+| `SSH_PRIVATE_KEY` | Contents of your `locomock_key.pem` file | ✅ Yes |
 | `OPENAI_API_KEY` | Your OpenAI API key (starts with sk-...) | ✅ Yes |
 | `DOMAIN_NAME` | Your custom domain (if any) | ⚠️ Optional |
 | `ADMIN_EMAIL` | Your email for SSL certificates | ⚠️ Optional |
@@ -29,12 +29,12 @@ Add these secrets:
 
 1. Open your `locomock_key.pem` file in a text editor
 2. Copy the **entire contents** (including `-----BEGIN RSA PRIVATE KEY-----` and `-----END RSA PRIVATE KEY-----`)
-3. Paste into the `AWS_EC2_SSH_KEY` secret
+3. Paste into the `SSH_PRIVATE_KEY` secret
 
 ```bash
 # On your local machine:
-cat locomock_key.pem
-# Copy the output and paste as AWS_EC2_SSH_KEY secret
+cat ~/.ssh/locomock_key.pem
+# Copy the output and paste as SSH_PRIVATE_KEY secret
 ```
 
 ---

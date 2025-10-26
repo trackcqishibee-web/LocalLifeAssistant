@@ -18,7 +18,7 @@ Go to your GitHub repository:
 
 | Secret Name | What to put | Where to find it |
 |------------|-------------|------------------|
-| `AWS_EC2_SSH_KEY` | Contents of `locomock_key.pem` file | Ask your friend or check your local machine |
+| `SSH_PRIVATE_KEY` | Contents of `locomock_key.pem` file | Located at `~/.ssh/locomock_key.pem` |
 | `OPENAI_API_KEY` | Already have it! | Use the one we just added to .env |
 
 **How to get SSH key contents:**
