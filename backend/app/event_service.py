@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """
-Location-aware Eventbrite crawler that can fetch events from different cities
+Unified Event Crawler supporting multiple sources (Eventbrite, Sohu) with AI normalization
 """
 
 import requests
 import json
 import logging
+import os
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone
 import time
+from openai import OpenAI
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
@@ -290,26 +293,28 @@ class EventbriteCrawler:
     def fetch_events_by_city(self, city_name: str, max_pages: int = 3) -> List[Dict[str, Any]]:
         """
         Fetch events for a specific city using real Eventbrite API
-        
+
         Args:
             city_name: City name (e.g., "san francisco", "nyc", "london")
             max_pages: Maximum number of pages to fetch
-            
+
         Returns:
             List of normalized event dictionaries
         """
-        logger.info(f"Fetching real events for {city_name}")
+        logger.info(f"📅 EventbriteCrawler: Starting to fetch events for '{city_name}'")
 
         # Map city name to Eventbrite location ID
         location_id = self._get_eventbrite_location_id(city_name)
-        
-        real_events = self.fetch_events(location_id=location_id, max_pages=3)
-        
+        logger.info(f"📅 EventbriteCrawler: Mapped '{city_name}' to location ID {location_id}")
+
+        real_events = self.fetch_events(location_id=location_id, max_pages=max_pages)
+
         if real_events and len(real_events) > 0:
-            logger.info(f"Retrieved {len(real_events)} real events for {city_name}")
-            return real_events
+            logger.info(f"📅 EventbriteCrawler: Retrieved {len(real_events)} real events for {city_name}")
         else:
-            return []
+            logger.warning(f"📅 EventbriteCrawler: No events found for {city_name}")
+
+        return real_events
     
     def _get_eventbrite_location_id(self, city_name: str) -> str:
         """
@@ -446,43 +451,395 @@ class EventbriteCrawler:
         logger.info(f"Total events fetched: {len(all_events)}")
         return all_events
 
+class SohuCrawler:
+    """Sohu article crawler with AI normalization"""
+
+    def __init__(self):
+        # City profiles for Sohu articles - using same format as EventbriteCrawler
+        self.city_profiles = {
+            "new_york": "https://mp.sohu.com/profile?xpt=aGFvY2hpYnVueUBzb2h1LmNvbQ==",
+        }
+
+    def fetch_events_by_city(self, city_name: str) -> List[Dict[str, Any]]:
+        """Fetch and normalize Sohu articles for a city"""
+        logger.info(f"📰 SohuCrawler: Starting to fetch articles for '{city_name}'")
+        try:
+            profile_url = self._get_city_profile(city_name)
+            if not profile_url:
+                logger.warning(f"📰 SohuCrawler: No Sohu profile found for {city_name}")
+                return []
+
+            logger.info(f"📰 SohuCrawler: Found profile URL for {city_name}")
+            html = self._fetch_sohu_profile(profile_url)
+            articles = self._parse_sohu_articles(html)
+            logger.info(f"📰 SohuCrawler: Parsed {len(articles)} articles from profile")
+
+            # Enhance each article with full content
+            enhanced_articles = []
+            for i, article in enumerate(articles[:10]):  # Limit to 10 articles
+                if article.get('article_url'):
+                    try:
+                        logger.debug(f"📰 SohuCrawler: Fetching content for article {i+1}/{min(len(articles), 10)}")
+                        article_html = self._fetch_sohu_article(article['article_url'])
+                        content_data = self._parse_sohu_article_content(article_html)
+                        article.update(content_data)
+                        enhanced_articles.append(article)
+                    except Exception as e:
+                        logger.error(f"📰 SohuCrawler: Failed to fetch article content: {e}")
+                        enhanced_articles.append(article)
+
+            logger.info(f"📰 SohuCrawler: Enhanced {len(enhanced_articles)} articles with full content")
+
+            # Normalize articles to event format
+            normalized_events = []
+            for article in enhanced_articles:
+                normalized = self._normalize_sohu_event(article)
+                normalized_events.append(normalized)
+
+            logger.info(f"📰 SohuCrawler: Successfully normalized {len(normalized_events)} Sohu articles to events")
+            return normalized_events
+
+        except Exception as e:
+            logger.error(f"📰 SohuCrawler: Error fetching Sohu events for {city_name}: {e}")
+            return []
+
+    def _get_city_profile(self, city_name: str) -> Optional[str]:
+        """Get Sohu profile URL for a city"""
+        city_key = city_name.lower().strip().replace(' ', '_').replace('-', '_')
+        return self.city_profiles.get(city_key)
+
+    def _fetch_sohu_profile(self, profile_url: str) -> str:
+        """Fetch Sohu profile HTML with cookies"""
+        cookies = {
+            'SUV': '1761456502828odinqfcO',
+            'reqtype': 'pc',
+            'gidinf': 'x099980107ee1b829c17bac31000396b6596aefaa33b',
+            '_dfp': 'tgWd/PeOqyhBKzfqD5Rx5QL5+GI0g1J11Z0srNbBlIk=',
+            'clt': '1761456516',
+            'cld': '20251026132836',
+            't': '1761463759249',
+        }
+
+        headers = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Cache-Control': 'max-age=0',
+            'Connection': 'keep-alive',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Upgrade-Insecure-Requests': '1',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+        }
+
+        response = requests.get(profile_url, cookies=cookies, headers=headers)
+        return response.text
+
+    def _fetch_sohu_article(self, article_url: str) -> str:
+        """Fetch individual Sohu article"""
+        cookies = {
+            'SUV': '1761456502828odinqfcO',
+            'reqtype': 'pc',
+            'gidinf': 'x099980107ee1b829c17bac31000396b6596aefaa33b',
+            '_dfp': 'tgWd/PeOqyhBKzfqD5Rx5QL5+GI0g1J11Z0srNbBlIk=',
+            'clt': '1761456516',
+            'cld': '20251026132836',
+            '_ga': 'GA1.1.756759890.1761461989',
+            '_ym_uid': '1761461990920399414',
+        }
+
+        headers = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Cache-Control': 'max-age=0',
+            'Connection': 'keep-alive',
+            'Referer': 'https://mp.sohu.com/profile?xpt=aGFvY2hpYnVueUBzb2h1LmNvbQ==',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-site',
+            'Sec-Fetch-User': '?1',
+            'Upgrade-Insecure-Requests': '1',
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+        }
+
+        response = requests.get(article_url, cookies=cookies, headers=headers)
+        return response.text
+
+    def _parse_sohu_articles(self, html_content: str) -> List[Dict[str, Any]]:
+        """Parse Sohu articles from HTML"""
+        soup = BeautifulSoup(html_content, 'html.parser')
+        articles = []
+
+        article_items = soup.find_all('div', class_='TPLImageTextFeedItem')
+
+        for item in article_items:
+            try:
+                article_data = {}
+
+                # Extract title
+                title_elem = item.find('div', class_='item-text-content-title')
+                article_data['title'] = title_elem.get_text(strip=True) if title_elem else "No title"
+
+                # Extract description
+                desc_elem = item.find('div', class_='item-text-content-description')
+                article_data['description'] = desc_elem.get_text(strip=True) if desc_elem else "No description"
+
+                # Extract article URL
+                link_elem = item.find('a', class_='tpl-image-text-feed-item-content')
+                if link_elem and link_elem.get('href'):
+                    article_url = link_elem['href']
+                    if article_url.startswith('//'):
+                        article_url = 'https:' + article_url
+                    elif article_url.startswith('/'):
+                        article_url = 'https://www.sohu.com' + article_url
+                    article_data['article_url'] = article_url
+
+                articles.append(article_data)
+
+            except Exception as e:
+                logger.error(f"Error parsing article: {e}")
+                continue
+
+        return articles
+
+    def _parse_sohu_article_content(self, html_content: str) -> Dict[str, Any]:
+        """Parse individual Sohu article content"""
+        soup = BeautifulSoup(html_content, 'html.parser')
+        article_data = {}
+
+        # Extract title
+        title_meta = soup.find('meta', property='og:title')
+        if title_meta and title_meta.get('content'):
+            article_data['title'] = title_meta['content']
+        else:
+            title_tag = soup.find('title')
+            article_data['title'] = title_tag.get_text(strip=True) if title_tag else "No title"
+
+        # Extract description
+        desc_meta = soup.find('meta', {'name': 'description'})
+        if desc_meta and desc_meta.get('content'):
+            article_data['description'] = desc_meta['content']
+        else:
+            og_desc = soup.find('meta', property='og:description')
+            article_data['description'] = og_desc['content'] if og_desc and og_desc.get('content') else ""
+
+        # Extract publish time
+        time_meta = soup.find('meta', {'name': 'datePublished'}) or soup.find('meta', property='article:published_time')
+        if time_meta and time_meta.get('content'):
+            article_data['publish_time'] = time_meta['content']
+
+        # Extract content paragraphs
+        article_element = soup.find('article', {'class': 'article', 'id': 'mp-editor'})
+        content_paragraphs = []
+
+        if article_element:
+            for element in article_element.find_all(['p', 'div']):
+                if element.get('class') and ('lookall' in element.get('class') or 'hidden-content' in element.get('class')):
+                    continue
+
+                if element.name == 'p':
+                    text = element.get_text(strip=True)
+                    if text and not text.startswith('返回搜狐'):
+                        content_paragraphs.append(text)
+
+        article_data['content_paragraphs'] = content_paragraphs
+
+        # Extract author
+        author_meta = soup.find('meta', {'name': 'author'})
+        if author_meta and author_meta.get('content'):
+            article_data['author'] = author_meta['content']
+        else:
+            media_meta = soup.find('meta', {'name': 'mediaid'})
+            article_data['author'] = media_meta['content'] if media_meta and media_meta.get('content') else "Unknown author"
+
+        return article_data
+
+    def _normalize_sohu_event(self, article: Dict[str, Any]) -> Dict[str, Any]:
+        """Use AI to normalize Sohu article to standard event format"""
+        try:
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY environment variable is required")
+
+            client = OpenAI(api_key=api_key)
+
+            prompt = f"""
+            Normalize this Sohu article into a standard event format.
+
+            Raw article data: {json.dumps(article, indent=2)}
+
+            Return JSON with these exact fields:
+            {{
+                "event_id": "sohu_unique_identifier",
+                "title": "article title",
+                "description": "brief description under 200 chars",
+                "start_datetime": "ISO format datetime or empty string",
+                "end_datetime": "ISO format datetime or empty string",
+                "venue_name": "Online or location name",
+                "venue_city": "city name if detectable",
+                "organizer_name": "article author or Sohu",
+                "ticket_min_price": "Free",
+                "ticket_max_price": "Free",
+                "is_free": true,
+                "categories": ["Article", "News", "relevant topics"],
+                "event_url": "article URL",
+                "source": "sohu",
+                "attendee_count": 0
+            }}
+
+            For articles about events, extract event details. For news articles, treat as informational content.
+            """
+
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=600,
+                temperature=0.1
+            )
+
+            result = json.loads(response.choices[0].message.content.strip())
+
+            # Ensure required fields
+            required_fields = [
+                "event_id", "title", "description", "start_datetime", "end_datetime",
+                "venue_name", "venue_city", "organizer_name", "ticket_min_price",
+                "ticket_max_price", "is_free", "categories", "event_url", "source"
+            ]
+
+            for field in required_fields:
+                if field not in result:
+                    if field in ["event_id"]:
+                        result[field] = f"sohu_{hash(str(article))}"
+                    elif field in ["start_datetime", "end_datetime", "venue_city"]:
+                        result[field] = ""
+                    elif field == "event_url":
+                        result[field] = article.get('article_url', '')
+                    elif field == "source":
+                        result[field] = "sohu"
+                    elif field == "is_free":
+                        result[field] = True
+                    elif field == "categories":
+                        result[field] = ["Article", "News"]
+                    elif field == "ticket_min_price":
+                        result[field] = "Free"
+                    elif field == "ticket_max_price":
+                        result[field] = "Free"
+                    elif field == "attendee_count":
+                        result[field] = 0
+                    else:
+                        result[field] = f"Unknown {field}"
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error normalizing Sohu event: {e}")
+            # Return basic normalized event on error
+            return {
+                "event_id": f"sohu_{hash(str(article))}",
+                "title": article.get("title", "Unknown Article"),
+                "description": article.get("description", "No description available"),
+                "start_datetime": article.get("publish_time", ""),
+                "end_datetime": "",
+                "venue_name": "Online",
+                "venue_city": "",
+                "organizer_name": article.get("author", "Sohu"),
+                "ticket_min_price": "Free",
+                "ticket_max_price": "Free",
+                "is_free": True,
+                "categories": ["Article", "News"],
+                "event_url": article.get("article_url", ""),
+                "source": "sohu",
+                "attendee_count": 0
+            }
+
+
+class EventCrawler:
+    """Unified event crawler orchestrating multiple sources"""
+
+    def __init__(self):
+        self.eventbrite_crawler = EventbriteCrawler()
+        self.sohu_crawler = SohuCrawler()
+
+    def fetch_events_by_city(self, city_name: str, sources: List[str] = None, max_pages: int = 3) -> List[Dict[str, Any]]:
+        """
+        Fetch and normalize events from multiple sources
+
+        Args:
+            city_name: City name (e.g., "new york", "san francisco")
+            sources: List of sources ["eventbrite", "sohu"]
+            max_pages: Max pages for Eventbrite
+
+        Returns:
+            List of normalized events
+        """
+        if sources is None:
+            sources = ["eventbrite", "sohu"]
+
+        all_events = []
+        logger.info(f"🔍 Starting unified event search for '{city_name}' using sources: {sources}")
+
+        # Fetch from Eventbrite
+        if "eventbrite" in sources:
+            logger.info(f"📅 Fetching events from Eventbrite for {city_name}...")
+            try:
+                events = self.eventbrite_crawler.fetch_events_by_city(city_name, max_pages)
+                all_events.extend(events)
+                logger.info(f"✅ Eventbrite: {len(events)} events found")
+            except Exception as e:
+                logger.error(f"❌ Eventbrite crawler failed: {e}")
+
+        # Fetch from Sohu
+        if "sohu" in sources:
+            logger.info(f"📰 Fetching articles from Sohu for {city_name}...")
+            try:
+                articles = self.sohu_crawler.fetch_events_by_city(city_name)
+                all_events.extend(articles)
+                logger.info(f"✅ Sohu: {len(articles)} articles normalized to events")
+            except Exception as e:
+                logger.error(f"❌ Sohu crawler failed: {e}")
+
+        logger.info(f"📊 Total events/articles collected: {len(all_events)} from {len(sources)} sources")
+        return all_events
+
+
+# Global instance for backward compatibility
+event_crawler = EventCrawler()
+
+
+def fetch_events_by_city(city_name: str, max_pages: int = 3) -> List[Dict[str, Any]]:
+    """Convenience function - fetch from all sources"""
+    return event_crawler.fetch_events_by_city(city_name, max_pages=max_pages)
+
+
+def get_supported_cities() -> List[str]:
+    """Get list of supported cities across all crawlers"""
+    return list(event_crawler.eventbrite_crawler.city_aliases.keys())
+
 
 if __name__ == "__main__":
-    # Global instance
-    location_crawler = EventbriteCrawler()
+    # Test the unified crawler
+    logging.basicConfig(level=logging.INFO)
 
-    def fetch_events_by_city(city_name: str, max_pages: int = 3) -> List[Dict[str, Any]]:
-        """Convenience function to fetch events by city"""
-        return location_crawler.fetch_events_by_city(city_name, max_pages)
+    print("Testing Unified Event Crawler")
+    print("=" * 50)
 
-    def get_supported_cities() -> List[str]:
-        """Get list of supported cities"""
-        return location_crawler.get_supported_cities()
+    # Test Eventbrite
+    print("\nFetching Eventbrite events...")
+    eb_events = event_crawler.fetch_events_by_city("san francisco", sources=["eventbrite"], max_pages=1)
+    print(f"Eventbrite: {len(eb_events)} events")
 
-    def test_location_aware_crawler():
-        """Test the location-aware crawler"""
-        logging.basicConfig(level=logging.INFO)
-        
-        print("Testing Location-Aware Eventbrite Crawler")
-        print("=" * 50)
-        
-        # Test 1: Show supported cities
-        cities = get_supported_cities()
-        print(f"Supported cities: {cities[:10]}...")  # Show first 10
-        
-        # Test 2: Fetch events from different cities
-        test_cities = ["san francisco", "london", "tokyo"]
-        
-        for city in test_cities:
-            print(f"\nFetching events for {city}...")
-            events = fetch_events_by_city(city, max_pages=1)  # Just 1 page for testing
-            
-            if events:
-                print(f"Found {len(events)} events")
-                sample_event = events[0]
-                print(f"Sample event: {sample_event['title']}")
-                print(f"Venue: {sample_event['venue_name']}, {sample_event['venue_city']}")
-            else:
-                print("No events found")
+    # Test Sohu
+    print("\nFetching Sohu articles...")
+    sohu_events = event_crawler.fetch_events_by_city("new york", sources=["sohu"])
+    print(f"Sohu: {len(sohu_events)} articles")
 
-    test_location_aware_crawler()
+    # Test unified
+    print("\nFetching from both sources...")
+    all_events = event_crawler.fetch_events_by_city("new york", sources=["eventbrite", "sohu"], max_pages=1)
+    print(f"Total: {len(all_events)} events/articles")
+
+    if all_events:
+        sample = all_events[0]
+        print(f"\nSample event: {sample['title']}")
+        print(f"Source: {sample['source']}")

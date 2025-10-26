@@ -18,7 +18,7 @@ import asyncio
 from dotenv import load_dotenv
 
 from .firebase_config import db
-from .event_service import EventbriteCrawler
+from .event_service import EventCrawler
 from .cache_manager import CacheManager
 from .search_service import SearchService
 from .extraction_service import ExtractionService, UserPreferences
@@ -150,7 +150,7 @@ class MigrateConversationsRequest(BaseModel):
     real_user_id: str
 
 # Initialize services
-event_crawler = EventbriteCrawler()
+event_crawler = EventCrawler()
 cache_manager = CacheManager(ttl_hours=CACHE_TTL_HOURS)
 search_service = SearchService()
 extraction_service = ExtractionService()
@@ -295,7 +295,7 @@ async def smart_cached_chat(request: ChatRequest):
         else:
             logger.info(f"No valid cache for {city}, fetching fresh events")
             # Fetch fresh events if no cache
-            events = event_crawler.fetch_events_by_city(city, max_pages=2)
+            events = event_crawler.fetch_events_by_city(city, max_pages=3)
             logger.info(f"Fetched {len(events)} fresh events for {city}")
             
             # Cache the fresh events
@@ -506,7 +506,7 @@ async def stream_chat_response(request: ChatRequest):
             
             # Create a task for the event fetching
             async def fetch_events():
-                return event_crawler.fetch_events_by_city(city, max_pages=2)
+                return event_crawler.fetch_events_by_city(city, max_pages=3)
             
             # Start the event fetching task
             fetch_task = asyncio.create_task(fetch_events())
