@@ -91,7 +91,11 @@ configure_environment() {
         print_step "Creating .env file with global environment variables..."
 
         # Create .env file with actual values (no template needed since vars are global)
-        sudo -u appuser bash -c "cat > '$ENV_FILE' << EOF
+        # Remove old .env if exists to avoid permission issues
+        sudo rm -f "$ENV_FILE"
+        
+        # Use tee to write as appuser (redirect happens inside sudo context)
+        cat << EOF | sudo -u appuser tee "$ENV_FILE" > /dev/null
 # OpenAI API Configuration
 OPENAI_API_KEY=$OPENAI_API_KEY
 
@@ -113,7 +117,7 @@ LOG_LEVEL=INFO
 
 # Firebase Configuration
 FIREBASE_CREDENTIALS_PATH=$FIREBASE_CREDENTIALS_PATH
-EOF"
+EOF
 
         print_success "Environment variables saved to .env file"
 
