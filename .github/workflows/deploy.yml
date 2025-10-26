@@ -21,22 +21,22 @@ jobs:
         mkdir -p ~/.ssh
         echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/locomock_key.pem
         chmod 600 ~/.ssh/locomock_key.pem
-        ssh-keyscan -H 3.89.127.102 >> ~/.ssh/known_hosts
+        ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
     
     - name: 📥 Download deployment scripts
       run: |
-        ssh -i ~/.ssh/locomock_key.pem -o StrictHostKeyChecking=no ubuntu@3.89.127.102 << 'EOF'
+        ssh -i ~/.ssh/locomock_key.pem -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
           cd /tmp
           # Clean up any existing deployment scripts to avoid cache issues
           rm -f auto-deploy.sh* 01-server-setup.sh* 02-app-deploy.sh* 03-nginx-setup.sh* 04-ssl-setup.sh* reboot-recovery.sh*
           
           # Download all deployment scripts (fresh copy with cache busting)
-          wget -q -O auto-deploy.sh "https://raw.githubusercontent.com/${{ github.repository }}/main/deploy/auto-deploy.sh?t=$(date +%s)"
-          wget -q -O 01-server-setup.sh "https://raw.githubusercontent.com/${{ github.repository }}/main/deploy/01-server-setup.sh?t=$(date +%s)"
-          wget -q -O 02-app-deploy.sh "https://raw.githubusercontent.com/${{ github.repository }}/main/deploy/02-app-deploy.sh?t=$(date +%s)"
-          wget -q -O 03-nginx-setup.sh "https://raw.githubusercontent.com/${{ github.repository }}/main/deploy/03-nginx-setup.sh?t=$(date +%s)"
-          wget -q -O 04-ssl-setup.sh "https://raw.githubusercontent.com/${{ github.repository }}/main/deploy/04-ssl-setup.sh?t=$(date +%s)"
-          wget -q -O reboot-recovery.sh "https://raw.githubusercontent.com/${{ github.repository }}/main/deploy/reboot-recovery.sh?t=$(date +%s)"
+          wget -q -O auto-deploy.sh "https://raw.githubusercontent.com/${{ github.repository }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/auto-deploy.sh?t=$(date +%s)"
+          wget -q -O 01-server-setup.sh "https://raw.githubusercontent.com/${{ github.repository }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/01-server-setup.sh?t=$(date +%s)"
+          wget -q -O 02-app-deploy.sh "https://raw.githubusercontent.com/${{ github.repository }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/02-app-deploy.sh?t=$(date +%s)"
+          wget -q -O 03-nginx-setup.sh "https://raw.githubusercontent.com/${{ github.repository }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/03-nginx-setup.sh?t=$(date +%s)"
+          wget -q -O 04-ssl-setup.sh "https://raw.githubusercontent.com/${{ github.repository }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/04-ssl-setup.sh?t=$(date +%s)"
+          wget -q -O reboot-recovery.sh "https://raw.githubusercontent.com/${{ github.repository }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/reboot-recovery.sh?t=$(date +%s)"
 
           # Make all scripts executable
           chmod +x *.sh
@@ -44,28 +44,28 @@ jobs:
     
     - name: 🔐 Setup Firebase credentials
       run: |
-        ssh -i ~/.ssh/locomock_key.pem -o StrictHostKeyChecking=no ubuntu@3.89.127.102 << 'EOFCREDS'
+        ssh -i ~/.ssh/locomock_key.pem -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOFCREDS'
           # Create Firebase credentials file from secret
-          mkdir -p /home/ubuntu
-          cat > /home/ubuntu/firebase-service-account.json << 'EOFJSON'
+          mkdir -p /home/${{ secrets.SSH_USER }}
+          cat > /home/${{ secrets.SSH_USER }}/firebase-service-account.json << 'EOFJSON'
         ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         EOFJSON
-          chmod 600 /home/ubuntu/firebase-service-account.json
+          chmod 600 /home/${{ secrets.SSH_USER }}/firebase-service-account.json
           echo "✅ Firebase credentials file created"
         EOFCREDS
     
     - name: 🚀 Deploy application
       run: |
-        ssh -i ~/.ssh/locomock_key.pem -o StrictHostKeyChecking=no ubuntu@3.89.127.102 << 'EOF'
+        ssh -i ~/.ssh/locomock_key.pem -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
           cd /tmp
 
           # Set environment variables
-          export DOMAIN_NAME="${{ secrets.DOMAIN_NAME || '3.89.127.102' }}"
-          export GITHUB_REPO="${{ vars.DEPLOY_GITHUB_REPO || github.repository }}"
-          export GITHUB_BRANCH="${{ vars.DEPLOY_GITHUB_BRANCH || 'main' }}"
+          export DOMAIN_NAME="${{ secrets.DOMAIN_NAME }}"
+          export GITHUB_REPO="${{ github.repository }}"
+          export GITHUB_BRANCH="${{ secrets.DEPLOY_GITHUB_BRANCH }}"
           export OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
           export FIREBASE_CREDENTIALS_PATH="/opt/locallifeassistant/firebase-service-account.json"
-          export EMAIL="${{ secrets.ADMIN_EMAIL || 'admin@localhost' }}"
+          export EMAIL="${{ secrets.ADMIN_EMAIL }}"
 
           # Run automated deployment
           ./auto-deploy.sh
@@ -73,7 +73,7 @@ jobs:
     
     - name: 🔍 Health check
       run: |
-        ssh -i ~/.ssh/locomock_key.pem -o StrictHostKeyChecking=no ubuntu@3.89.127.102 << 'EOF'
+        ssh -i ~/.ssh/locomock_key.pem -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
           echo "🔍 Performing post-deployment health check..."
           
           # Check if services are running
@@ -105,8 +105,7 @@ jobs:
     - name: 📊 Deployment summary
       run: |
         echo "🎉 Deployment completed successfully!"
-        echo "🌐 EC2 Instance: 3.89.127.102"
-        echo "🌍 Region: us-east-1"
-        echo "📝 Application URL: http://3.89.127.102"
-        echo "   (or https://${{ secrets.DOMAIN_NAME }} if domain is configured)"
+        echo "🌐 EC2 Instance: ${{ secrets.SERVER_IP }}"
+        echo "🌍 Domain: https://${{ secrets.DOMAIN_NAME }}"
+        echo "📝 Branch: ${{ secrets.DEPLOY_GITHUB_BRANCH }}"
 
