@@ -9,18 +9,24 @@
     "serve": "vite preview --port $PORT --host 0.0.0.0"
   },
   "dependencies": {
+    "@radix-ui/react-scroll-area": "^1.2.10",
+    "@radix-ui/react-slot": "^1.2.3",
+    "axios": "^1.6.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "firebase": "^10.7.1",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.294.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "axios": "^1.6.2",
-    "lucide-react": "^0.294.0",
-    "firebase": "^10.7.1",
     "react-leaflet": "^4.2.1",
-    "leaflet": "^1.9.4"
+    "tailwind-merge": "^3.3.1",
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
+    "@types/leaflet": "^1.9.8",
     "@types/react": "^18.2.37",
     "@types/react-dom": "^18.2.15",
-    "@types/leaflet": "^1.9.8",
     "@vitejs/plugin-react": "^4.1.1",
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.32",

@@ -11,22 +11,6 @@ export interface ChatMessage {
   timestamp?: string;
 }
 
-export interface LocationCoordinates {
-  latitude: number;
-  longitude: number;
-  formatted_address: string;
-}
-
-export interface GeocodeResponse {
-  success: boolean;
-  coordinates: {
-    latitude: number;
-    longitude: number;
-    formatted_address: string;
-  } | null;
-  error_message: string | null;
-}
-
 export interface UserPreferences {
   location?: string;
   date?: string;
@@ -38,7 +22,6 @@ export interface ChatRequest {
   message: string;
   conversation_history: ChatMessage[];
   llm_provider?: string;
-  location?: LocationCoordinates | null;
   user_preferences?: UserPreferences;
   is_initial_response?: boolean;
   user_id: string;  // NEW - Required anonymous user ID
@@ -214,18 +197,6 @@ class APIClient {
     return response.data;
   }
 
-  async geocodeLocation(input: string): Promise<LocationCoordinates> {
-    const response = await axios.post(`${this.baseURL}/api/geocode`, {
-      input_text: input
-    });
-    
-    // Handle the backend's response format
-    if (response.data.success && response.data.coordinates) {
-      return response.data.coordinates;
-    } else {
-      throw new Error(response.data.error_message || 'Failed to geocode location');
-    }
-  }
 
   async getUserUsage(userId: string): Promise<any> {
     const response = await axios.get(`${this.baseURL}/api/usage/${userId}`);

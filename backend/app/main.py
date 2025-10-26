@@ -20,7 +20,6 @@ from dotenv import load_dotenv
 from .firebase_config import db
 from .event_service import EventbriteCrawler
 from .cache_manager import CacheManager
-from .geocoding import GeocodingService, GeocodeRequest, GeocodeResponse, LocationCoordinates
 from .search_service import SearchService
 from .extraction_service import ExtractionService, UserPreferences
 from .usage_tracker import UsageTracker
@@ -120,7 +119,6 @@ class ChatRequest(BaseModel):
     message: str
     conversation_history: List[Dict[str, Any]] = []
     llm_provider: str = "openai"
-    location: Optional[LocationCoordinates] = None
     user_preferences: Optional[UserPreferences] = None
     is_initial_response: bool = False  # Flag for welcome message response
     user_id: str  # NEW - Required anonymous user ID
@@ -154,7 +152,6 @@ class MigrateConversationsRequest(BaseModel):
 # Initialize services
 event_crawler = EventbriteCrawler()
 cache_manager = CacheManager(ttl_hours=CACHE_TTL_HOURS)
-geocoding_service = GeocodingService()
 search_service = SearchService()
 extraction_service = ExtractionService()
 usage_tracker = UsageTracker()
@@ -201,7 +198,7 @@ async def smart_cached_chat(request: ChatRequest):
     try:
         logger.info(f"Smart cached chat request: {request.message}")
         user_id = request.user_id
-        
+
         # Check trial limit for anonymous users
         if user_id.startswith("user_"):  # Anonymous user
             if usage_tracker.check_trial_limit(user_id):
@@ -216,18 +213,17 @@ async def smart_cached_chat(request: ChatRequest):
                     usage_stats=usage_tracker.get_usage(user_id),
                     conversation_id="temp"
                 )
-        
+
         # Increment usage for anonymous users
         if user_id.startswith("user_"):
             usage_stats = usage_tracker.increment_usage(user_id)
         else:
             usage_stats = None
-        
+
         # Get or create conversation
         conversation_id = request.conversation_id
         if not conversation_id:
             conversation_id = conversation_storage.create_conversation(user_id, {
-                "location": request.location.dict() if request.location else None,
                 "llm_provider": request.llm_provider
             })
 
@@ -263,15 +259,6 @@ async def smart_cached_chat(request: ChatRequest):
                 location_provided = True
                 logger.info(f"Using city from query extraction: {city}")
         
-        # Priority 3: Extract city from location coordinates (fallback)
-        if not city and request.location:
-            address = request.location.formatted_address
-            if address:
-                parts = address.split(',')
-                if len(parts) >= 1:
-                    city = parts[0].strip().lower()
-                    location_provided = True
-                    logger.info(f"Using city from location coordinates: {city}")
         
         # Step 3: Handle missing location for initial responses
         if request.is_initial_response and not location_provided:
@@ -295,8 +282,9 @@ async def smart_cached_chat(request: ChatRequest):
                 logger.info("Informing user that we're defaulting to New York")
         
         logger.info(f"Final city decision: {city}")
+        # ------------------------------------------------------------
         
-        # Step 1: Try to get cached events
+        # Step 5: Try to get cached events
         cached_events = cache_manager.get_cached_events(city)
         cache_age_hours = cache_manager.get_cache_age(city)
         
@@ -306,16 +294,16 @@ async def smart_cached_chat(request: ChatRequest):
             cache_used = True
         else:
             logger.info(f"No valid cache for {city}, fetching fresh events")
-            # Step 2: Fetch fresh events if no cache
+            # Fetch fresh events if no cache
             events = event_crawler.fetch_events_by_city(city, max_pages=2)
             logger.info(f"Fetched {len(events)} fresh events for {city}")
             
-            # Step 3: Cache the fresh events
+            # Cache the fresh events
             cache_manager.cache_events(city, events)
             cache_used = False
             cache_age_hours = 0
         
-        # Step 4: LLM-powered intelligent event search with preferences
+        # Step 6: LLM-powered intelligent event search with preferences
         logger.info(f"Starting LLM search for query: '{request.message}' with {len(events)} events")
         
         # Convert UserPreferences object to dict for search service
@@ -341,7 +329,7 @@ async def smart_cached_chat(request: ChatRequest):
             logger.info(f"First event has llm_scores: {first_event.get('llm_scores', 'None')}")
             logger.info(f"First event relevance_score: {first_event.get('relevance_score', 'None')}")
         
-        # Step 5: Format recommendations
+        # Step 7: Format recommendations
         formatted_recommendations = []
         for event in top_events:
             formatted_recommendations.append({
@@ -354,7 +342,7 @@ async def smart_cached_chat(request: ChatRequest):
                 "explanation": f"Event in {city.title()}: {event.get('title', 'Unknown Event')}"
             })
         
-        # Step 6: Generate response message
+        # Step 8: Generate response message
         location_note = ""
         if not location_provided and city == "new york":
             location_note = " (I couldn't determine your location, so I'm defaulting to New York)"
@@ -364,7 +352,7 @@ async def smart_cached_chat(request: ChatRequest):
         else:
             response_message = f"😔 I couldn't find any events in {city.title()} matching your query.{location_note} Try asking about 'fashion events', 'music concerts', 'halloween parties', or 'free events'."
         
-        # Step 7: Create extraction summary if preferences were extracted
+        # Step 9: Create extraction summary if preferences were extracted
         extraction_summary = None
         if extracted_preferences:
             summary_parts = []
@@ -404,9 +392,9 @@ async def smart_cached_chat(request: ChatRequest):
             cache_age_hours=cache_age_hours,
             extracted_preferences=extracted_preferences,
             extraction_summary=extraction_summary,
-            usage_stats=usage_stats,  # NEW
+            usage_stats=usage_stats,
             trial_exceeded=False,
-            conversation_id=conversation_id  # NEW
+            conversation_id=conversation_id
         )
         
     except Exception as e:
@@ -439,7 +427,6 @@ async def stream_chat_response(request: ChatRequest):
         conversation_id = request.conversation_id
         if not conversation_id:
             conversation_id = conversation_storage.create_conversation(user_id, {
-                "location": request.location.dict() if request.location else None,
                 "llm_provider": request.llm_provider
             })
 
@@ -477,15 +464,6 @@ async def stream_chat_response(request: ChatRequest):
                 location_provided = True
                 logger.info(f"Using city from query extraction: {city}")
         
-        # Priority 3: Extract city from location coordinates (fallback)
-        if not city and request.location:
-            address = request.location.formatted_address
-            if address:
-                parts = address.split(',')
-                if len(parts) >= 1:
-                    city = parts[0].strip().lower()
-                    location_provided = True
-                    logger.info(f"Using city from location coordinates: {city}")
         
         # Step 3: Handle missing location for initial responses
         if request.is_initial_response and not location_provided:
@@ -806,10 +784,6 @@ async def delete_conversation(user_id: str, conversation_id: str):
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-@app.post("/api/geocode", response_model=GeocodeResponse)
-async def geocode_location(request: GeocodeRequest):
-    """Geocode a location input including US zipcodes"""
-    return await geocoding_service.geocode_location(request)
 
 @app.post("/api/cache/cleanup")
 async def cleanup_cache():
