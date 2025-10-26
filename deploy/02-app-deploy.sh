@@ -34,7 +34,16 @@ if [ -d ".git" ]; then
 else
     # No repository, clone it
     echo "ℹ️  No repository found, cloning..."
+    # Clean directory first (except .env if it exists)
+    if [ -f ".env" ]; then
+        sudo -u appuser mv .env /tmp/.env.backup
+    fi
+    sudo -u appuser find . -maxdepth 1 ! -name "." ! -name ".." -exec rm -rf {} + 2>/dev/null || true
     sudo -u appuser git clone https://github.com/${GITHUB_REPO}.git .
+    # Restore .env if it was backed up
+    if [ -f "/tmp/.env.backup" ]; then
+        sudo -u appuser mv /tmp/.env.backup .env
+    fi
     echo "✅ Repository cloned"
 fi
 
