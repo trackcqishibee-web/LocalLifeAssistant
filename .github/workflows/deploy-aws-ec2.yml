@@ -64,7 +64,7 @@ jobs:
           export GITHUB_REPO="${{ vars.DEPLOY_GITHUB_REPO || github.repository }}"
           export GITHUB_BRANCH="${{ vars.DEPLOY_GITHUB_BRANCH || 'main' }}"
           export OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
-          export FIREBASE_CREDENTIALS_PATH="/home/ubuntu/firebase-service-account.json"
+          export FIREBASE_CREDENTIALS_PATH="/opt/locallifeassistant/firebase-service-account.json"
           export EMAIL="${{ secrets.ADMIN_EMAIL || 'admin@localhost' }}"
 
           # Run automated deployment
