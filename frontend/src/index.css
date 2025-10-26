@@ -22,7 +22,7 @@
   }
 
   .recommendation-card {
-    @apply bg-amber-50/80 text-amber-900 rounded-lg p-1.5;
+    @apply bg-amber-50/80 text-amber-900 rounded-lg p-1.5 mb-6;
   }
 }
 
