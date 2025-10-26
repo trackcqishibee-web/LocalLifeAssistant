@@ -1,10 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Loader2, User } from 'lucide-react';
-import { ChatMessage, apiClient, ChatRequest, LocationCoordinates } from '../api/client';
+import { ChatMessage, apiClient, ChatRequest } from '../api/client';
 import RecommendationCard from './RecommendationCard';
 import WelcomeMessage from './WelcomeMessage';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
 
-interface ChatMessageWithRecommendations extends ChatMessage {
+interface ChatMessageWithRecommendations {
+  role: 'user' | 'assistant';
+  content?: string; // Optional to allow undefined for recommendation-only messages
+  timestamp?: string;
   recommendations?: any[];
 }
 
@@ -13,7 +18,6 @@ interface ChatInterfaceProps {
   onRecommendations: (recommendations: any[]) => void;
   llmProvider: string;
   conversationHistory: ChatMessage[];
-  userLocation: LocationCoordinates | null;
   userId: string;
   onTrialExceeded: () => void;
   conversationId: string | null;
@@ -24,7 +28,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   onRecommendations,
   llmProvider,
   conversationHistory,
-  userLocation,
   userId,
   onTrialExceeded,
   conversationId
@@ -40,49 +43,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const scrollToMostRecentUserMessage = (messages: ChatMessageWithRecommendations[]) => {
-    console.log('🔄 scrollToMostRecentUserMessage called with messages:', messages.length);
-    // Find all user messages and scroll to the most recent one
-    const userMessages = messages.filter(msg => msg.role === 'user');
-    console.log('👤 Found user messages:', userMessages.length);
-    
-    if (userMessages.length > 0) {
-      const mostRecentUserMessage = userMessages[userMessages.length - 1];
-      const messageIndex = messages.findIndex(msg => msg.timestamp === mostRecentUserMessage.timestamp);
-      console.log('📍 Most recent user message index:', messageIndex);
-      
-      // Find the DOM element and scroll to it
-      const messageElements = document.querySelectorAll('.chat-message');
-      console.log('🎯 Found DOM elements:', messageElements.length);
-      
-      if (messageElements[messageIndex]) {
-        console.log('📍 Scrolling to most recent user message at index:', messageIndex);
-        messageElements[messageIndex].scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } else {
-        console.log('❌ Element not found at index:', messageIndex);
+
+
+  // Scroll to bottom when new content is added (but not for recommendation-only messages)
+  useEffect(() => {
+    const lastMessage = messagesWithRecommendations[messagesWithRecommendations.length - 1];
+    if (lastMessage) {
+      // Check if this is a recommendation-only message
+      const hasContent = lastMessage.content && lastMessage.content.trim() !== '';
+      const isRecommendationOnly = !hasContent && lastMessage.recommendations && lastMessage.recommendations.length > 0;
+
+      // Don't scroll for recommendation-only messages
+      if (!isRecommendationOnly) {
+        scrollToBottom();
       }
-    } else {
-      console.log('❌ No user messages found');
-    }
-  };
-
-
-  useEffect(() => {
-    // Only scroll to bottom for user messages, not for assistant messages
-    const lastMessage = messagesWithRecommendations[messagesWithRecommendations.length - 1];
-    if (lastMessage && lastMessage.role === 'user') {
-      scrollToBottom();
-    }
-  }, [conversationHistory, messagesWithRecommendations]);
-
-  // Scroll to most recent user message when assistant message is added
-  useEffect(() => {
-    const lastMessage = messagesWithRecommendations[messagesWithRecommendations.length - 1];
-    if (lastMessage && lastMessage.role === 'assistant' && lastMessage.content.includes('Found')) {
-      // This is the main "Found X events" message, scroll to the most recent user message
-      setTimeout(() => {
-        scrollToMostRecentUserMessage(messagesWithRecommendations);
-      }, 100);
     }
   }, [messagesWithRecommendations]);
 
@@ -124,7 +98,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       recommendations: []
     };
 
-    onNewMessage(userMessage);
+    onNewMessage(userMessage as ChatMessage);
     setMessagesWithRecommendations(prev => [...prev, userMessage]);
     setMessage('');
     setIsLoading(true);
@@ -139,7 +113,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         message: message.trim(),
         conversation_history: conversationHistory,
         llm_provider: llmProvider,
-        location: userLocation,
         is_initial_response: isInitialResponse,
         user_id: userId,
         conversation_id: conversationId
@@ -162,7 +135,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           };
           
           // Add to conversation history immediately
-          onNewMessage(assistantMessage);
+          onNewMessage(assistantMessage as ChatMessage);
           setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
           
           // Clear the streaming state to prevent re-rendering
@@ -188,13 +161,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           // Create a separate message for each recommendation
           const recommendationMessage: ChatMessageWithRecommendations = {
             role: 'assistant',
-            content: '', // Empty content - just show the recommendation card
+            content: undefined, // Use undefined for cleaner detection of recommendation-only messages
             timestamp: new Date().toISOString(),
             recommendations: [recommendation]
           };
           
-          // Add to conversation history immediately
-          onNewMessage(recommendationMessage);
+          // Add to local UI state for rendering (don't add to conversation history)
           setMessagesWithRecommendations(prev => [...prev, recommendationMessage]);
           
           // Update recommendations tracking
@@ -235,15 +207,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   return (
     <div className="flex flex-col h-full">
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Show welcome message when conversation is empty */}
-        {messagesWithRecommendations.length === 0 && (
-          <WelcomeMessage />
-        )}
-        
-        {messagesWithRecommendations.map((msg, index) => {
-          // Check if this is a recommendation-only message (no content, only recommendations)
-          const isRecommendationOnly = !msg.content && msg.recommendations && msg.recommendations.length > 0;
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="space-y-4">
+          {/* Show welcome message when conversation is empty */}
+          {messagesWithRecommendations.length === 0 && (
+            <WelcomeMessage />
+          )}
+
+          {messagesWithRecommendations.map((msg, index) => {
+          // Check if this message has meaningful content (not just whitespace)
+          const hasContent = msg.content && msg.content.trim() !== '';
+          // Check if this is a recommendation-only message (no meaningful content, only recommendations)
+          const isRecommendationOnly = !hasContent && msg.recommendations && msg.recommendations.length > 0;
+
+          // Skip completely empty assistant messages that aren't recommendation-only
+          if (msg.role === 'assistant' && !hasContent && (!msg.recommendations || msg.recommendations.length === 0)) {
+            return null;
+          }
           
           return (
             <div
@@ -322,33 +302,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
           </div>
         )}
-        
-        <div ref={messagesEndRef} />
+
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
       {/* Input Area */}
-      <div className="bg-gray-50/50 p-4 shadow-sm">
+      <div className="flex-shrink-0 border-t bg-background p-4">
         <form onSubmit={handleSubmit} className="flex space-x-2">
-          <input
+          <Input
             type="text"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Ask me about events, restaurants, or anything local..."
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
             disabled={isLoading}
+            className="flex-1"
           />
-          <button
+          <Button
             type="submit"
             disabled={!message.trim() || isLoading}
-            className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            size="default"
+            className="bg-amber-600 hover:bg-amber-700 text-white"
           >
             {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
             ) : (
-              <Send className="w-4 h-4" />
+              <Send className="w-4 h-4 mr-2" />
             )}
-            <span>Send</span>
-          </button>
+            Send
+          </Button>
         </form>
       </div>
     </div>

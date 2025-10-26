@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Settings, MessageCircle, MapPin } from 'lucide-react';
 import ChatInterface from './components/ChatInterface';
-import LocationInput from './components/LocationInput';
 import RegistrationModal from './components/RegistrationModal';
 import LoginModal from './components/LoginModal';
-import { ChatMessage, apiClient, LocationCoordinates } from './api/client';
+import { ChatMessage, apiClient } from './api/client';
 import { getOrCreateUserId, setUserId } from './utils/userIdManager';
 import { updateUsageStats, shouldShowRegistrationPrompt, markRegistrationPrompted, getTrialWarningMessage } from './utils/usageTracker';
 import { auth } from './firebase/config';
@@ -15,7 +14,6 @@ const App: React.FC = () => {
   const [llmProvider, setLlmProvider] = useState('openai');
   const [showSettings, setShowSettings] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
-  const [userLocation, setUserLocation] = useState<LocationCoordinates | null>(null);
   const [userId, setUserIdState] = useState<string>('');
   const [usageStats, setUsageStats] = useState<any>(null);
   const [showRegistrationModal, setShowRegistrationModal] = useState(false);
@@ -137,9 +135,6 @@ const App: React.FC = () => {
   };
 
 
-  const handleLocationChange = useCallback((location: LocationCoordinates | null) => {
-    setUserLocation(location);
-  }, []);
 
   // Initialize conversation
   useEffect(() => {
@@ -272,7 +267,7 @@ const App: React.FC = () => {
         message: query,
         conversation_history: conversationHistory,
         llm_provider: llmProvider,
-        location: userLocation,
+        location: null,
         is_initial_response: conversationHistory.length === 0,
         user_id: userId
       };
@@ -428,36 +423,28 @@ const App: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
           {/* Chat Interface */}
           <div className="lg:col-span-3">
-            <div className="bg-white rounded-lg shadow-sm h-[700px] flex flex-col">
-              <div className="p-4 bg-gray-50/50">
+            <div className="bg-white rounded-lg shadow-sm h-[650px] flex flex-col">
+              <div className="p-4 bg-gray-50/50 border-b">
                 <div className="flex items-center space-x-2">
                   <MessageCircle className="w-5 h-5 text-amber-600" />
                   <h2 className="text-lg font-semibold text-gray-900">Chat with Assistant</h2>
                 </div>
               </div>
-              
-        <ChatInterface
-          onNewMessage={handleNewMessage}
-          onRecommendations={handleRecommendations}
-          llmProvider={llmProvider}
-          conversationHistory={conversationHistory}
-          userLocation={userLocation}
-          userId={userId}
-          onTrialExceeded={() => setShowRegistrationModal(true)}
-          conversationId={currentConversationId}
-        />
+
+              <ChatInterface
+                onNewMessage={handleNewMessage}
+                onRecommendations={handleRecommendations}
+                llmProvider={llmProvider}
+                conversationHistory={conversationHistory}
+                userId={userId}
+                onTrialExceeded={() => setShowRegistrationModal(true)}
+                conversationId={currentConversationId}
+              />
             </div>
           </div>
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Location Input */}
-            <LocationInput
-              onLocationChange={handleLocationChange}
-              initialLocation={userLocation}
-            />
-
-
             {/* Quick Examples */}
             <div className="bg-white rounded-lg shadow-sm p-4">
               <h3 className="text-sm font-semibold text-gray-900 mb-3">Try asking:</h3>
