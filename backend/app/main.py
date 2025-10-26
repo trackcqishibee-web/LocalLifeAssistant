@@ -60,6 +60,12 @@ else:
         "http://127.0.0.1:5173"
     ]
 
+# Always add Render frontend domain for deployment
+render_frontend_domain = "https://locallifeassistant-frontend.onrender.com"
+if render_frontend_domain not in allow_origins:
+    allow_origins.append(render_frontend_domain)
+    logger.info(f"Added Render frontend domain to CORS: {render_frontend_domain}")
+
 # Log CORS configuration for debugging
 logger.info(f"DOMAIN_NAME environment variable: '{domain_name}'")
 logger.info(f"Allowed origins: {allow_origins}")
