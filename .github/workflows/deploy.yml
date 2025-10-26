@@ -1,4 +1,4 @@
-name: 🚀 Deploy to AWS EC2
+name: 🚀 Deploy to Production
 
 on:
   push:
@@ -31,12 +31,12 @@ jobs:
           rm -f auto-deploy.sh* 01-server-setup.sh* 02-app-deploy.sh* 03-nginx-setup.sh* 04-ssl-setup.sh* reboot-recovery.sh*
           
           # Download all deployment scripts (fresh copy with cache busting)
-          wget -q -O auto-deploy.sh "https://raw.githubusercontent.com/${{ github.repository }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/auto-deploy.sh?t=$(date +%s)"
-          wget -q -O 01-server-setup.sh "https://raw.githubusercontent.com/${{ github.repository }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/01-server-setup.sh?t=$(date +%s)"
-          wget -q -O 02-app-deploy.sh "https://raw.githubusercontent.com/${{ github.repository }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/02-app-deploy.sh?t=$(date +%s)"
-          wget -q -O 03-nginx-setup.sh "https://raw.githubusercontent.com/${{ github.repository }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/03-nginx-setup.sh?t=$(date +%s)"
-          wget -q -O 04-ssl-setup.sh "https://raw.githubusercontent.com/${{ github.repository }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/04-ssl-setup.sh?t=$(date +%s)"
-          wget -q -O reboot-recovery.sh "https://raw.githubusercontent.com/${{ github.repository }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/reboot-recovery.sh?t=$(date +%s)"
+          wget -q -O auto-deploy.sh "https://raw.githubusercontent.com/${{ secrets.DEPLOY_GITHUB_REPO }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/auto-deploy.sh?t=$(date +%s)"
+          wget -q -O 01-server-setup.sh "https://raw.githubusercontent.com/${{ secrets.DEPLOY_GITHUB_REPO }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/01-server-setup.sh?t=$(date +%s)"
+          wget -q -O 02-app-deploy.sh "https://raw.githubusercontent.com/${{ secrets.DEPLOY_GITHUB_REPO }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/02-app-deploy.sh?t=$(date +%s)"
+          wget -q -O 03-nginx-setup.sh "https://raw.githubusercontent.com/${{ secrets.DEPLOY_GITHUB_REPO }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/03-nginx-setup.sh?t=$(date +%s)"
+          wget -q -O 04-ssl-setup.sh "https://raw.githubusercontent.com/${{ secrets.DEPLOY_GITHUB_REPO }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/04-ssl-setup.sh?t=$(date +%s)"
+          wget -q -O reboot-recovery.sh "https://raw.githubusercontent.com/${{ secrets.DEPLOY_GITHUB_REPO }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/reboot-recovery.sh?t=$(date +%s)"
 
           # Make all scripts executable
           chmod +x *.sh
@@ -61,10 +61,10 @@ jobs:
 
           # Set environment variables
           export DOMAIN_NAME="${{ secrets.DOMAIN_NAME }}"
-          export GITHUB_REPO="${{ github.repository }}"
+          export GITHUB_REPO="${{ secrets.DEPLOY_GITHUB_REPO }}"
           export GITHUB_BRANCH="${{ secrets.DEPLOY_GITHUB_BRANCH }}"
           export OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
-          export FIREBASE_CREDENTIALS_PATH="/opt/locallifeassistant/firebase-service-account.json"
+          export FIREBASE_CREDENTIALS_PATH="${{ secrets.FIREBASE_CREDENTIALS_PATH }}"
           export EMAIL="${{ secrets.ADMIN_EMAIL }}"
 
           # Run automated deployment

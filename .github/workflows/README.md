@@ -10,7 +10,9 @@ Configure these secrets in: **Settings** → **Secrets and variables** → **Act
 | `SERVER_IP` | EC2 instance IP address | `3.89.127.102` |
 | `SSH_USER` | SSH username | `ubuntu` |
 | `DOMAIN_NAME` | Your domain name | `jeff.locomoco.top` |
+| `DEPLOY_GITHUB_REPO` | GitHub repository to deploy | `LijieTu/LocalLifeAssistant` |
 | `DEPLOY_GITHUB_BRANCH` | Branch to deploy from | `main` or `feature/aws-ec2-deployment` |
+| `FIREBASE_CREDENTIALS_PATH` | Path to Firebase credentials on EC2 | `/home/appuser/firebase-service-account.json` |
 | `OPENAI_API_KEY` | OpenAI API key | `sk-proj-...` |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Firebase credentials | `{ "type": "service_account", ... }` |
 | `ADMIN_EMAIL` | Email for SSL certificates | `admin@example.com` |
