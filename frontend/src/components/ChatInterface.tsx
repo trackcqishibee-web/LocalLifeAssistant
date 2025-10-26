@@ -33,16 +33,58 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [extractionSummary, setExtractionSummary] = useState<string | null>(null);
   const [messagesWithRecommendations, setMessagesWithRecommendations] = useState<ChatMessageWithRecommendations[]>([]);
+  const [currentStatus, setCurrentStatus] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const scrollToMostRecentUserMessage = (messages: ChatMessageWithRecommendations[]) => {
+    console.log('🔄 scrollToMostRecentUserMessage called with messages:', messages.length);
+    // Find all user messages and scroll to the most recent one
+    const userMessages = messages.filter(msg => msg.role === 'user');
+    console.log('👤 Found user messages:', userMessages.length);
+    
+    if (userMessages.length > 0) {
+      const mostRecentUserMessage = userMessages[userMessages.length - 1];
+      const messageIndex = messages.findIndex(msg => msg.timestamp === mostRecentUserMessage.timestamp);
+      console.log('📍 Most recent user message index:', messageIndex);
+      
+      // Find the DOM element and scroll to it
+      const messageElements = document.querySelectorAll('.chat-message');
+      console.log('🎯 Found DOM elements:', messageElements.length);
+      
+      if (messageElements[messageIndex]) {
+        console.log('📍 Scrolling to most recent user message at index:', messageIndex);
+        messageElements[messageIndex].scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        console.log('❌ Element not found at index:', messageIndex);
+      }
+    } else {
+      console.log('❌ No user messages found');
+    }
+  };
+
 
   useEffect(() => {
-    scrollToBottom();
+    // Only scroll to bottom for user messages, not for assistant messages
+    const lastMessage = messagesWithRecommendations[messagesWithRecommendations.length - 1];
+    if (lastMessage && lastMessage.role === 'user') {
+      scrollToBottom();
+    }
   }, [conversationHistory, messagesWithRecommendations]);
+
+  // Scroll to most recent user message when assistant message is added
+  useEffect(() => {
+    const lastMessage = messagesWithRecommendations[messagesWithRecommendations.length - 1];
+    if (lastMessage && lastMessage.role === 'assistant' && lastMessage.content.includes('Found')) {
+      // This is the main "Found X events" message, scroll to the most recent user message
+      setTimeout(() => {
+        scrollToMostRecentUserMessage(messagesWithRecommendations);
+      }, 100);
+    }
+  }, [messagesWithRecommendations]);
 
   // Sync with conversation history
   useEffect(() => {
@@ -72,6 +114,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setMessage('');
     setIsLoading(true);
     setExtractionSummary(null);
+    setCurrentStatus('');
 
     try {
       // Detect if this is the first user message (initial response to welcome message)
@@ -87,63 +130,79 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         conversation_id: conversationId
       };
 
-      const response = await apiClient.chat(request);
-      
-      // Check if trial exceeded
-      if (response.trial_exceeded) {
-        onTrialExceeded();
-      }
-
-      // Update conversation ID if it changed (new conversation)
-      if (response.conversation_id && response.conversation_id !== conversationId) {
-        // This will trigger App.tsx to update
-        console.log('Conversation ID updated:', response.conversation_id);
-        localStorage.setItem('current_conversation_id', response.conversation_id);
-      }
-      
-      // Set extraction summary if available and keep loading state to show it
-      if (response.extraction_summary) {
-        setExtractionSummary(response.extraction_summary);
-        // Keep loading state for a moment to show the extraction summary
-        setTimeout(() => {
+      await apiClient.chatStream(
+        request,
+        // onStatus
+        (status: string) => {
+          setCurrentStatus(status);
+        },
+        // onMessage
+        (messageContent: string, metadata?: any) => {
+          // Create the main message without recommendations (they're separate now)
           const assistantMessage: ChatMessageWithRecommendations = {
             role: 'assistant',
-            content: response.message,
+            content: messageContent,
             timestamp: new Date().toISOString(),
-            recommendations: response.recommendations || []
+            recommendations: []
           };
-
-          onNewMessage(assistantMessage);
-          console.log('Received recommendations:', response.recommendations);
-          onRecommendations(response.recommendations || []);
           
-          // Update local state with recommendations
+          // Add to conversation history immediately
+          onNewMessage(assistantMessage);
           setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
           
-          // Clear loading state
-          setIsLoading(false);
-          setExtractionSummary(null);
-        }, 1500); // Show extraction summary for 1.5 seconds
-      } else {
-        // No extraction summary, proceed normally
-        const assistantMessage: ChatMessageWithRecommendations = {
-          role: 'assistant',
-          content: response.message,
-          timestamp: new Date().toISOString(),
-          recommendations: response.recommendations || []
-        };
+          // Clear the streaming state to prevent re-rendering
+          
+          // Check if trial exceeded
+          if (metadata?.trial_exceeded) {
+            onTrialExceeded();
+          }
 
-        onNewMessage(assistantMessage);
-        console.log('Received recommendations:', response.recommendations);
-        onRecommendations(response.recommendations || []);
-        
-        // Update local state with recommendations
-        setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
-        
-        // Clear loading state
-        setIsLoading(false);
-        setExtractionSummary(null);
-      }
+          // Update conversation ID if it changed (new conversation)
+          if (metadata?.conversation_id && metadata.conversation_id !== conversationId) {
+            console.log('Conversation ID updated:', metadata.conversation_id);
+            localStorage.setItem('current_conversation_id', metadata.conversation_id);
+          }
+          
+          // Set extraction summary if available
+          if (metadata?.extraction_summary) {
+            setExtractionSummary(metadata.extraction_summary);
+          }
+        },
+        // onRecommendation
+        (recommendation: any) => {
+          // Create a separate message for each recommendation
+          const recommendationMessage: ChatMessageWithRecommendations = {
+            role: 'assistant',
+            content: '', // Empty content - just show the recommendation card
+            timestamp: new Date().toISOString(),
+            recommendations: [recommendation]
+          };
+          
+          // Add to conversation history immediately
+          onNewMessage(recommendationMessage);
+          setMessagesWithRecommendations(prev => [...prev, recommendationMessage]);
+          
+          // Update recommendations tracking
+          onRecommendations([recommendation]);
+        },
+        // onError
+        (error: string) => {
+          console.error('Streaming error:', error);
+          const errorMessage: ChatMessage = {
+            role: 'assistant',
+            content: `Sorry, I encountered an error: ${error}`,
+            timestamp: new Date().toISOString()
+          };
+          onNewMessage(errorMessage);
+        },
+        // onDone
+        () => {
+          // Clear loading state and reset streaming state
+          setIsLoading(false);
+          setCurrentStatus('');
+          setExtractionSummary(null);
+        }
+      );
     } catch (error) {
       console.error('Error sending message:', error);
       const errorMessage: ChatMessage = {
@@ -153,6 +212,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       };
       onNewMessage(errorMessage);
       setIsLoading(false);
+      setCurrentStatus('');
       setExtractionSummary(null);
     }
   };
@@ -166,46 +226,64 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           <WelcomeMessage />
         )}
         
-        {messagesWithRecommendations.map((msg, index) => (
-          <div
-            key={index}
-            className={`chat-message ${msg.role}`}
-          >
-            <div className="flex items-start space-x-2">
-              <div className="flex-shrink-0">
-                {msg.role === 'user' ? (
-                  <div className="w-8 h-8 bg-amber-600 rounded-full flex items-center justify-center text-white">
-                    <User className="w-4 h-4" />
-                  </div>
-                ) : (
-                  <div className="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                    AI
-                  </div>
-                )}
-              </div>
-              <div className="flex-1">
-                <div className="text-sm text-gray-500 mb-1">
-                  {msg.role === 'user' ? 'You' : 'Assistant'}
-                </div>
-                <div className="whitespace-pre-wrap mb-3">{msg.content}</div>
-                
-                {/* Display recommendations inline */}
-                {msg.recommendations && msg.recommendations.length > 0 && (
-                  <div className="mt-4 space-y-3">
-                    <div className="text-sm font-medium text-amber-800/80 mb-2">
-                      📋 Recommendations ({msg.recommendations.length})
+        {messagesWithRecommendations.map((msg, index) => {
+          // Check if this is a recommendation-only message (no content, only recommendations)
+          const isRecommendationOnly = !msg.content && msg.recommendations && msg.recommendations.length > 0;
+          
+          return (
+            <div
+              key={index}
+              className={`chat-message ${msg.role}`}
+            >
+              {isRecommendationOnly ? (
+                // For recommendation-only messages, just show the recommendation card
+                <div className="space-y-3">
+                  {msg.recommendations?.map((rec, recIndex) => (
+                    <div key={recIndex} className="mb-6 animate-fadeIn">
+                      <RecommendationCard recommendation={rec} />
                     </div>
-                    {msg.recommendations.map((rec, recIndex) => (
-                      <div key={recIndex} className="border border-amber-200/50 rounded-lg p-3 bg-amber-50/30">
-                        <RecommendationCard recommendation={rec} />
+                  ))}
+                </div>
+              ) : (
+                // For regular messages, show avatar, label, content, and recommendations
+                <div className="flex items-start space-x-2">
+                  <div className="flex-shrink-0">
+                    {msg.role === 'user' ? (
+                      <div className="w-8 h-8 bg-amber-600 rounded-full flex items-center justify-center text-white">
+                        <User className="w-4 h-4" />
                       </div>
-                    ))}
+                    ) : (
+                      <div className="w-8 h-8 bg-gray-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                        AI
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                  <div className="flex-1">
+                    <div className="text-sm text-gray-500 mb-1">
+                      {msg.role === 'user' ? 'You' : 'Assistant'}
+                    </div>
+                    <div className="whitespace-pre-wrap mb-3">{msg.content}</div>
+                    
+                    {/* Display recommendations inline */}
+                    {msg.recommendations && msg.recommendations.length > 0 && (
+                      <div className="mt-4 space-y-3">
+                        <div className="text-sm font-medium text-gray-600 mb-4">
+                          📋 Recommendations ({msg.recommendations.length})
+                        </div>
+                        {msg.recommendations.map((rec, recIndex) => (
+                          <div key={recIndex} className="mb-6">
+                            <RecommendationCard recommendation={rec} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
+        
         
         {isLoading && (
           <div className="chat-message assistant">
@@ -222,7 +300,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 <div className="flex items-center space-x-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>
-                    {extractionSummary || 'Processing your request...'}
+                    {currentStatus || extractionSummary || 'Processing your request...'}
                   </span>
                 </div>
               </div>
@@ -234,7 +312,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       </div>
 
       {/* Input Area */}
-      <div className="border-t border-gray-200 p-4">
+      <div className="bg-gray-50/50 p-4 shadow-sm">
         <form onSubmit={handleSubmit} className="flex space-x-2">
           <input
             type="text"
