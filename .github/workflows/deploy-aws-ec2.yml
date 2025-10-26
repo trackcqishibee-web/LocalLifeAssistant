@@ -37,6 +37,18 @@ jobs:
           chmod +x *.sh
         EOF
     
+    - name: 🔐 Setup Firebase credentials
+      run: |
+        ssh -i ~/.ssh/locomock_key.pem -o StrictHostKeyChecking=no ubuntu@3.89.127.102 << 'EOFCREDS'
+          # Create Firebase credentials file from secret
+          mkdir -p /home/ubuntu
+          cat > /home/ubuntu/firebase-service-account.json << 'EOFJSON'
+        ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        EOFJSON
+          chmod 600 /home/ubuntu/firebase-service-account.json
+          echo "✅ Firebase credentials file created"
+        EOFCREDS
+    
     - name: 🚀 Deploy application
       run: |
         ssh -i ~/.ssh/locomock_key.pem -o StrictHostKeyChecking=no ubuntu@3.89.127.102 << 'EOF'
@@ -47,7 +59,7 @@ jobs:
           export GITHUB_REPO="${{ vars.DEPLOY_GITHUB_REPO || github.repository }}"
           export GITHUB_BRANCH="${{ vars.DEPLOY_GITHUB_BRANCH || 'main' }}"
           export OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
-          export FIREBASE_CREDENTIALS_PATH="${{ secrets.FIREBASE_CREDENTIALS_PATH || '/home/ubuntu/firebase-service-account.json' }}"
+          export FIREBASE_CREDENTIALS_PATH="/home/ubuntu/firebase-service-account.json"
           export EMAIL="${{ secrets.ADMIN_EMAIL || 'admin@localhost' }}"
 
           # Run automated deployment
