@@ -15,6 +15,15 @@ if [ -z "$DOMAIN_NAME" ]; then
     exit 1
 fi
 
+# Check if DOMAIN_NAME is an IP address
+if [[ "$DOMAIN_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "⚠️  DOMAIN_NAME is an IP address ($DOMAIN_NAME)"
+    echo "ℹ️  Let's Encrypt does not issue SSL certificates for IP addresses"
+    echo "ℹ️  Application will use HTTP instead of HTTPS"
+    echo "✅ SSL setup skipped (not applicable for IP addresses)"
+    exit 0
+fi
+
 echo "🌐 Setting up SSL for domain: $DOMAIN_NAME"
 
 # Check if certificate already exists
