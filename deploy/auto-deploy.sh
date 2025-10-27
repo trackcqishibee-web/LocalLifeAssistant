@@ -124,7 +124,7 @@ LOG_LEVEL=INFO
 
 # Firebase Configuration
 FIREBASE_CREDENTIALS_PATH=$FIREBASE_CREDENTIALS_PATH
-EOF"
+EOF
 
         print_success "Environment variables saved to .env file"
 
