@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # 🚀 Automated Deployment Script for Local Life Assistant
+# Last updated: 2025-10-27 - EOF heredoc syntax fixed
 # GitHub Actions 友好的自动化部署脚本
 # Usage: ./auto-deploy.sh
 
