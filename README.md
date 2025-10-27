@@ -652,6 +652,3 @@ For questions or issues:
 ---
 
 Built with ❤️ using FastAPI, React, ChromaDB, and modern AI technologies.
-# Deployment trigger - npm fixed on EC2
-# Trigger deployment - permissions fixed
-# Trigger deployment - apt locks cleared
