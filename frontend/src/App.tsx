@@ -134,8 +134,6 @@ const App: React.FC = () => {
     console.log('Received recommendations:', recommendations);
   };
 
-
-
   // Initialize conversation
   useEffect(() => {
     if (!userId) return;
@@ -251,75 +249,12 @@ const App: React.FC = () => {
     }
   };
 
-  const handleExampleQuery = async (query: string) => {
-    const userMessage: ChatMessage = {
-      role: 'user',
-      content: query,
-      timestamp: new Date().toISOString()
-    };
-    
-    // Add user message to chat
-    handleNewMessage(userMessage);
-    
-    // Create a temporary chat interface to send the request
-    try {
-      const request = {
-        message: query,
-        conversation_history: conversationHistory,
-        llm_provider: llmProvider,
-        location: null,
-        is_initial_response: conversationHistory.length === 0,
-        user_id: userId
-      };
-      
-      const response = await apiClient.chat(request);
-      
-      const assistantMessage = {
-        role: 'assistant' as const,
-        content: response.message,
-        timestamp: new Date().toISOString(),
-        recommendations: response.recommendations || []
-      } as any;
-      
-      handleNewMessage(assistantMessage);
-      handleRecommendations(response.recommendations || []);
-    } catch (error) {
-      console.error('Error sending example query:', error);
-      const errorMessage: ChatMessage = {
-        role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
-        timestamp: new Date().toISOString()
-      };
-      handleNewMessage(errorMessage);
-    }
-  };
-
   const clearConversation = () => {
     setConversationHistory([]);
   };
 
-  const exampleQueries = [
-    "Find me a jazz concert this weekend",
-    "What restaurants are good for a date night?",
-    "Show me free events in Brooklyn",
-    "I want to try some new cuisine",
-    "What networking events are happening?",
-    "Find events in Los Angeles",
-    "Show me restaurants in Chicago",
-    "What's happening in Miami this weekend?"
-  ];
-
   return (
-    <div
-      className={`min-h-screen ${trialWarning ? 'pt-20' : ''}`}
-      style={{
-        backgroundImage: 'linear-gradient(rgba(245, 158, 11, 0.1), rgba(245, 158, 11, 0.1)), url("https://raw.githubusercontent.com/LijieTu/local-moco/main/landing.png")',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-        backgroundAttachment: 'fixed'
-      }}
-    >
+    <div className={`min-h-screen ${trialWarning ? 'pt-20' : ''}`}>
       {/* Header */}
       <header className="bg-white shadow-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -420,47 +355,24 @@ const App: React.FC = () => {
       )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Chat Interface */}
-          <div className="lg:col-span-3">
-            <div className="bg-white rounded-lg shadow-sm h-[650px] flex flex-col">
-              <div className="p-4 bg-gray-50/50 border-b">
-                <div className="flex items-center space-x-2">
-                  <MessageCircle className="w-5 h-5 text-amber-600" />
-                  <h2 className="text-lg font-semibold text-gray-900">Chat with Assistant</h2>
-                </div>
-              </div>
-
-              <ChatInterface
-                onNewMessage={handleNewMessage}
-                onRecommendations={handleRecommendations}
-                llmProvider={llmProvider}
-                conversationHistory={conversationHistory}
-                userId={userId}
-                onTrialExceeded={() => setShowRegistrationModal(true)}
-                conversationId={currentConversationId}
-              />
+        {/* Chat Interface */}
+        <div className="bg-white rounded-lg shadow-sm h-[700px] flex flex-col">
+          <div className="p-4 bg-gray-50/50">
+            <div className="flex items-center space-x-2">
+              <MessageCircle className="w-5 h-5 text-amber-600" />
+              <h2 className="text-lg font-semibold text-gray-900">Chat with Assistant</h2>
             </div>
           </div>
-
-          {/* Sidebar */}
-          <div className="space-y-6">
-            {/* Quick Examples */}
-            <div className="bg-white rounded-lg shadow-sm p-4">
-              <h3 className="text-sm font-semibold text-gray-900 mb-3">Try asking:</h3>
-              <div className="max-h-64 overflow-y-auto space-y-1">
-                {exampleQueries.map((query, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleExampleQuery(query)}
-                    className="w-full text-left p-2 text-xs text-amber-800 hover:bg-amber-50/50 rounded-md transition-colors"
-                  >
-                    <span className="text-amber-900 font-medium">"{query}"</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+          
+          <ChatInterface
+            onNewMessage={handleNewMessage}
+            onRecommendations={handleRecommendations}
+            llmProvider={llmProvider}
+            conversationHistory={conversationHistory}
+            userId={userId}
+            onTrialExceeded={() => setShowRegistrationModal(true)}
+            conversationId={currentConversationId}
+          />
         </div>
       </div>
 

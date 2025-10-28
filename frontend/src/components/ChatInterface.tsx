@@ -3,8 +3,6 @@ import { Send, Loader2, User } from 'lucide-react';
 import { ChatMessage, apiClient, ChatRequest } from '../api/client';
 import RecommendationCard from './RecommendationCard';
 import WelcomeMessage from './WelcomeMessage';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
 
 interface ChatMessageWithRecommendations {
   role: 'user' | 'assistant';
@@ -308,29 +306,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       </div>
 
       {/* Input Area */}
-      <div className="flex-shrink-0 border-t bg-background p-4">
+      <div className="bg-gray-50/50 p-4 shadow-sm">
         <form onSubmit={handleSubmit} className="flex space-x-2">
-          <Input
+          <input
             type="text"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Ask me about events, restaurants, or anything local..."
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
             disabled={isLoading}
-            className="flex-1"
           />
-          <Button
+          <button
             type="submit"
             disabled={!message.trim() || isLoading}
-            size="default"
-            className="bg-amber-600 hover:bg-amber-700 text-white"
+            className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
           >
             {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <Send className="w-4 h-4 mr-2" />
+              <Send className="w-4 h-4" />
             )}
-            Send
-          </Button>
+            <span>Send</span>
+          </button>
         </form>
       </div>
     </div>
