@@ -27,44 +27,43 @@ class EventbriteCrawler:
         
         # Common Eventbrite location IDs for major cities
         self.location_ids = {
-            # US Cities
             "new_york": "85977539",
-            "los_angeles": "85975577", 
+            # "los_angeles": "85975577", 
             "san_francisco": "85922351",
-            "chicago": "85977485",
-            "boston": "85977482",
-            "seattle": "85977488",
-            "austin": "85977481",
-            "denver": "85977483",
-            "miami": "85977484",
-            "atlanta": "85977480",
-            "philadelphia": "85977486",
-            "phoenix": "85977487",
-            "las_vegas": "85977489",
-            "san_diego": "85977490",
-            "portland": "85977491",
-            "nashville": "85977492",
-            "orlando": "85977493",
-            "houston": "85977494",
-            "dallas": "85977495",
-            "detroit": "85977496",
+            # "chicago": "85977485",
+            # "boston": "85977482",
+            # "seattle": "85977488",
+            # "austin": "85977481",
+            # "denver": "85977483",
+            # "miami": "85977484",
+            # "atlanta": "85977480",
+            # "philadelphia": "85977486",
+            # "phoenix": "85977487",
+            # "las_vegas": "85977489",
+            # "san_diego": "85977490",
+            # "portland": "85977491",
+            # "nashville": "85977492",
+            # "orlando": "85977493",
+            # "houston": "85977494",
+            # "dallas": "85977495",
+            # "detroit": "85977496",
             
             # International Cities
-            "london": "85977501",
-            "paris": "85977502", 
-            "tokyo": "85977503",
-            "sydney": "85977504",
-            "toronto": "85977505",
-            "berlin": "85977506",
-            "amsterdam": "85977507",
-            "dublin": "85977508",
-            "madrid": "85977509",
-            "rome": "85977510",
-            "singapore": "85977511",
-            "hong_kong": "85977512",
-            "mumbai": "85977513",
-            "sao_paulo": "85977514",
-            "mexico_city": "85977515",
+            # "london": "85977501",
+            # "paris": "85977502", 
+            # "tokyo": "85977503",
+            # "sydney": "85977504",
+            # "toronto": "85977505",
+            # "berlin": "85977506",
+            # "amsterdam": "85977507",
+            # "dublin": "85977508",
+            # "madrid": "85977509",
+            # "rome": "85977510",
+            # "singapore": "85977511",
+            # "hong_kong": "85977512",
+            # "mumbai": "85977513",
+            # "sao_paulo": "85977514",
+            # "mexico_city": "85977515",
         }
         
         # City name mappings for user-friendly input
@@ -186,7 +185,7 @@ class EventbriteCrawler:
 
     def get_supported_cities(self) -> List[str]:
         """Get list of supported city names"""
-        return list(self.city_aliases.keys())
+        return list(self.location_ids.keys())
     
     def _create_search_payload(self, location_id: str, page: int = 1, page_size: int = 20) -> Dict[str, Any]:
         """Create search payload for Eventbrite API"""
@@ -304,7 +303,7 @@ class EventbriteCrawler:
         logger.info(f"📅 EventbriteCrawler: Starting to fetch events for '{city_name}'")
 
         # Map city name to Eventbrite location ID
-        location_id = self._get_eventbrite_location_id(city_name)
+        location_id = self.get_location_id(city_name)
         logger.info(f"📅 EventbriteCrawler: Mapped '{city_name}' to location ID {location_id}")
 
         real_events = self.fetch_events(location_id=location_id, max_pages=max_pages)
@@ -315,62 +314,6 @@ class EventbriteCrawler:
             logger.warning(f"📅 EventbriteCrawler: No events found for {city_name}")
 
         return real_events
-    
-    def _get_eventbrite_location_id(self, city_name: str) -> str:
-        """
-        Map city name to Eventbrite location ID
-        
-        Args:
-            city_name: City name (e.g., "san francisco", "nyc", "london")
-            
-        Returns:
-            Eventbrite location ID
-        """
-        # Eventbrite location ID mapping - US Cities with real location IDs
-        location_mapping = {
-            # Major US Cities with actual location IDs
-            "new york": "85977539",           # NYC
-            "nyc": "85977539",               # NYC
-            "brooklyn": "85977605",          # Brooklyn, NY
-            "queens": "85977601",            # Queens, NY
-            "manhattan": "85977539",         # Manhattan (using NYC)
-            
-            "san francisco": "85922351",     # Palo Alto (closest to SF)
-            "santa clara": "85922355",       # Santa Clara, CA
-            "sacramento": "85922413",        # Sacramento, CA
-            "davis": "85922405",             # Davis, CA
-            "burlingame": "85922509",        # Burlingame, CA
-            "morgan hill": "85922359",       # Morgan Hill, CA
-            
-            # NY State cities
-            "syracuse": "85977803",          # Syracuse, NY
-            "greenwich": "85977609",         # Greenwich, NY
-            "melville": "85977611",          # Melville, NY
-            "hudson": "85977813",            # Hudson, NY
-            "poughkeepsie": "85977817",      # Poughkeepsie, NY
-            "catskill": "85977807",          # Catskill, NY
-            "kinderhook": "85977811",        # Kinderhook, NY
-            "gowanda": "85977541",           # Gowanda, NY
-            "olean": "85977543",             # Olean, NY
-            
-            # Major cities that don't have specific IDs yet (fallback to NYC)
-            "los angeles": "85977539",       # NYC events for now
-            "chicago": "85977539",           # NYC events for now
-            "boston": "85977539",            # NYC events for now
-            "seattle": "85977539",           # NYC events for now
-            "austin": "85977539",            # NYC events for now
-            "miami": "85977539",             # NYC events for now
-            "denver": "85977539",            # NYC events for now
-            "atlanta": "85977539",           # NYC events for now
-            "phoenix": "85977539",           # NYC events for now
-            "detroit": "85977539",           # NYC events for now
-        }
-        
-        # Clean city name
-        clean_city = city_name.lower().strip().replace('_', ' ')
-        
-        # Return mapped ID or default to NYC
-        return location_mapping.get(clean_city, "85977539")
 
     def fetch_events_multiple_cities(self, cities: List[str], max_pages_per_city: int = 2) -> Dict[str, List[Dict[str, Any]]]:
         """
@@ -476,7 +419,7 @@ class SohuCrawler:
 
             # Enhance each article with full content
             enhanced_articles = []
-            for i, article in enumerate(articles[:10]):  # Limit to 10 articles
+            for i, article in enumerate(articles):
                 if article.get('article_url'):
                     try:
                         logger.debug(f"📰 SohuCrawler: Fetching content for article {i+1}/{min(len(articles), 10)}")
@@ -667,7 +610,7 @@ class SohuCrawler:
             prompt = f"""
             Normalize this Sohu article into a standard event format.
 
-            Raw article data: {json.dumps(article, indent=2)}
+            Raw article data: {json.dumps(article, indent=2, ensure_ascii=False)}
 
             Return JSON with these exact fields:
             {{
@@ -801,6 +744,7 @@ class EventCrawler:
 
         logger.info(f"📊 Total events/articles collected: {len(all_events)} from {len(sources)} sources")
         return all_events
+
 
 
 # Global instance for backward compatibility

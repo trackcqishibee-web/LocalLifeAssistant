@@ -22,7 +22,8 @@ venv/
 
 # Database and cache
 chroma_db/
-event_cache/
+cache/
+
 
 # Build outputs
 .vite/

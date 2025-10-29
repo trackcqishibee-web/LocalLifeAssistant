@@ -284,24 +284,19 @@ async def smart_cached_chat(request: ChatRequest):
         logger.info(f"Final city decision: {city}")
         # ------------------------------------------------------------
         
-        # Step 5: Try to get cached events
-        cached_events = cache_manager.get_cached_events(city)
+        # Step 5: Try to get cached events (will fetch fresh if expired)
+        cached_events = cache_manager.get_cached_events(city, event_crawler)
         cache_age_hours = cache_manager.get_cache_age(city)
-        
+
         if cached_events:
             logger.info(f"Using cached events for {city} (age: {cache_age_hours:.1f}h)")
             events = cached_events
-            cache_used = True
+            cache_used = cache_age_hours is not None and cache_age_hours > 0
         else:
-            logger.info(f"No valid cache for {city}, fetching fresh events")
-            # Fetch fresh events if no cache
-            events = event_crawler.fetch_events_by_city(city, max_pages=3)
-            logger.info(f"Fetched {len(events)} fresh events for {city}")
-            
-            # Cache the fresh events
-            cache_manager.cache_events(city, events)
+            logger.warning(f"Failed to get any events for {city}")
+            events = []
             cache_used = False
-            cache_age_hours = 0
+            cache_age_hours = None
         
         # Step 6: LLM-powered intelligent event search with preferences
         logger.info(f"Starting LLM search for query: '{request.message}' with {len(events)} events")
@@ -483,51 +478,31 @@ async def stream_chat_response(request: ChatRequest):
         
         logger.info(f"Final city decision: {city}")
         
-        # Step 1: Try to get cached events
+        # Step 1: Try to get cached events (will fetch fresh if expired)
         yield f"data: {json.dumps({'type': 'status', 'content': f'Searching for events in {city.title()}...'})}\n\n"
         await asyncio.sleep(0.3)
-        
-        cached_events = cache_manager.get_cached_events(city)
+
+        # Get cached events (will fetch fresh automatically if expired)
+        cached_events = cache_manager.get_cached_events(city, event_crawler)
         cache_age_hours = cache_manager.get_cache_age(city)
-        
+
         if cached_events:
-            logger.info(f"Using cached events for {city} (age: {cache_age_hours:.1f}h)")
             events = cached_events
-            cache_used = True
-            yield f"data: {json.dumps({'type': 'status', 'content': f'Found cached events for {city.title()} (from {cache_age_hours:.1f}h ago)'})}\n\n"
+            if cache_age_hours is not None and cache_age_hours > 0:
+                # Using cached events
+                logger.info(f"Using cached events for {city} (age: {cache_age_hours:.1f}h)")
+                cache_used = True
+                yield f"data: {json.dumps({'type': 'status', 'content': f'Found cached events for {city.title()} (from {cache_age_hours:.1f}h ago)'})}\n\n"
+            else:
+                # Freshly fetched events
+                logger.info(f"Fetched {len(events)} fresh events for {city}")
+                cache_used = False
+                yield f"data: {json.dumps({'type': 'status', 'content': f'Found {len(events)} fresh events for {city.title()}'})}\n\n"
         else:
-            logger.info(f"No valid cache for {city}, fetching fresh events")
-            
-            # Alternate between two similar messages while fetching fresh events
-            fetching_messages = [
-                f"Fetching fresh events for {city.title()}...",
-                f"Searching for the latest events in {city.title()}..."
-            ]
-            
-            # Create a task for the event fetching
-            async def fetch_events():
-                return event_crawler.fetch_events_by_city(city, max_pages=3)
-            
-            # Start the event fetching task
-            fetch_task = asyncio.create_task(fetch_events())
-            
-            # Show alternating messages while fetching events
-            i = 0
-            while not fetch_task.done():
-                message = fetching_messages[i % 2]  # Alternate between the two messages
-                yield f"data: {json.dumps({'type': 'status', 'content': message})}\n\n"
-                await asyncio.sleep(1.0)  # 1 second delay between messages
-                i += 1
-            
-            # Wait for event fetching to complete
-            events = await fetch_task
-            logger.info(f"Fetched {len(events)} fresh events for {city}")
-            
-            # Step 3: Cache the fresh events
-            cache_manager.cache_events(city, events)
+            logger.warning(f"Failed to get any events for {city}")
+            events = []
             cache_used = False
-            cache_age_hours = 0
-            yield f"data: {json.dumps({'type': 'status', 'content': f'Found {len(events)} fresh events for {city.title()}'})}\n\n"
+            cache_age_hours = None
         
         # Step 4: LLM-powered intelligent event search with preferences
         # Alternate between two similar messages to keep users engaged

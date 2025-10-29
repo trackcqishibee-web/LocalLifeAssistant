@@ -31,7 +31,7 @@ class SearchService:
         
         # Prepare event summaries for LLM
         event_summaries = []
-        for i, event in enumerate(events[:20]):  # Limit to top 20 for performance
+        for i, event in enumerate(events):
             summary = {
                 "id": i,
                 "title": event.get("title", ""),
@@ -63,7 +63,7 @@ You are an expert event recommendation system. Given a user query and a list of 
 User Query: "{query}"
 {preferences_text}
 Available Events:
-{json.dumps(event_summaries, indent=2)}
+{json.dumps(event_summaries, indent=2, ensure_ascii=False)}
 
 Please analyze each event and return a JSON object with:
 1. "selected_events": Array of event IDs (0-19) ranked by relevance (max 5 events)
@@ -104,7 +104,7 @@ Return format:
                 temperature=0.1
             )
             
-            logger.info(f"OpenAI API call successful")
+            # logger.info(f"OpenAI API call with {prompt} successful")
             
             # Parse LLM response
             llm_response = response.choices[0].message.content.strip()
