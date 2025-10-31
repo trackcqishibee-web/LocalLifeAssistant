@@ -30,7 +30,22 @@ export interface ChatRequest {
 
 export interface RecommendationItem {
   type: 'event' | 'restaurant';
-  data: any;
+  data: {
+    title?: string;
+    name?: string;
+    description: string;
+    venue_name?: string;
+    venue_city?: string;
+    start_datetime?: string;
+    end_datetime?: string;
+    image_url?: string;
+    event_url?: string;
+    categories?: string[];
+    rating?: number;
+    is_open_now?: boolean;
+    website?: string;
+    [key: string]: any;
+  };
   relevance_score: number;
   explanation: string;
 }

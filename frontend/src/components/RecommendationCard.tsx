@@ -1,10 +1,27 @@
 import React from 'react';
 import { MapPin, Calendar, Star, ExternalLink, Clock } from 'lucide-react';
 
+interface EventData {
+  title?: string;
+  name?: string;
+  description: string;
+  venue_name?: string;
+  venue_city?: string;
+  start_datetime?: string;
+  end_datetime?: string;
+  image_url?: string;
+  event_url?: string;
+  categories?: string[];
+  rating?: number;
+  is_open_now?: boolean;
+  website?: string;
+  [key: string]: any;
+}
+
 interface RecommendationCardProps {
   recommendation: {
     type: 'event' | 'restaurant';
-    data: any;
+    data: EventData;
     relevance_score: number;
     explanation: string;
   };
@@ -13,7 +30,7 @@ interface RecommendationCardProps {
 const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation }) => {
   const { type, data, explanation } = recommendation;
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | undefined) => {
     try {
       if (!dateString || dateString === 'TBD') return 'Date TBD';
       const date = new Date(dateString);
@@ -45,6 +62,21 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
 
   return (
     <div className="recommendation-card">
+      {/* Event Image */}
+      {data.image_url && (
+        <div className="mb-3">
+          <img
+            src={data.image_url}
+            alt={type === 'event' ? data.title : data.name}
+            className="w-full h-48 object-cover rounded-lg"
+            onError={(e) => {
+              // Hide image if it fails to load
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
+          />
+        </div>
+      )}
+
       <div className="flex items-start justify-between mb-0.5">
         <h3 className="text-lg font-bold flex-1 pr-4">
           {type === 'event' ? data.title : data.name}
