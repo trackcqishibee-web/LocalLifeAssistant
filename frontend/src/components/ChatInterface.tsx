@@ -3,7 +3,6 @@ import { Send, Loader2 } from 'lucide-react';
 import { ChatMessage, ChatRequest } from '../api/client';
 import { dataService } from '../services/dataService';
 import RecommendationCard from './RecommendationCard';
-import WelcomeMessage from './WelcomeMessage';
 import { ImageWithFallback } from './ImageWithFallback';
 import userAvatarImg from '../assets/images/figma/user-avatar.png';
 import agentAvatarImg from '../assets/images/figma/agent-avatar.png';
@@ -43,6 +42,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+  };
+
+  const scrollToBottomSmooth = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
@@ -58,7 +61,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       // Don't scroll for recommendation-only messages
       if (!isRecommendationOnly) {
-        scrollToBottom();
+        scrollToBottomSmooth();
       }
     }
   }, [messagesWithRecommendations]);
@@ -88,6 +91,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     });
     
     setMessagesWithRecommendations(syncedMessages);
+    
+    // Scroll to bottom when messages are synced (including initial message)
+    // Use requestAnimationFrame to ensure DOM is updated before scrolling
+    if (syncedMessages.length > 0) {
+      requestAnimationFrame(() => {
+        setTimeout(() => scrollToBottom(), 50);
+      });
+    }
   }, [conversationHistory]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -110,7 +121,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
     try {
       // Detect if this is the first user message (initial response to welcome message)
-      const isInitialResponse = conversationHistory.length === 0;
+      // Check if conversationHistory only has the initial agent message or is empty
+      const hasOnlyInitialMessage = conversationHistory.length === 1 && 
+        conversationHistory[0]?.role === 'assistant' &&
+        conversationHistory[0]?.content?.includes('What city, state, or zip code');
+      const isInitialResponse = conversationHistory.length === 0 || hasOnlyInitialMessage;
       
       const request: ChatRequest = {
         message: message.trim(),
@@ -158,6 +173,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           if (metadata?.extraction_summary) {
             setExtractionSummary(metadata.extraction_summary);
           }
+          
         },
         // onRecommendation
         (recommendation: any) => {
@@ -207,9 +223,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
-  const handleExampleClick = (text: string) => {
-    setMessage(text);
-  };
 
   // Hidden for now - hasRecommendations and handleRefresh function
   // const hasRecommendations = messagesWithRecommendations.some(
@@ -304,11 +317,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <div className="space-y-4">
-          {/* Show welcome message when conversation is empty */}
-          {messagesWithRecommendations.length === 0 && (
-            <WelcomeMessage onExampleClick={handleExampleClick} />
-          )}
-
           {messagesWithRecommendations.map((msg, index) => {
           // Check if this message has meaningful content (not just whitespace)
           const hasContent = msg.content && msg.content.trim() !== '';
@@ -391,7 +399,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#76C1B2' }} />
                 <p className="text-[15px]" style={{ color: '#221A13' }}>
-                  {currentStatus || extractionSummary || 'Processing your request...'}
+                  {currentStatus || extractionSummary || '...'}
                 </p>
               </div>
             </div>

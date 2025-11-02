@@ -38,7 +38,17 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
     }
   };
 
-  const price = eventData.is_free ? 'Free' : (eventData.ticket_min_price || 'TBD');
+  const formatPrice = (priceValue: string | number | undefined): string => {
+    if (!priceValue || priceValue === 'TBD' || priceValue === '') return 'TBD';
+    const priceStr = String(priceValue).trim();
+    if (priceStr.startsWith('$')) return priceStr;
+    if (priceStr === 'Free') return 'Free';
+    const numericValue = parseFloat(priceStr);
+    if (isNaN(numericValue)) return priceStr;
+    return `$${numericValue}`;
+  };
+
+  const price = eventData.is_free ? 'Free' : formatPrice(eventData.ticket_min_price);
   const [liked, setLiked] = React.useState(false);
 
   return (

@@ -158,7 +158,8 @@ class APIClient {
                     extraction_summary: data.extraction_summary,
                     usage_stats: data.usage_stats,
                     trial_exceeded: data.trial_exceeded,
-                    conversation_id: data.conversation_id
+                    conversation_id: data.conversation_id,
+                    location_processed: data.location_processed
                   });
                   break;
                 case 'recommendation':

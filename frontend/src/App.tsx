@@ -33,6 +33,10 @@ const App: React.FC = () => {
 
     // Scroll to top on initial load
     window.scrollTo(0, 0);
+
+    // Clear chat history on page refresh (component remount)
+    setConversationHistory([]);
+    localStorage.removeItem('current_conversation_id');
   }, []);
 
   // Firebase authentication state listener
@@ -121,34 +125,22 @@ const App: React.FC = () => {
     if (!userId) return;
     
     const initializeConversation = async () => {
-      // Check localStorage for current conversation
-      const savedConversationId = localStorage.getItem('current_conversation_id');
+      // Create a new conversation (history already cleared on page refresh)
+      const newId = await apiClient.createConversation(userId, { 
+        llm_provider: llmProvider 
+      });
+      setCurrentConversationId(newId);
+      localStorage.setItem('current_conversation_id', newId);
       
-      if (savedConversationId) {
-        try {
-          // Try to load existing conversation
-          const conversation = await apiClient.getConversation(userId, savedConversationId);
-          setCurrentConversationId(savedConversationId);
-          setConversationHistory(conversation.messages);
-          console.log('Loaded existing conversation:', savedConversationId);
-        } catch (error) {
-          // Conversation not found, create new one
-          console.log('Conversation not found, creating new one');
-          const newId = await apiClient.createConversation(userId, { 
-            llm_provider: llmProvider 
-          });
-          setCurrentConversationId(newId);
-          localStorage.setItem('current_conversation_id', newId);
-        }
-      } else {
-        // Create new conversation
-        const newId = await apiClient.createConversation(userId, { 
-          llm_provider: llmProvider 
-        });
-        setCurrentConversationId(newId);
-        localStorage.setItem('current_conversation_id', newId);
-        console.log('Created new conversation:', newId);
-      }
+      // Start conversation with initial agent message
+      const initialMessage: ChatMessage = {
+        role: 'assistant',
+        content: 'Hi! What city, state, or zip code would you like to search for events in?',
+        timestamp: new Date().toISOString()
+      };
+      setConversationHistory([initialMessage]);
+      
+      console.log('Created new conversation:', newId);
     };
     
     initializeConversation();
@@ -256,7 +248,10 @@ const App: React.FC = () => {
   return (
     <div className="h-dvh bg-[#FCFBF9] flex flex-col max-w-md mx-auto relative overflow-hidden">
       {/* Fixed Header Container */}
-      <div className="fixed top-0 left-0 right-0 z-50 bg-[#FCFBF9] max-w-md mx-auto">
+      <div 
+        className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-md z-[9999] bg-[#FCFBF9]"
+        style={{ position: 'fixed', top: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '28rem' }}
+      >
         {/* Header */}
         <div className="bg-[#FCFBF9] px-4 py-2.5 border-b border-slate-200/50 flex items-center gap-2">
           <button
