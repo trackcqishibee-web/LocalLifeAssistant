@@ -79,7 +79,7 @@ const mockEvents: any[] = [
 
 // Mock implementation of data service
 class MockDataService implements IDataService {
-  async chat(request: ChatRequest): Promise<ChatResponse> {
+  async chat(_request: ChatRequest): Promise<ChatResponse> {
     // Simulate API delay
     await new Promise(resolve => setTimeout(resolve, 500));
 
@@ -96,7 +96,8 @@ class MockDataService implements IDataService {
       recommendations,
       llm_provider_used: 'mock',
       cache_used: false,
-      conversation_id: `mock-conv-${Date.now()}`
+      conversation_id: `mock-conv-${Date.now()}`,
+      trial_exceeded: false
     };
   }
 
@@ -117,10 +118,10 @@ class MockDataService implements IDataService {
       await new Promise(resolve => setTimeout(resolve, 300));
 
       // Send message
-      const message = `🎉 Found ${mockEvents.length} events that match your search! Check out the recommendations below ↓`;
+      const message = `🎉 Found ${mockEvents.length} events that match your search for "${request.message}"! Check out the recommendations below ↓`;
       onMessage(message, {
         extraction_summary: 'Extracted preferences: spiritual wellness, personal growth',
-        conversation_id: `mock-conv-${Date.now()}`
+        conversation_id: request.conversation_id || `mock-conv-${Date.now()}`
       });
 
       await new Promise(resolve => setTimeout(resolve, 200));
