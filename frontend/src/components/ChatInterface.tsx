@@ -7,6 +7,7 @@ import WelcomeMessage from './WelcomeMessage';
 import { ImageWithFallback } from './ImageWithFallback';
 import userAvatarImg from '../assets/images/figma/user-avatar.png';
 import agentAvatarImg from '../assets/images/figma/agent-avatar.png';
+import refreshIcon from '../assets/images/figma/refresh-icon.png';
 
 interface ChatMessageWithRecommendations {
   role: 'user' | 'assistant';
@@ -210,6 +211,93 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setMessage(text);
   };
 
+  const hasRecommendations = messagesWithRecommendations.some(
+    msg => msg.recommendations && msg.recommendations.length > 0
+  );
+
+  const handleRefresh = async () => {
+    if (!hasRecommendations || isLoading) return;
+
+    // Find the last user message with recommendations
+    const lastUserMessage = messagesWithRecommendations
+      .slice()
+      .reverse()
+      .find(msg => msg.role === 'user' && msg.content);
+
+    if (!lastUserMessage || !lastUserMessage.content) return;
+
+    // Clear existing recommendations
+    setMessagesWithRecommendations(prev => 
+      prev.filter(msg => !msg.recommendations || msg.recommendations.length === 0)
+    );
+
+    // Re-trigger the chat request
+    setIsLoading(true);
+    setCurrentStatus('Refreshing recommendations...');
+
+    try {
+      const request: ChatRequest = {
+        message: lastUserMessage.content,
+        conversation_history: conversationHistory,
+        llm_provider: llmProvider,
+        is_initial_response: false,
+        user_id: userId,
+        conversation_id: conversationId
+      };
+
+      await dataService.chatStream(
+        request,
+        (status: string) => setCurrentStatus(status),
+        (messageContent: string, metadata?: any) => {
+          const assistantMessage: ChatMessageWithRecommendations = {
+            role: 'assistant',
+            content: messageContent,
+            timestamp: new Date().toISOString(),
+            recommendations: []
+          };
+          
+          onNewMessage(assistantMessage as ChatMessage);
+          setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
+          
+          if (metadata?.trial_exceeded) {
+            onTrialExceeded();
+          }
+          if (metadata?.conversation_id && metadata.conversation_id !== conversationId) {
+            localStorage.setItem('current_conversation_id', metadata.conversation_id);
+          }
+        },
+        (recommendation: any) => {
+          const recommendationMessage: ChatMessageWithRecommendations = {
+            role: 'assistant',
+            content: undefined,
+            timestamp: new Date().toISOString(),
+            recommendations: [recommendation]
+          };
+          
+          setMessagesWithRecommendations(prev => [...prev, recommendationMessage]);
+          onRecommendations([recommendation]);
+        },
+        (error: string) => {
+          console.error('Refresh error:', error);
+          const errorMessage: ChatMessage = {
+            role: 'assistant',
+            content: `Sorry, I encountered an error refreshing: ${error}`,
+            timestamp: new Date().toISOString()
+          };
+          onNewMessage(errorMessage);
+        },
+        () => {
+          setIsLoading(false);
+          setCurrentStatus('');
+        }
+      );
+    } catch (error) {
+      console.error('Error refreshing:', error);
+      setIsLoading(false);
+      setCurrentStatus('');
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#FCFBF9]">
       {/* Messages Area */}
@@ -248,12 +336,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 /* Recommendation-only message - show cards horizontally */
                 <div className="flex gap-2 items-start">
                   <div className="w-11 h-11 flex-shrink-0" />
-                  <div className="flex-1 space-y-3 min-w-0">
+                  <div className="flex-1 min-w-0">
                     {/* Event Cards - Horizontal Scroll */}
                     <div className="overflow-x-auto overflow-y-hidden -mx-1 scrollbar-hide">
-                      <div className="flex gap-3 px-1 pb-2">
+                      <div className="flex flex-nowrap gap-3 px-1 pb-2">
                         {msg.recommendations?.map((rec, recIndex) => (
-                          <div key={recIndex}>
+                          <div key={recIndex} className="flex-shrink-0">
                             <RecommendationCard recommendation={rec} />
                           </div>
                         ))}
@@ -270,17 +358,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   </div>
                   
                   {/* Bot Message */}
-                  <div className="flex-1 space-y-3 min-w-0">
-                    <div className="bg-white rounded-xl rounded-tl-sm px-4 py-3 shadow-md border" style={{ borderColor: '#F5F5F5' }}>
+                  <div className="flex-1 min-w-0">
+                    <div className="bg-white rounded-xl rounded-tl-sm px-4 py-3 shadow-md border mb-3" style={{ borderColor: '#F5F5F5' }}>
                       <p className="text-[15px]" style={{ color: '#221A13' }}>{msg.content}</p>
                     </div>
 
                     {/* Event Cards - Horizontal Scroll */}
                     {msg.recommendations && msg.recommendations.length > 0 && (
                       <div className="overflow-x-auto overflow-y-hidden -mx-1 scrollbar-hide">
-                        <div className="flex gap-3 px-1 pb-2">
+                        <div className="flex flex-nowrap gap-3 px-1 pb-2">
                           {msg.recommendations.map((rec, recIndex) => (
-                            <div key={recIndex}>
+                            <div key={recIndex} className="flex-shrink-0">
                               <RecommendationCard recommendation={rec} />
                             </div>
                           ))}
@@ -319,7 +407,26 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       {/* Input Area */}
       <div className="bg-[#FCFBF9] px-4 py-6 flex-shrink-0">
-        <form onSubmit={handleSubmit} className="flex gap-3 items-center">
+        <form onSubmit={handleSubmit} className="flex gap-3 items-center relative">
+          {/* Refresh Button */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={!hasRecommendations || isLoading}
+              className="rounded-full bg-white h-14 w-14 flex items-center justify-center transition-all shadow-md border-[0.5px] border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 disabled:hover:bg-white active:scale-90 active:shadow-lg"
+            >
+              <img 
+                src={refreshIcon} 
+                alt="Refresh" 
+                className="w-8 h-8 transition-transform active:rotate-180" 
+                style={{ 
+                  filter: 'invert(67%) sepia(18%) saturate(1245%) hue-rotate(121deg) brightness(92%) contrast(86%)'
+                }} 
+              />
+            </button>
+          </div>
+          
           <input
             type="text"
             value={message}
@@ -329,6 +436,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             style={{ color: '#221A13' }}
             disabled={isLoading}
           />
+          
           <button
             type="submit"
             disabled={!message.trim() || isLoading}
