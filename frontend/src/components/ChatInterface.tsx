@@ -336,9 +336,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 /* Recommendation-only message - show cards horizontally */
                 <div className="flex gap-2 items-start">
                   <div className="w-11 h-11 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 overflow-hidden">
                     {/* Event Cards - Horizontal Scroll */}
-                    <div className="overflow-x-auto overflow-y-hidden -mx-1 scrollbar-hide">
+                    <div className="overflow-x-auto overflow-y-hidden -mx-1 scrollbar-hide horizontal-scroll-mobile">
                       <div className="flex flex-nowrap gap-3 px-1 pb-2">
                         {msg.recommendations?.map((rec, recIndex) => (
                           <div key={recIndex} className="flex-shrink-0">
@@ -358,14 +358,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   </div>
                   
                   {/* Bot Message */}
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 overflow-hidden">
                     <div className="bg-white rounded-xl rounded-tl-sm px-4 py-3 shadow-md border mb-3" style={{ borderColor: '#F5F5F5' }}>
                       <p className="text-[15px]" style={{ color: '#221A13' }}>{msg.content}</p>
                     </div>
 
                     {/* Event Cards - Horizontal Scroll */}
                     {msg.recommendations && msg.recommendations.length > 0 && (
-                      <div className="overflow-x-auto overflow-y-hidden -mx-1 scrollbar-hide">
+                      <div className="overflow-x-auto overflow-y-hidden -mx-1 scrollbar-hide horizontal-scroll-mobile">
                         <div className="flex flex-nowrap gap-3 px-1 pb-2">
                           {msg.recommendations.map((rec, recIndex) => (
                             <div key={recIndex} className="flex-shrink-0">

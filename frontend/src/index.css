@@ -92,6 +92,12 @@
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
+
+  .horizontal-scroll-mobile {
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+    overscroll-behavior-x: contain;
+  }
 }
 
 @keyframes fadeIn {
