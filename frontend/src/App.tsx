@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Settings, MessageCircle, MapPin } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Menu, Home, LogIn, UserPlus } from 'lucide-react';
 import ChatInterface from './components/ChatInterface';
 import RegistrationModal from './components/RegistrationModal';
 import LoginModal from './components/LoginModal';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from './components/ui/sheet';
 import { ChatMessage, apiClient } from './api/client';
 import { getOrCreateUserId, setUserId } from './utils/userIdManager';
 import { updateUsageStats, shouldShowRegistrationPrompt, markRegistrationPrompted, getTrialWarningMessage } from './utils/usageTracker';
@@ -11,9 +12,8 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 
 const App: React.FC = () => {
   const [conversationHistory, setConversationHistory] = useState<ChatMessage[]>([]);
-  const [llmProvider, setLlmProvider] = useState('openai');
-  const [showSettings, setShowSettings] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
+  const [llmProvider] = useState('openai');
+  const [menuOpen, setMenuOpen] = useState(false);
   const [userId, setUserIdState] = useState<string>('');
   const [usageStats, setUsageStats] = useState<any>(null);
   const [showRegistrationModal, setShowRegistrationModal] = useState(false);
@@ -25,15 +25,7 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  const availableProviders = [
-    { value: 'openai', label: 'OpenAI (GPT-3.5)' },
-    { value: 'anthropic', label: 'Anthropic Claude' },
-    { value: 'ollama', label: 'Ollama (Local)' }
-  ];
-
   useEffect(() => {
-    checkConnection();
-
     // Prevent browser scroll restoration on page load
     if ('scrollRestoration' in history) {
       history.scrollRestoration = 'manual';
@@ -41,6 +33,11 @@ const App: React.FC = () => {
 
     // Scroll to top on initial load
     window.scrollTo(0, 0);
+
+    // On page refresh, always clear conversation history and start fresh
+    setConversationHistory([]);
+    localStorage.removeItem('current_conversation_id');
+    localStorage.removeItem('conversation_history');
   }, []);
 
   // Firebase authentication state listener
@@ -115,18 +112,13 @@ const App: React.FC = () => {
     }
   }, [userId]);
 
-  const checkConnection = async () => {
-    try {
-      await apiClient.healthCheck();
-      setIsConnected(true);
-    } catch (error) {
-      console.error('Connection failed:', error);
-      setIsConnected(false);
-    }
-  };
-
   const handleNewMessage = (message: ChatMessage) => {
-    setConversationHistory(prev => [...prev, message]);
+    setConversationHistory(prev => {
+      const updated = [...prev, message];
+      // Persist to localStorage for session preservation
+      localStorage.setItem('conversation_history', JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const handleRecommendations = (recommendations: any[]) => {
@@ -134,37 +126,72 @@ const App: React.FC = () => {
     console.log('Received recommendations:', recommendations);
   };
 
-  // Initialize conversation
+  // Initialize conversation when userId changes (but preserve during login/logout)
+  // Use a ref to track if we're in the middle of a login/logout operation
+  const preserveConversationRef = useRef(false);
+  
   useEffect(() => {
     if (!userId) return;
     
     const initializeConversation = async () => {
-      // Check localStorage for current conversation
-      const savedConversationId = localStorage.getItem('current_conversation_id');
+      // If we're preserving conversation (during login/logout), don't create new one
+      if (preserveConversationRef.current) {
+        preserveConversationRef.current = false; // Reset flag
+        return;
+      }
       
-      if (savedConversationId) {
+      // Check if we have an existing conversation from localStorage (only if preserving)
+      const existingConvId = localStorage.getItem('current_conversation_id');
+      const existingHistoryJson = localStorage.getItem('conversation_history');
+      
+      // Only restore if we have both and conversationHistory is empty (preserved state)
+      if (existingConvId && existingHistoryJson && conversationHistory.length === 0) {
         try {
-          // Try to load existing conversation
-          const conversation = await apiClient.getConversation(userId, savedConversationId);
-          setCurrentConversationId(savedConversationId);
-          setConversationHistory(conversation.messages);
-          console.log('Loaded existing conversation:', savedConversationId);
+          const existingHistory = JSON.parse(existingHistoryJson);
+          if (Array.isArray(existingHistory) && existingHistory.length > 0) {
+            // Try to load the existing conversation from the backend
+            try {
+              const conversation = await apiClient.getConversation(userId, existingConvId);
+              if (conversation && conversation.messages && conversation.messages.length > 0) {
+                // Preserve existing conversation from backend
+                setCurrentConversationId(existingConvId);
+                setConversationHistory(conversation.messages);
+                localStorage.setItem('conversation_history', JSON.stringify(conversation.messages));
+                console.log('Restored conversation from backend:', existingConvId);
+                return;
+              }
+            } catch (error) {
+              console.log('Could not load conversation from backend, using localStorage:', error);
+              // Use localStorage version as fallback
+              setCurrentConversationId(existingConvId);
+              setConversationHistory(existingHistory);
+              console.log('Restored conversation from localStorage:', existingConvId);
+              return;
+            }
+          }
         } catch (error) {
-          // Conversation not found, create new one
-          console.log('Conversation not found, creating new one');
-          const newId = await apiClient.createConversation(userId, { 
-            llm_provider: llmProvider 
-          });
-          setCurrentConversationId(newId);
-          localStorage.setItem('current_conversation_id', newId);
+          console.log('Could not parse conversation history from localStorage:', error);
+          // Continue to create new conversation
         }
-      } else {
-        // Create new conversation
+      }
+      
+      // No existing conversation or on fresh page load - create new one
+      if (conversationHistory.length === 0) {
         const newId = await apiClient.createConversation(userId, { 
           llm_provider: llmProvider 
         });
         setCurrentConversationId(newId);
         localStorage.setItem('current_conversation_id', newId);
+        
+        // Start conversation with initial agent message
+        const initialMessage: ChatMessage = {
+          role: 'assistant',
+          content: 'Hi! What city, state, or zip code would you like to search for events in?',
+          timestamp: new Date().toISOString()
+        };
+        setConversationHistory([initialMessage]);
+        localStorage.setItem('conversation_history', JSON.stringify([initialMessage]));
+        
         console.log('Created new conversation:', newId);
       }
     };
@@ -174,6 +201,13 @@ const App: React.FC = () => {
 
   const handleRegister = async (anonymousUserId: string, _email: string, _password: string, _name: string, idToken: string) => {
     try {
+      // Preserve current conversation before registration
+      const currentConvId = currentConversationId;
+      const currentHistory = conversationHistory;
+      
+      // Set flag to preserve conversation during userId change
+      preserveConversationRef.current = true;
+      
       // The Firebase user is already created, now register with our backend using token
       const response = await apiClient.registerWithToken(anonymousUserId, idToken);
 
@@ -185,6 +219,33 @@ const App: React.FC = () => {
 
         // Update usage stats
         updateUsageStats({ is_registered: true });
+
+        // Preserve conversation if it exists
+        if (currentConvId && currentHistory.length > 0) {
+          // Try to use the migrated conversation
+          try {
+            const conversation = await apiClient.getConversation(registeredUserId, currentConvId);
+            if (conversation && conversation.messages && conversation.messages.length > 0) {
+              setCurrentConversationId(currentConvId);
+              setConversationHistory(conversation.messages);
+              localStorage.setItem('current_conversation_id', currentConvId);
+              localStorage.setItem('conversation_history', JSON.stringify(conversation.messages));
+              console.log('Preserved conversation after registration:', currentConvId);
+            } else {
+              // Fallback: use current history
+              setCurrentConversationId(currentConvId);
+              setConversationHistory(currentHistory);
+              localStorage.setItem('current_conversation_id', currentConvId);
+              localStorage.setItem('conversation_history', JSON.stringify(currentHistory));
+            }
+          } catch (error) {
+            // Fallback: preserve current history
+            setCurrentConversationId(currentConvId);
+            setConversationHistory(currentHistory);
+            localStorage.setItem('current_conversation_id', currentConvId);
+            localStorage.setItem('conversation_history', JSON.stringify(currentHistory));
+          }
+        }
 
         // Show success message
         alert('Registration successful! Your conversation history has been preserved.');
@@ -199,20 +260,84 @@ const App: React.FC = () => {
 
   const handleLogin = async (_user: User, token: string) => {
     try {
+      // Preserve current conversation before login
+      const currentConvId = currentConversationId;
+      const currentHistory = conversationHistory;
+      
+      // Set flag to preserve conversation during userId change
+      preserveConversationRef.current = true;
+      
       // Firebase authentication is already handled, just verify with backend
       const response = await apiClient.verifyToken(token);
 
       if (response.success) {
-        // Load user's conversations
-        const conversations = await apiClient.listUserConversations(response.user_id);
+        // Update user ID to authenticated user
+        const authenticatedUserId = response.user_id || _user.uid;
+        setUserIdState(authenticatedUserId);
+        setUserId(authenticatedUserId);
 
-        // Load most recent conversation if exists
-        if (conversations.length > 0) {
-          const mostRecent = conversations[0];
-          const conversation = await apiClient.getConversation(response.user_id, mostRecent.conversation_id);
-          setCurrentConversationId(mostRecent.conversation_id);
-          setConversationHistory(conversation.messages);
-          localStorage.setItem('current_conversation_id', mostRecent.conversation_id);
+        // Update usage stats for registered user
+        updateUsageStats({ is_registered: true });
+
+        // Preserve conversation if it exists, otherwise load user's conversations
+        if (currentConvId && currentHistory.length > 0) {
+          // Try to preserve current conversation
+          try {
+            const conversation = await apiClient.getConversation(authenticatedUserId, currentConvId);
+            if (conversation && conversation.messages && conversation.messages.length > 0) {
+              setCurrentConversationId(currentConvId);
+              setConversationHistory(conversation.messages);
+              localStorage.setItem('current_conversation_id', currentConvId);
+              localStorage.setItem('conversation_history', JSON.stringify(conversation.messages));
+              console.log('Preserved conversation after login:', currentConvId);
+            } else {
+              // Fallback: use current history
+              setCurrentConversationId(currentConvId);
+              setConversationHistory(currentHistory);
+              localStorage.setItem('current_conversation_id', currentConvId);
+              localStorage.setItem('conversation_history', JSON.stringify(currentHistory));
+            }
+          } catch (error) {
+            // Fallback: preserve current history
+            setCurrentConversationId(currentConvId);
+            setConversationHistory(currentHistory);
+            localStorage.setItem('current_conversation_id', currentConvId);
+            localStorage.setItem('conversation_history', JSON.stringify(currentHistory));
+          }
+        } else {
+          // No current conversation - try to load user's conversations
+          try {
+            const conversations = await apiClient.listUserConversations(authenticatedUserId);
+
+            // Load most recent conversation if exists
+            if (conversations && conversations.length > 0) {
+              const mostRecent = conversations[0];
+              const conversation = await apiClient.getConversation(authenticatedUserId, mostRecent.conversation_id);
+              setCurrentConversationId(mostRecent.conversation_id);
+              setConversationHistory(conversation.messages || []);
+              localStorage.setItem('current_conversation_id', mostRecent.conversation_id);
+              localStorage.setItem('conversation_history', JSON.stringify(conversation.messages || []));
+            } else {
+              // New user - start with initial message
+              const initialMessage: ChatMessage = {
+                role: 'assistant',
+                content: 'Hi! What city, state, or zip code would you like to search for events in?',
+                timestamp: new Date().toISOString()
+              };
+              setConversationHistory([initialMessage]);
+              localStorage.setItem('conversation_history', JSON.stringify([initialMessage]));
+            }
+          } catch (conversationError: any) {
+            // If listing conversations fails, start with initial message
+            console.warn('Could not load conversations, starting fresh:', conversationError);
+            const initialMessage: ChatMessage = {
+              role: 'assistant',
+              content: 'Hi! What city, state, or zip code would you like to search for events in?',
+              timestamp: new Date().toISOString()
+            };
+            setConversationHistory([initialMessage]);
+            localStorage.setItem('conversation_history', JSON.stringify([initialMessage]));
+          }
         }
 
         setShowLoginModal(false);
@@ -229,16 +354,36 @@ const App: React.FC = () => {
 
   const handleLogout = async () => {
     try {
+      // Preserve current conversation before logout
+      const currentConvId = currentConversationId;
+      const currentHistory = conversationHistory;
+      
+      // Set flag to preserve conversation during userId change
+      preserveConversationRef.current = true;
+      
       await auth.signOut();
-      // Clear conversation and reset to anonymous user
-      setConversationHistory([]);
-      setCurrentConversationId(null);
-      localStorage.removeItem('current_conversation_id');
-
+      
       // Reset to anonymous user ID
       const anonymousId = getOrCreateUserId();
       setUserIdState(anonymousId);
       setUserId(anonymousId);
+
+      // Preserve conversation if it exists
+      if (currentConvId && currentHistory.length > 0) {
+        // Try to preserve the conversation with anonymous user
+        // The conversation will be migrated if user logs back in
+        setCurrentConversationId(currentConvId);
+        setConversationHistory(currentHistory);
+        localStorage.setItem('current_conversation_id', currentConvId);
+        localStorage.setItem('conversation_history', JSON.stringify(currentHistory));
+        console.log('Preserved conversation after logout:', currentConvId);
+      } else {
+        // No conversation to preserve - clear state
+        setCurrentConversationId(null);
+        setConversationHistory([]);
+        localStorage.removeItem('current_conversation_id');
+        localStorage.removeItem('conversation_history');
+      }
 
       // Update usage stats for anonymous user
       updateUsageStats({ is_registered: false });
@@ -249,157 +394,151 @@ const App: React.FC = () => {
     }
   };
 
-  const clearConversation = () => {
-    setConversationHistory([]);
-  };
 
   return (
-    <div className={`min-h-screen ${trialWarning ? 'pt-20' : ''}`}>
-      {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-amber-600 rounded-lg flex items-center justify-center">
-                <MapPin className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Local Life Assistant</h1>
-                <p className="text-sm text-gray-500">AI-powered recommendations for your city</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              {/* Authentication Status */}
-              {authLoading ? (
-                <div className="text-sm text-gray-600">Loading...</div>
-              ) : currentUser ? (
-                <div className="flex items-center gap-3">
-                  <div className="text-sm text-gray-700">
-                    Welcome, {currentUser.displayName || currentUser.email?.split('@')[0] || 'User'}
-                  </div>
-                  <button
-                    onClick={handleLogout}
-                    className="text-sm bg-amber-600/80 text-white px-3 py-1 rounded-md hover:bg-amber-700/80 transition-colors"
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3">
-                  {usageStats && !usageStats.is_registered && (
-                    <div className="text-sm text-gray-600">
-                      Trial: {usageStats.trial_remaining} interactions left
-                    </div>
-                  )}
-                  <button
-                    onClick={() => setShowRegistrationModal(true)}
-                    className="text-sm bg-amber-600 text-white px-3 py-1 rounded-md hover:bg-amber-700 transition-colors"
-                  >
-                    Sign in / Register
-                  </button>
-                </div>
-              )}
-              
-              <div className="flex items-center space-x-2">
-                <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                <span className="text-sm text-gray-600">
-                  {isConnected ? 'Connected' : 'Disconnected'}
-                </span>
-              </div>
-              
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <Settings className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Settings Panel */}
-      {showSettings && (
-        <div className="bg-white shadow-sm p-4">
-          <div className="max-w-7xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  LLM Provider
-                </label>
-                <select
-                  value={llmProvider}
-                  onChange={(e) => setLlmProvider(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                >
-                  {availableProviders.map(provider => (
-                    <option key={provider.value} value={provider.value}>
-                      {provider.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="flex items-end">
-                <button
-                  onClick={clearConversation}
-                  className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-                >
-                  Clear Conversation
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Chat Interface */}
-        <div className="bg-white rounded-lg shadow-sm h-[700px] flex flex-col">
-          <div className="p-4 bg-gray-50/50">
-            <div className="flex items-center space-x-2">
-              <MessageCircle className="w-5 h-5 text-amber-600" />
-              <h2 className="text-lg font-semibold text-gray-900">Chat with Assistant</h2>
-            </div>
-          </div>
-          
-          <ChatInterface
-            onNewMessage={handleNewMessage}
-            onRecommendations={handleRecommendations}
-            llmProvider={llmProvider}
-            conversationHistory={conversationHistory}
-            userId={userId}
-            onTrialExceeded={() => setShowRegistrationModal(true)}
-            conversationId={currentConversationId}
-          />
+    <div className="h-dvh bg-[#FCFBF9] flex flex-col max-w-md mx-auto relative overflow-hidden">
+      {/* Fixed Header Container */}
+      <div 
+        className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-md z-[9999] bg-[#FCFBF9]"
+        style={{ position: 'fixed', top: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '28rem' }}
+      >
+        {/* Header */}
+        <div className="bg-[#FCFBF9] px-4 py-2.5 border-b border-slate-200/50 flex items-center gap-2">
+          <button
+            onClick={() => setMenuOpen(true)}
+            type="button"
+            className="p-1.5 hover:bg-slate-200/50 rounded-lg transition-colors"
+          >
+            <Menu className="w-5 h-5" style={{ color: 'rgb(118, 193, 178)' }} />
+          </button>
+          <h1
+            className="text-lg"
+            style={{
+              background: 'linear-gradient(135deg, #76C1B2 0%, #B46A55 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              fontFamily: 'Aladin, cursive'
+            }}
+          >
+            LocoMoco. Catch the Vibe. Locally
+          </h1>
         </div>
       </div>
 
+      {/* Side Menu */}
+      <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+        <SheetContent side="left" className="w-[85%] bg-[#FCFBF9] p-0" style={{ fontFamily: 'Aladin, cursive' }} aria-describedby={undefined}>
+          <SheetHeader className="sr-only">
+            <SheetTitle>Menu</SheetTitle>
+          </SheetHeader>
+          <div className="flex flex-col h-full">
+            {/* Menu Header */}
+            <div className="px-4 py-6 border-b border-slate-200/50">
+              <h2 className="text-lg font-semibold" style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>
+                Menu
+              </h2>
+            </div>
+
+            {/* Menu Items */}
+            <div className="flex-1 px-4 py-6 space-y-4">
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  window.location.href = '/';
+                }}
+                className="w-full flex items-center gap-3 p-4 bg-white/80 backdrop-blur-sm rounded-xl hover:bg-white transition-colors"
+              >
+                <Home className="w-5 h-5" style={{ color: '#76C1B2' }} />
+                <span style={{ color: '#221A13' }}>Home</span>
+              </button>
+
+              {authLoading ? (
+                <div className="text-sm" style={{ color: '#5E574E' }}>Loading...</div>
+              ) : currentUser ? (
+                <div className="space-y-2">
+                  <div className="px-4 py-2 text-sm" style={{ color: '#5E574E' }}>
+                    Welcome, {currentUser.displayName || currentUser.email?.split('@')[0] || 'User'}
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setMenuOpen(false);
+                      await handleLogout();
+                    }}
+                    className="w-full flex items-center gap-3 p-4 bg-white/80 backdrop-blur-sm rounded-xl hover:bg-white transition-colors"
+                  >
+                    <LogIn className="w-5 h-5" style={{ color: '#B46A55' }} />
+                    <span style={{ color: '#221A13' }}>Sign Out</span>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setShowLoginModal(true);
+                    }}
+                    className="w-full flex items-center gap-3 p-4 bg-white/80 backdrop-blur-sm rounded-xl hover:bg-white transition-colors"
+                  >
+                    <LogIn className="w-5 h-5" style={{ color: '#76C1B2' }} />
+                    <span style={{ color: '#221A13' }}>Sign In</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setShowRegistrationModal(true);
+                    }}
+                    className="w-full flex items-center gap-3 p-4 bg-white/80 backdrop-blur-sm rounded-xl hover:bg-white transition-colors"
+                  >
+                    <UserPlus className="w-5 h-5" style={{ color: '#B46A55' }} />
+                    <span style={{ color: '#221A13' }}>Register</span>
+                  </button>
+                  {usageStats && !usageStats.is_registered && (
+                    <div className="px-4 py-2 text-xs" style={{ color: '#5E574E' }}>
+                      Trial: {usageStats.trial_remaining} interactions left
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Chat Interface - Full Height */}
+      <div className="flex-1 min-h-0 pt-[57px]">
+        <ChatInterface
+          onNewMessage={handleNewMessage}
+          onRecommendations={handleRecommendations}
+          llmProvider={llmProvider}
+          conversationHistory={conversationHistory}
+          userId={userId}
+          onTrialExceeded={() => setShowRegistrationModal(true)}
+          conversationId={currentConversationId}
+        />
+      </div>
 
       {/* Trial Warning Banner */}
       {trialWarning && (
-        <div className="fixed top-0 left-0 right-0 bg-amber-50 border-l-4 border-amber-500 p-4 z-40">
-          <div className="max-w-7xl mx-auto">
-            <p className="text-amber-700">{trialWarning}</p>
-          </div>
+        <div className="fixed top-[57px] left-0 right-0 bg-amber-50 border-l-4 border-amber-500 p-4 z-40 max-w-md mx-auto">
+          <p className="text-amber-700">{trialWarning}</p>
         </div>
       )}
 
-              {/* Registration Modal */}
-              <RegistrationModal
-                isOpen={showRegistrationModal}
-                onClose={() => setShowRegistrationModal(false)}
-                onRegister={handleRegister}
-                trialRemaining={usageStats?.trial_remaining || 0}
-              />
+      {/* Registration Modal */}
+      <RegistrationModal
+        isOpen={showRegistrationModal}
+        onClose={() => setShowRegistrationModal(false)}
+        onRegister={handleRegister}
+        trialRemaining={usageStats?.trial_remaining || 0}
+      />
 
-              {/* Login Modal */}
-              <LoginModal
-                isOpen={showLoginModal}
-                onClose={() => setShowLoginModal(false)}
-                onLogin={handleLogin}
-              />
+      {/* Login Modal */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onLogin={handleLogin}
+      />
     </div>
   );
 };

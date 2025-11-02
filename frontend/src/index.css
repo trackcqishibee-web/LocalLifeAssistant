@@ -4,7 +4,7 @@
 
 @layer base {
   html {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Abitare Sans', system-ui, sans-serif;
   }
   :root {
     --background: 0 0% 100%;
@@ -83,6 +83,21 @@
   .animate-fadeIn {
     animation: fadeIn 0.5s ease-in-out;
   }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .horizontal-scroll-mobile {
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+    overscroll-behavior-x: contain;
+  }
 }
 
 @keyframes fadeIn {
@@ -102,7 +117,12 @@
   * {
     border-color: hsl(var(--border));
   }
-  body {
+  html, body {
     @apply bg-background text-foreground;
+    overflow: hidden;
+    touch-action: pan-y;
+  }
+  #root {
+    overflow: hidden;
   }
 }

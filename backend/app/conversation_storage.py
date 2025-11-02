@@ -81,19 +81,30 @@ class ConversationStorage:
         """List all conversations for a user (summary only)"""
         try:
             conversations = []
-            conv_docs = self.db.collection('users').document(user_id).collection('conversations') \
-                .order_by('last_message_at', direction=firestore.Query.DESCENDING) \
+            conv_ref = self.db.collection('users').document(user_id).collection('conversations')
+            
+            # Check if the user document exists first
+            user_doc = self.db.collection('users').document(user_id).get()
+            if not user_doc.exists:
+                # User doesn't exist yet, return empty list
+                logger.info(f"User {user_id} does not exist in Firestore, returning empty conversations list")
+                return []
+            
+            # Query conversations for this user
+            conv_docs = conv_ref.order_by('last_message_at', direction=firestore.Query.DESCENDING) \
                 .limit(limit).get()
 
             for doc in conv_docs:
                 conv = doc.to_dict()
+                if not conv:
+                    continue
                 messages = conv.get('messages', [])
 
                 # Create summary
                 conversations.append({
-                    "conversation_id": conv["conversation_id"],
-                    "created_at": conv["created_at"],
-                    "last_message_at": conv["last_message_at"],
+                    "conversation_id": conv.get("conversation_id", doc.id),
+                    "created_at": conv.get("created_at", ""),
+                    "last_message_at": conv.get("last_message_at", ""),
                     "message_count": len(messages),
                     "preview": messages[0]["content"][:100] if messages else ""
                 })
@@ -101,7 +112,8 @@ class ConversationStorage:
             return conversations
 
         except Exception as e:
-            logger.error(f"Error listing conversations: {e}")
+            logger.error(f"Error listing conversations for user {user_id}: {e}", exc_info=True)
+            # Return empty list instead of raising - this handles new users gracefully
             return []
 
     def delete_conversation(self, user_id: str, conversation_id: str):

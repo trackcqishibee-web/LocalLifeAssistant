@@ -425,21 +425,14 @@ async def stream_chat_response(request: ChatRequest):
                 "llm_provider": request.llm_provider
             })
 
-        # Save user message
-        conversation_storage.save_message(user_id, conversation_id, {
-            "role": "user",
-            "content": request.message,
-            "timestamp": datetime.now().isoformat()
-        })
-        
-        # Step 1: Extract user preferences if this is an initial response
+        # Step 1: Extract user preferences first (so we can save them with message)
         extracted_preferences = None
         if request.is_initial_response:
-            yield f"data: {json.dumps({'type': 'status', 'content': 'Analyzing your preferences...'})}\n\n"
-            await asyncio.sleep(0.5)  # Small delay for UX
             logger.info("Initial response detected, extracting user preferences")
             extracted_preferences = extraction_service.extract_user_preferences(request.message)
             logger.info(f"Extracted preferences: {extracted_preferences}")
+        else:
+            logger.info("Non-initial response detected")
         
         # Step 2: Determine city to use (prioritize extracted preferences)
         city = None
@@ -457,7 +450,26 @@ async def stream_chat_response(request: ChatRequest):
             if query_city:
                 city = query_city.lower()
                 location_provided = True
-                logger.info(f"Using city from query extraction: {city}")
+                # Update extracted_preferences with location if found via fallback
+                if extracted_preferences:
+                    extracted_preferences.location = query_city
+                else:
+                    from .extraction_service import UserPreferences
+                    extracted_preferences = UserPreferences(location=query_city)
+                logger.info(f"Using city from query extraction: {city}, updated extracted_preferences")
+        
+        # Save user message with extracted preferences (after we've determined location)
+        # Only save for initial responses here - non-initial responses will be saved later
+        if request.is_initial_response:
+            prefs_dict = extracted_preferences.dict() if extracted_preferences else None
+            logger.info(f"Saving initial user message with extracted_preferences: {prefs_dict}")
+            conversation_storage.save_message(user_id, conversation_id, {
+                "role": "user",
+                "content": request.message,
+                "timestamp": datetime.now().isoformat(),
+                "extracted_preferences": prefs_dict
+            })
+            logger.info(f"Saved user message for conversation {conversation_id}, location in prefs: {prefs_dict.get('location') if prefs_dict else 'None'}")
         
         
         # Step 3: Handle missing location for initial responses
@@ -468,6 +480,123 @@ async def stream_chat_response(request: ChatRequest):
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
             return
         
+        # Step 3.5: Check if location is provided but no event type (for initial responses)
+        event_type_provided = extracted_preferences and extracted_preferences.event_type and extracted_preferences.event_type != "none"
+        
+        if request.is_initial_response and location_provided and not event_type_provided:
+            logger.info("Location provided but no event type in initial response, asking for event type")
+            follow_up_message = "Great! What kind of events are you interested in?"
+            yield f"data: {json.dumps({'type': 'message', 'content': follow_up_message, 'location_processed': True, 'usage_stats': usage_stats, 'trial_exceeded': False, 'conversation_id': conversation_id})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            
+            # Save assistant message with stored location
+            conversation_storage.save_message(user_id, conversation_id, {
+                "role": "assistant",
+                "content": follow_up_message,
+                "timestamp": datetime.now().isoformat(),
+                "recommendations": [],
+                "extracted_preferences": extracted_preferences.dict() if extracted_preferences else None
+            })
+            return
+        
+        # Step 3.6: For non-initial responses, retrieve location from conversation and extract event type
+        if not request.is_initial_response:
+            # Retrieve location from stored conversation
+            stored_location = None
+            try:
+                logger.info(f"Retrieving conversation {conversation_id} for user {user_id} (anonymous: {user_id.startswith('user_')})")
+                conversation = conversation_storage.get_conversation(user_id, conversation_id)
+                if conversation:
+                    logger.info(f"Conversation found, message count: {len(conversation.get('messages', []))}")
+                    if conversation.get('messages'):
+                        for idx, msg in enumerate(conversation.get('messages', [])):
+                            if isinstance(msg, dict):
+                                msg_role = msg.get('role')
+                                msg_content = msg.get('content', '')[:50]
+                                stored_prefs = msg.get('extracted_preferences')
+                                logger.info(f"Message {idx}: role={msg_role}, content='{msg_content}...', has_prefs={stored_prefs is not None}")
+                                if stored_prefs:
+                                    if isinstance(stored_prefs, dict):
+                                        location_value = stored_prefs.get('location')
+                                        logger.info(f"  extracted_preferences dict: location={location_value}")
+                                        if location_value and location_value != "none":
+                                            stored_location = location_value
+                                            logger.info(f"✓ Found stored location in message {idx}: {stored_location}")
+                                            break
+                                    else:
+                                        logger.warning(f"  extracted_preferences is not a dict, type: {type(stored_prefs)}")
+                else:
+                    logger.warning(f"Conversation {conversation_id} not found or empty")
+            except Exception as e:
+                logger.error(f"Could not retrieve conversation to get stored location: {e}", exc_info=True)
+            
+            # Extract event type from current message
+            if not extracted_preferences:
+                extracted_preferences = extraction_service.extract_user_preferences(request.message)
+            else:
+                # If we already have preferences, try to extract event type from current message
+                current_preferences = extraction_service.extract_user_preferences(request.message)
+                if current_preferences:
+                    if current_preferences.event_type and current_preferences.event_type != "none":
+                        extracted_preferences.event_type = current_preferences.event_type
+                    # Also check for other fields
+                    if current_preferences.date and current_preferences.date != "none":
+                        extracted_preferences.date = current_preferences.date
+                    if current_preferences.time and current_preferences.time != "none":
+                        extracted_preferences.time = current_preferences.time
+            
+            event_type_provided = extracted_preferences and extracted_preferences.event_type and extracted_preferences.event_type != "none"
+            
+            # Use stored location
+            if stored_location:
+                city = stored_location.lower()
+                location_provided = True
+                if extracted_preferences:
+                    extracted_preferences.location = stored_location
+                else:
+                    from .extraction_service import UserPreferences
+                    extracted_preferences = UserPreferences(location=stored_location)
+                logger.info(f"Using stored location: {stored_location}")
+            
+            # Check if we have both location and event type
+            if not location_provided:
+                logger.warning("Non-initial response but no location found")
+                location_message = "I need to know which city you're interested in. Could you please tell me the city or area?"
+                yield f"data: {json.dumps({'type': 'message', 'content': location_message})}\n\n"
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                
+                # Save user message anyway
+                conversation_storage.save_message(user_id, conversation_id, {
+                    "role": "user",
+                    "content": request.message,
+                    "timestamp": datetime.now().isoformat(),
+                    "extracted_preferences": extracted_preferences.dict() if extracted_preferences else None
+                })
+                return
+            
+            if not event_type_provided:
+                logger.warning("Non-initial response but no event type found")
+                event_type_message = "What kind of events are you interested in?"
+                yield f"data: {json.dumps({'type': 'message', 'content': event_type_message})}\n\n"
+                yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                
+                # Save user message with stored location
+                conversation_storage.save_message(user_id, conversation_id, {
+                    "role": "user",
+                    "content": request.message,
+                    "timestamp": datetime.now().isoformat(),
+                    "extracted_preferences": extracted_preferences.dict() if extracted_preferences else None
+                })
+                return
+            
+            # Save user message with combined preferences (location + event type)
+            conversation_storage.save_message(user_id, conversation_id, {
+                "role": "user",
+                "content": request.message,
+                "timestamp": datetime.now().isoformat(),
+                "extracted_preferences": extracted_preferences.dict() if extracted_preferences else None
+            })
+        
         # Step 4: Default fallback for non-initial responses or when location still missing
         if not city:
             city = "new york"
@@ -476,9 +605,9 @@ async def stream_chat_response(request: ChatRequest):
             if not request.is_initial_response:
                 logger.info("Informing user that we're defaulting to New York")
         
-        logger.info(f"Final city decision: {city}")
+        logger.info(f"Final city decision: {city}, Event type: {extracted_preferences.event_type if extracted_preferences else 'none'}")
         
-        # Step 1: Try to get cached events (will fetch fresh if expired)
+        # Step 5: Now proceed with event fetching (only when both location and event type are available)
         yield f"data: {json.dumps({'type': 'status', 'content': f'Searching for events in {city.title()}...'})}\n\n"
         await asyncio.sleep(0.3)
 
@@ -579,8 +708,11 @@ async def stream_chat_response(request: ChatRequest):
         else:
             response_message = f"😔 I couldn't find any events in {city.title()} matching your query.{location_note} Try asking about 'fashion events', 'music concerts', 'halloween parties', or 'free events'."
         
+        # Determine if location was just processed (for follow-up message)
+        location_just_processed = request.is_initial_response and location_provided
+        
         # Send the main message first
-        yield f"data: {json.dumps({'type': 'message', 'content': response_message, 'extraction_summary': extraction_summary, 'usage_stats': usage_stats, 'trial_exceeded': False, 'conversation_id': conversation_id})}\n\n"
+        yield f"data: {json.dumps({'type': 'message', 'content': response_message, 'extraction_summary': extraction_summary, 'usage_stats': usage_stats, 'trial_exceeded': False, 'conversation_id': conversation_id, 'location_processed': location_just_processed})}\n\n"
         
         # Step 7: Format recommendations and stream them one by one
         yield f"data: {json.dumps({'type': 'status', 'content': f'Preparing {len(top_events)} recommendations...'})}\n\n"
