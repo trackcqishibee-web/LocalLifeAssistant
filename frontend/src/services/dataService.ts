@@ -1,9 +1,7 @@
-import { ChatRequest, ChatResponse, ChatMessage, RecommendationRequest } from '../api/client';
+import { ChatRequest, ChatResponse, RecommendationRequest } from '../api/client';
 import { apiClient } from '../api/client';
 
-const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true';
-
-// Interface matching apiClient methods for data operations
+// Export IDataService interface for use in mockData
 export interface IDataService {
   chat(request: ChatRequest): Promise<ChatResponse>;
   chatStream(
@@ -27,6 +25,8 @@ export interface IDataService {
   listUserConversations(userId: string, limit?: number): Promise<any[]>;
   deleteConversation(userId: string, conversationId: string): Promise<void>;
 }
+
+const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 
 // Real implementation - delegates to apiClient
 class RealDataService implements IDataService {
@@ -106,4 +106,3 @@ export function getDataService(): IDataService {
 
 // Export singleton instance
 export const dataService = getDataService();
-

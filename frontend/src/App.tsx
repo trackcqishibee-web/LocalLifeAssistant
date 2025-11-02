@@ -12,9 +12,7 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 
 const App: React.FC = () => {
   const [conversationHistory, setConversationHistory] = useState<ChatMessage[]>([]);
-  const [llmProvider, setLlmProvider] = useState('openai');
-  const [showSettings, setShowSettings] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
+  const [llmProvider] = useState('openai');
   const [menuOpen, setMenuOpen] = useState(false);
   const [userId, setUserIdState] = useState<string>('');
   const [usageStats, setUsageStats] = useState<any>(null);
@@ -27,15 +25,7 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  const availableProviders = [
-    { value: 'openai', label: 'OpenAI (GPT-3.5)' },
-    { value: 'anthropic', label: 'Anthropic Claude' },
-    { value: 'ollama', label: 'Ollama (Local)' }
-  ];
-
   useEffect(() => {
-    checkConnection();
-
     // Prevent browser scroll restoration on page load
     if ('scrollRestoration' in history) {
       history.scrollRestoration = 'manual';
@@ -116,16 +106,6 @@ const App: React.FC = () => {
       });
     }
   }, [userId]);
-
-  const checkConnection = async () => {
-    try {
-      await apiClient.healthCheck();
-      setIsConnected(true);
-    } catch (error) {
-      console.error('Connection failed:', error);
-      setIsConnected(false);
-    }
-  };
 
   const handleNewMessage = (message: ChatMessage) => {
     setConversationHistory(prev => [...prev, message]);
@@ -272,9 +252,6 @@ const App: React.FC = () => {
     }
   };
 
-  const clearConversation = () => {
-    setConversationHistory([]);
-  };
 
   return (
     <div className="h-dvh bg-[#FCFBF9] flex flex-col max-w-md mx-auto">

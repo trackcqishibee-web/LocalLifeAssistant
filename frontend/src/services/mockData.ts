@@ -1,4 +1,5 @@
-import { IDataService, ChatRequest, ChatResponse, RecommendationRequest, RecommendationItem } from '../api/client';
+import { IDataService } from '../services/dataService';
+import { ChatRequest, ChatResponse, RecommendationRequest, RecommendationItem } from '../api/client';
 
 // Mock event data matching the backend structure
 const mockEvents: any[] = [
@@ -146,7 +147,7 @@ class MockDataService implements IDataService {
     }
   }
 
-  async getRecommendations(request: RecommendationRequest): Promise<any> {
+      async getRecommendations(request: RecommendationRequest): Promise<any> {
     await new Promise(resolve => setTimeout(resolve, 300));
     return {
       recommendations: mockEvents.slice(0, request.max_results || 5).map((event, index) => ({
@@ -158,14 +159,14 @@ class MockDataService implements IDataService {
     };
   }
 
-  async getEvents(query: string, location?: string, category?: string, maxResults: number = 5): Promise<any> {
+      async getEvents(_query: string, _location?: string, _category?: string, maxResults: number = 5): Promise<any> {
     await new Promise(resolve => setTimeout(resolve, 300));
     return {
       events: mockEvents.slice(0, maxResults)
     };
   }
 
-  async getRestaurants(query: string, location?: string, cuisine?: string, maxResults: number = 5): Promise<any> {
+      async getRestaurants(_query: string, _location?: string, _cuisine?: string, _maxResults: number = 5): Promise<any> {
     await new Promise(resolve => setTimeout(resolve, 300));
     return {
       restaurants: []
@@ -203,7 +204,7 @@ class MockDataService implements IDataService {
     };
   }
 
-  async registerWithToken(anonymousUserId: string, token: string): Promise<any> {
+      async registerWithToken(_anonymousUserId: string, _token: string): Promise<any> {
     await new Promise(resolve => setTimeout(resolve, 300));
     return {
       success: true,
@@ -211,7 +212,7 @@ class MockDataService implements IDataService {
     };
   }
 
-  async verifyToken(token: string): Promise<any> {
+      async verifyToken(_token: string): Promise<any> {
     await new Promise(resolve => setTimeout(resolve, 100));
     return {
       success: true,
@@ -219,12 +220,12 @@ class MockDataService implements IDataService {
     };
   }
 
-  async createConversation(userId: string, metadata: any = {}): Promise<string> {
+      async createConversation(_userId: string, _metadata: any = {}): Promise<string> {
     await new Promise(resolve => setTimeout(resolve, 100));
     return `conv_${Date.now()}`;
   }
 
-  async getConversation(userId: string, conversationId: string): Promise<any> {
+      async getConversation(_userId: string, conversationId: string): Promise<any> {
     await new Promise(resolve => setTimeout(resolve, 100));
     return {
       conversation_id: conversationId,
@@ -232,12 +233,12 @@ class MockDataService implements IDataService {
     };
   }
 
-  async listUserConversations(userId: string, limit: number = 50): Promise<any[]> {
+      async listUserConversations(_userId: string, _limit: number = 50): Promise<any[]> {
     await new Promise(resolve => setTimeout(resolve, 100));
     return [];
   }
 
-  async deleteConversation(userId: string, conversationId: string): Promise<void> {
+      async deleteConversation(_userId: string, _conversationId: string): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 100));
   }
 }
