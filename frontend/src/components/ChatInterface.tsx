@@ -7,7 +7,7 @@ import WelcomeMessage from './WelcomeMessage';
 import { ImageWithFallback } from './ImageWithFallback';
 import userAvatarImg from '../assets/images/figma/user-avatar.png';
 import agentAvatarImg from '../assets/images/figma/agent-avatar.png';
-import refreshIcon from '../assets/images/figma/refresh-icon.png';
+// import refreshIcon from '../assets/images/figma/refresh-icon.png'; // Hidden for now
 
 interface ChatMessageWithRecommendations {
   role: 'user' | 'assistant';
@@ -211,92 +211,93 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setMessage(text);
   };
 
-  const hasRecommendations = messagesWithRecommendations.some(
-    msg => msg.recommendations && msg.recommendations.length > 0
-  );
+  // Hidden for now - hasRecommendations and handleRefresh function
+  // const hasRecommendations = messagesWithRecommendations.some(
+  //   msg => msg.recommendations && msg.recommendations.length > 0
+  // );
 
-  const handleRefresh = async () => {
-    if (!hasRecommendations || isLoading) return;
+  // const handleRefresh = async () => {
+  //   if (!hasRecommendations || isLoading) return;
 
-    // Find the last user message with recommendations
-    const lastUserMessage = messagesWithRecommendations
-      .slice()
-      .reverse()
-      .find(msg => msg.role === 'user' && msg.content);
+  //   // Find the last user message with recommendations
+  //   const lastUserMessage = messagesWithRecommendations
+  //     .slice()
+  //     .reverse()
+  //     .find(msg => msg.role === 'user' && msg.content);
 
-    if (!lastUserMessage || !lastUserMessage.content) return;
+  //   if (!lastUserMessage || !lastUserMessage.content) return;
 
-    // Clear existing recommendations
-    setMessagesWithRecommendations(prev => 
-      prev.filter(msg => !msg.recommendations || msg.recommendations.length === 0)
-    );
+  //   // Clear existing recommendations
+  //   setMessagesWithRecommendations(prev => 
+  //     prev.filter(msg => !msg.recommendations || msg.recommendations.length === 0)
+  //   );
 
-    // Re-trigger the chat request
-    setIsLoading(true);
-    setCurrentStatus('Refreshing recommendations...');
+  //   // Re-trigger the chat request
+  //   setIsLoading(true);
+  //   setCurrentStatus('Refreshing recommendations...');
 
-    try {
-      const request: ChatRequest = {
-        message: lastUserMessage.content,
-        conversation_history: conversationHistory,
-        llm_provider: llmProvider,
-        is_initial_response: false,
-        user_id: userId,
-        conversation_id: conversationId
-      };
+  //   try {
+  //     const request: ChatRequest = {
+  //       message: lastUserMessage.content,
+  //       conversation_history: conversationHistory,
+  //       llm_provider: llmProvider,
+  //       is_initial_response: false,
+  //       user_id: userId,
+  //       conversation_id: conversationId
+  //     };
 
-      await dataService.chatStream(
-        request,
-        (status: string) => setCurrentStatus(status),
-        (messageContent: string, metadata?: any) => {
-          const assistantMessage: ChatMessageWithRecommendations = {
-            role: 'assistant',
-            content: messageContent,
-            timestamp: new Date().toISOString(),
-            recommendations: []
-          };
+  //     await dataService.chatStream(
+  //       request,
+  //       (status: string) => setCurrentStatus(status),
+  //       (messageContent: string, metadata?: any) => {
+  //         const assistantMessage: ChatMessageWithRecommendations = {
+  //           role: 'assistant',
+  //           content: messageContent,
+  //           timestamp: new Date().toISOString(),
+  //           recommendations: []
+  //         };
           
-          onNewMessage(assistantMessage as ChatMessage);
-          setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
+  //         onNewMessage(assistantMessage as ChatMessage);
+  //         setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
           
-          if (metadata?.trial_exceeded) {
-            onTrialExceeded();
-          }
-          if (metadata?.conversation_id && metadata.conversation_id !== conversationId) {
-            localStorage.setItem('current_conversation_id', metadata.conversation_id);
-          }
-        },
-        (recommendation: any) => {
-          const recommendationMessage: ChatMessageWithRecommendations = {
-            role: 'assistant',
-            content: undefined,
-            timestamp: new Date().toISOString(),
-            recommendations: [recommendation]
-          };
+  //         if (metadata?.trial_exceeded) {
+  //           onTrialExceeded();
+  //         }
+  //         if (metadata?.conversation_id && metadata.conversation_id !== conversationId) {
+  //           localStorage.setItem('current_conversation_id', metadata.conversation_id);
+  //         }
+  //       },
+  //       (recommendation: any) => {
+  //         const recommendationMessage: ChatMessageWithRecommendations = {
+  //           role: 'assistant',
+  //           content: undefined,
+  //           timestamp: new Date().toISOString(),
+  //           recommendations: [recommendation]
+  //         };
           
-          setMessagesWithRecommendations(prev => [...prev, recommendationMessage]);
-          onRecommendations([recommendation]);
-        },
-        (error: string) => {
-          console.error('Refresh error:', error);
-          const errorMessage: ChatMessage = {
-            role: 'assistant',
-            content: `Sorry, I encountered an error refreshing: ${error}`,
-            timestamp: new Date().toISOString()
-          };
-          onNewMessage(errorMessage);
-        },
-        () => {
-          setIsLoading(false);
-          setCurrentStatus('');
-        }
-      );
-    } catch (error) {
-      console.error('Error refreshing:', error);
-      setIsLoading(false);
-      setCurrentStatus('');
-    }
-  };
+  //         setMessagesWithRecommendations(prev => [...prev, recommendationMessage]);
+  //         onRecommendations([recommendation]);
+  //       },
+  //       (error: string) => {
+  //         console.error('Refresh error:', error);
+  //         const errorMessage: ChatMessage = {
+  //           role: 'assistant',
+  //           content: `Sorry, I encountered an error refreshing: ${error}`,
+  //           timestamp: new Date().toISOString()
+  //         };
+  //         onNewMessage(errorMessage);
+  //       },
+  //       () => {
+  //         setIsLoading(false);
+  //         setCurrentStatus('');
+  //       }
+  //     );
+  //   } catch (error) {
+  //     console.error('Error refreshing:', error);
+  //     setIsLoading(false);
+  //     setCurrentStatus('');
+  //   }
+  // };
 
   return (
     <div className="flex flex-col h-full bg-[#FCFBF9]">
@@ -404,8 +405,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {/* Input Area */}
       <div className="bg-[#FCFBF9] px-4 py-6 flex-shrink-0">
         <form onSubmit={handleSubmit} className="flex gap-3 items-center relative">
-          {/* Refresh Button */}
-          <div className="relative">
+          {/* Refresh Button - Hidden for now */}
+          {/* <div className="relative">
             <button
               type="button"
               onClick={handleRefresh}
@@ -421,7 +422,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 }} 
               />
             </button>
-          </div>
+          </div> */}
           
           <input
             type="text"

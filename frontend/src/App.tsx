@@ -254,18 +254,9 @@ const App: React.FC = () => {
 
 
   return (
-    <div className="h-dvh bg-[#FCFBF9] flex flex-col max-w-md mx-auto">
-      {/* Sticky Header Container */}
-      <div className="sticky top-0 z-50 bg-[#FCFBF9] flex-shrink-0">
-        {/* Status Bar */}
-        <div className="h-11 bg-[#FCFBF9] flex items-center justify-between px-4 text-xs text-slate-700">
-          <span>9:41</span>
-          <div className="flex items-center gap-1">
-            <div className="w-4 h-3 border border-slate-700 rounded-sm" />
-            <div className="w-3 h-3 border border-slate-700 rounded-sm" />
-          </div>
-        </div>
-
+    <div className="h-dvh bg-[#FCFBF9] flex flex-col max-w-md mx-auto relative overflow-hidden">
+      {/* Fixed Header Container */}
+      <div className="fixed top-0 left-0 right-0 z-50 bg-[#FCFBF9] max-w-md mx-auto">
         {/* Header */}
         <div className="bg-[#FCFBF9] px-4 py-2.5 border-b border-slate-200/50 flex items-center gap-2">
           <button
@@ -292,14 +283,14 @@ const App: React.FC = () => {
 
       {/* Side Menu */}
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-        <SheetContent side="left" className="w-[85%] bg-[#FCFBF9] p-0" aria-describedby={undefined}>
+        <SheetContent side="left" className="w-[85%] bg-[#FCFBF9] p-0" style={{ fontFamily: 'Aladin, cursive' }} aria-describedby={undefined}>
           <SheetHeader className="sr-only">
             <SheetTitle>Menu</SheetTitle>
           </SheetHeader>
           <div className="flex flex-col h-full">
             {/* Menu Header */}
             <div className="px-4 py-6 border-b border-slate-200/50">
-              <h2 className="text-lg font-semibold" style={{ color: '#221A13' }}>
+              <h2 className="text-lg font-semibold" style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>
                 Menu
               </h2>
             </div>
@@ -370,7 +361,7 @@ const App: React.FC = () => {
       </Sheet>
 
       {/* Chat Interface - Full Height */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 pt-[57px]">
         <ChatInterface
           onNewMessage={handleNewMessage}
           onRecommendations={handleRecommendations}
@@ -384,7 +375,7 @@ const App: React.FC = () => {
 
       {/* Trial Warning Banner */}
       {trialWarning && (
-        <div className="fixed top-0 left-0 right-0 bg-amber-50 border-l-4 border-amber-500 p-4 z-40 max-w-md mx-auto">
+        <div className="fixed top-[57px] left-0 right-0 bg-amber-50 border-l-4 border-amber-500 p-4 z-40 max-w-md mx-auto">
           <p className="text-amber-700">{trialWarning}</p>
         </div>
       )}
