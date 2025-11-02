@@ -399,7 +399,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#76C1B2' }} />
                 <p className="text-[15px]" style={{ color: '#221A13' }}>
-                  {currentStatus || extractionSummary || '...'}
+                  {currentStatus || extractionSummary || ''}
                 </p>
               </div>
             </div>

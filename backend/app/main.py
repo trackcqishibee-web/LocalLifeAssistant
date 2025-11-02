@@ -461,12 +461,15 @@ async def stream_chat_response(request: ChatRequest):
         # Save user message with extracted preferences (after we've determined location)
         # Only save for initial responses here - non-initial responses will be saved later
         if request.is_initial_response:
+            prefs_dict = extracted_preferences.dict() if extracted_preferences else None
+            logger.info(f"Saving initial user message with extracted_preferences: {prefs_dict}")
             conversation_storage.save_message(user_id, conversation_id, {
                 "role": "user",
                 "content": request.message,
                 "timestamp": datetime.now().isoformat(),
-                "extracted_preferences": extracted_preferences.dict() if extracted_preferences else None
+                "extracted_preferences": prefs_dict
             })
+            logger.info(f"Saved user message for conversation {conversation_id}, location in prefs: {prefs_dict.get('location') if prefs_dict else 'None'}")
         
         
         # Step 3: Handle missing location for initial responses
@@ -482,9 +485,6 @@ async def stream_chat_response(request: ChatRequest):
         
         if request.is_initial_response and location_provided and not event_type_provided:
             logger.info("Location provided but no event type in initial response, asking for event type")
-            # Show waiting indicator before follow-up message
-            yield f"data: {json.dumps({'type': 'status', 'content': '...'})}\n\n"
-            await asyncio.sleep(0.3)  # Small delay for UX
             follow_up_message = "Great! What kind of events are you interested in?"
             yield f"data: {json.dumps({'type': 'message', 'content': follow_up_message, 'location_processed': True, 'usage_stats': usage_stats, 'trial_exceeded': False, 'conversation_id': conversation_id})}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
@@ -504,17 +504,31 @@ async def stream_chat_response(request: ChatRequest):
             # Retrieve location from stored conversation
             stored_location = None
             try:
+                logger.info(f"Retrieving conversation {conversation_id} for user {user_id} (anonymous: {user_id.startswith('user_')})")
                 conversation = conversation_storage.get_conversation(user_id, conversation_id)
-                if conversation and conversation.get('messages'):
-                    for msg in conversation.get('messages', []):
-                        if isinstance(msg, dict) and msg.get('extracted_preferences'):
-                            stored_prefs = msg.get('extracted_preferences')
-                            if isinstance(stored_prefs, dict) and stored_prefs.get('location') and stored_prefs.get('location') != "none":
-                                stored_location = stored_prefs.get('location')
-                                logger.info(f"Found stored location in conversation: {stored_location}")
-                                break
+                if conversation:
+                    logger.info(f"Conversation found, message count: {len(conversation.get('messages', []))}")
+                    if conversation.get('messages'):
+                        for idx, msg in enumerate(conversation.get('messages', [])):
+                            if isinstance(msg, dict):
+                                msg_role = msg.get('role')
+                                msg_content = msg.get('content', '')[:50]
+                                stored_prefs = msg.get('extracted_preferences')
+                                logger.info(f"Message {idx}: role={msg_role}, content='{msg_content}...', has_prefs={stored_prefs is not None}")
+                                if stored_prefs:
+                                    if isinstance(stored_prefs, dict):
+                                        location_value = stored_prefs.get('location')
+                                        logger.info(f"  extracted_preferences dict: location={location_value}")
+                                        if location_value and location_value != "none":
+                                            stored_location = location_value
+                                            logger.info(f"✓ Found stored location in message {idx}: {stored_location}")
+                                            break
+                                    else:
+                                        logger.warning(f"  extracted_preferences is not a dict, type: {type(stored_prefs)}")
+                else:
+                    logger.warning(f"Conversation {conversation_id} not found or empty")
             except Exception as e:
-                logger.warning(f"Could not retrieve conversation to get stored location: {e}")
+                logger.error(f"Could not retrieve conversation to get stored location: {e}", exc_info=True)
             
             # Extract event type from current message
             if not extracted_preferences:
