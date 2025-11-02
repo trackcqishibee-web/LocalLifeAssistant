@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Menu, Home, LogIn, UserPlus } from 'lucide-react';
 import ChatInterface from './components/ChatInterface';
 import RegistrationModal from './components/RegistrationModal';
@@ -34,9 +34,10 @@ const App: React.FC = () => {
     // Scroll to top on initial load
     window.scrollTo(0, 0);
 
-    // Clear chat history on page refresh (component remount)
+    // On page refresh, always clear conversation history and start fresh
     setConversationHistory([]);
     localStorage.removeItem('current_conversation_id');
+    localStorage.removeItem('conversation_history');
   }, []);
 
   // Firebase authentication state listener
@@ -112,7 +113,12 @@ const App: React.FC = () => {
   }, [userId]);
 
   const handleNewMessage = (message: ChatMessage) => {
-    setConversationHistory(prev => [...prev, message]);
+    setConversationHistory(prev => {
+      const updated = [...prev, message];
+      // Persist to localStorage for session preservation
+      localStorage.setItem('conversation_history', JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const handleRecommendations = (recommendations: any[]) => {
@@ -120,27 +126,74 @@ const App: React.FC = () => {
     console.log('Received recommendations:', recommendations);
   };
 
-  // Initialize conversation
+  // Initialize conversation when userId changes (but preserve during login/logout)
+  // Use a ref to track if we're in the middle of a login/logout operation
+  const preserveConversationRef = useRef(false);
+  
   useEffect(() => {
     if (!userId) return;
     
     const initializeConversation = async () => {
-      // Create a new conversation (history already cleared on page refresh)
-      const newId = await apiClient.createConversation(userId, { 
-        llm_provider: llmProvider 
-      });
-      setCurrentConversationId(newId);
-      localStorage.setItem('current_conversation_id', newId);
+      // If we're preserving conversation (during login/logout), don't create new one
+      if (preserveConversationRef.current) {
+        preserveConversationRef.current = false; // Reset flag
+        return;
+      }
       
-      // Start conversation with initial agent message
-      const initialMessage: ChatMessage = {
-        role: 'assistant',
-        content: 'Hi! What city, state, or zip code would you like to search for events in?',
-        timestamp: new Date().toISOString()
-      };
-      setConversationHistory([initialMessage]);
+      // Check if we have an existing conversation from localStorage (only if preserving)
+      const existingConvId = localStorage.getItem('current_conversation_id');
+      const existingHistoryJson = localStorage.getItem('conversation_history');
       
-      console.log('Created new conversation:', newId);
+      // Only restore if we have both and conversationHistory is empty (preserved state)
+      if (existingConvId && existingHistoryJson && conversationHistory.length === 0) {
+        try {
+          const existingHistory = JSON.parse(existingHistoryJson);
+          if (Array.isArray(existingHistory) && existingHistory.length > 0) {
+            // Try to load the existing conversation from the backend
+            try {
+              const conversation = await apiClient.getConversation(userId, existingConvId);
+              if (conversation && conversation.messages && conversation.messages.length > 0) {
+                // Preserve existing conversation from backend
+                setCurrentConversationId(existingConvId);
+                setConversationHistory(conversation.messages);
+                localStorage.setItem('conversation_history', JSON.stringify(conversation.messages));
+                console.log('Restored conversation from backend:', existingConvId);
+                return;
+              }
+            } catch (error) {
+              console.log('Could not load conversation from backend, using localStorage:', error);
+              // Use localStorage version as fallback
+              setCurrentConversationId(existingConvId);
+              setConversationHistory(existingHistory);
+              console.log('Restored conversation from localStorage:', existingConvId);
+              return;
+            }
+          }
+        } catch (error) {
+          console.log('Could not parse conversation history from localStorage:', error);
+          // Continue to create new conversation
+        }
+      }
+      
+      // No existing conversation or on fresh page load - create new one
+      if (conversationHistory.length === 0) {
+        const newId = await apiClient.createConversation(userId, { 
+          llm_provider: llmProvider 
+        });
+        setCurrentConversationId(newId);
+        localStorage.setItem('current_conversation_id', newId);
+        
+        // Start conversation with initial agent message
+        const initialMessage: ChatMessage = {
+          role: 'assistant',
+          content: 'Hi! What city, state, or zip code would you like to search for events in?',
+          timestamp: new Date().toISOString()
+        };
+        setConversationHistory([initialMessage]);
+        localStorage.setItem('conversation_history', JSON.stringify([initialMessage]));
+        
+        console.log('Created new conversation:', newId);
+      }
     };
     
     initializeConversation();
@@ -148,6 +201,13 @@ const App: React.FC = () => {
 
   const handleRegister = async (anonymousUserId: string, _email: string, _password: string, _name: string, idToken: string) => {
     try {
+      // Preserve current conversation before registration
+      const currentConvId = currentConversationId;
+      const currentHistory = conversationHistory;
+      
+      // Set flag to preserve conversation during userId change
+      preserveConversationRef.current = true;
+      
       // The Firebase user is already created, now register with our backend using token
       const response = await apiClient.registerWithToken(anonymousUserId, idToken);
 
@@ -159,6 +219,33 @@ const App: React.FC = () => {
 
         // Update usage stats
         updateUsageStats({ is_registered: true });
+
+        // Preserve conversation if it exists
+        if (currentConvId && currentHistory.length > 0) {
+          // Try to use the migrated conversation
+          try {
+            const conversation = await apiClient.getConversation(registeredUserId, currentConvId);
+            if (conversation && conversation.messages && conversation.messages.length > 0) {
+              setCurrentConversationId(currentConvId);
+              setConversationHistory(conversation.messages);
+              localStorage.setItem('current_conversation_id', currentConvId);
+              localStorage.setItem('conversation_history', JSON.stringify(conversation.messages));
+              console.log('Preserved conversation after registration:', currentConvId);
+            } else {
+              // Fallback: use current history
+              setCurrentConversationId(currentConvId);
+              setConversationHistory(currentHistory);
+              localStorage.setItem('current_conversation_id', currentConvId);
+              localStorage.setItem('conversation_history', JSON.stringify(currentHistory));
+            }
+          } catch (error) {
+            // Fallback: preserve current history
+            setCurrentConversationId(currentConvId);
+            setConversationHistory(currentHistory);
+            localStorage.setItem('current_conversation_id', currentConvId);
+            localStorage.setItem('conversation_history', JSON.stringify(currentHistory));
+          }
+        }
 
         // Show success message
         alert('Registration successful! Your conversation history has been preserved.');
@@ -173,6 +260,13 @@ const App: React.FC = () => {
 
   const handleLogin = async (_user: User, token: string) => {
     try {
+      // Preserve current conversation before login
+      const currentConvId = currentConversationId;
+      const currentHistory = conversationHistory;
+      
+      // Set flag to preserve conversation during userId change
+      preserveConversationRef.current = true;
+      
       // Firebase authentication is already handled, just verify with backend
       const response = await apiClient.verifyToken(token);
 
@@ -185,29 +279,65 @@ const App: React.FC = () => {
         // Update usage stats for registered user
         updateUsageStats({ is_registered: true });
 
-        // Try to load user's conversations (may be empty for new users)
-        try {
-          const conversations = await apiClient.listUserConversations(authenticatedUserId);
-
-          // Load most recent conversation if exists
-          if (conversations && conversations.length > 0) {
-            const mostRecent = conversations[0];
-            const conversation = await apiClient.getConversation(authenticatedUserId, mostRecent.conversation_id);
-            setCurrentConversationId(mostRecent.conversation_id);
-            setConversationHistory(conversation.messages || []);
-            localStorage.setItem('current_conversation_id', mostRecent.conversation_id);
-          } else {
-            // New user - start with empty conversation
-            setConversationHistory([]);
-            setCurrentConversationId(null);
-            localStorage.removeItem('current_conversation_id');
+        // Preserve conversation if it exists, otherwise load user's conversations
+        if (currentConvId && currentHistory.length > 0) {
+          // Try to preserve current conversation
+          try {
+            const conversation = await apiClient.getConversation(authenticatedUserId, currentConvId);
+            if (conversation && conversation.messages && conversation.messages.length > 0) {
+              setCurrentConversationId(currentConvId);
+              setConversationHistory(conversation.messages);
+              localStorage.setItem('current_conversation_id', currentConvId);
+              localStorage.setItem('conversation_history', JSON.stringify(conversation.messages));
+              console.log('Preserved conversation after login:', currentConvId);
+            } else {
+              // Fallback: use current history
+              setCurrentConversationId(currentConvId);
+              setConversationHistory(currentHistory);
+              localStorage.setItem('current_conversation_id', currentConvId);
+              localStorage.setItem('conversation_history', JSON.stringify(currentHistory));
+            }
+          } catch (error) {
+            // Fallback: preserve current history
+            setCurrentConversationId(currentConvId);
+            setConversationHistory(currentHistory);
+            localStorage.setItem('current_conversation_id', currentConvId);
+            localStorage.setItem('conversation_history', JSON.stringify(currentHistory));
           }
-        } catch (conversationError: any) {
-          // If listing conversations fails (404 for new users or missing endpoint), just start fresh
-          console.warn('Could not load conversations, starting fresh:', conversationError);
-          setConversationHistory([]);
-          setCurrentConversationId(null);
-          localStorage.removeItem('current_conversation_id');
+        } else {
+          // No current conversation - try to load user's conversations
+          try {
+            const conversations = await apiClient.listUserConversations(authenticatedUserId);
+
+            // Load most recent conversation if exists
+            if (conversations && conversations.length > 0) {
+              const mostRecent = conversations[0];
+              const conversation = await apiClient.getConversation(authenticatedUserId, mostRecent.conversation_id);
+              setCurrentConversationId(mostRecent.conversation_id);
+              setConversationHistory(conversation.messages || []);
+              localStorage.setItem('current_conversation_id', mostRecent.conversation_id);
+              localStorage.setItem('conversation_history', JSON.stringify(conversation.messages || []));
+            } else {
+              // New user - start with initial message
+              const initialMessage: ChatMessage = {
+                role: 'assistant',
+                content: 'Hi! What city, state, or zip code would you like to search for events in?',
+                timestamp: new Date().toISOString()
+              };
+              setConversationHistory([initialMessage]);
+              localStorage.setItem('conversation_history', JSON.stringify([initialMessage]));
+            }
+          } catch (conversationError: any) {
+            // If listing conversations fails, start with initial message
+            console.warn('Could not load conversations, starting fresh:', conversationError);
+            const initialMessage: ChatMessage = {
+              role: 'assistant',
+              content: 'Hi! What city, state, or zip code would you like to search for events in?',
+              timestamp: new Date().toISOString()
+            };
+            setConversationHistory([initialMessage]);
+            localStorage.setItem('conversation_history', JSON.stringify([initialMessage]));
+          }
         }
 
         setShowLoginModal(false);
@@ -224,16 +354,36 @@ const App: React.FC = () => {
 
   const handleLogout = async () => {
     try {
+      // Preserve current conversation before logout
+      const currentConvId = currentConversationId;
+      const currentHistory = conversationHistory;
+      
+      // Set flag to preserve conversation during userId change
+      preserveConversationRef.current = true;
+      
       await auth.signOut();
-      // Clear conversation and reset to anonymous user
-      setConversationHistory([]);
-      setCurrentConversationId(null);
-      localStorage.removeItem('current_conversation_id');
-
+      
       // Reset to anonymous user ID
       const anonymousId = getOrCreateUserId();
       setUserIdState(anonymousId);
       setUserId(anonymousId);
+
+      // Preserve conversation if it exists
+      if (currentConvId && currentHistory.length > 0) {
+        // Try to preserve the conversation with anonymous user
+        // The conversation will be migrated if user logs back in
+        setCurrentConversationId(currentConvId);
+        setConversationHistory(currentHistory);
+        localStorage.setItem('current_conversation_id', currentConvId);
+        localStorage.setItem('conversation_history', JSON.stringify(currentHistory));
+        console.log('Preserved conversation after logout:', currentConvId);
+      } else {
+        // No conversation to preserve - clear state
+        setCurrentConversationId(null);
+        setConversationHistory([]);
+        localStorage.removeItem('current_conversation_id');
+        localStorage.removeItem('conversation_history');
+      }
 
       // Update usage stats for anonymous user
       updateUsageStats({ is_registered: false });
