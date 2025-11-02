@@ -1,43 +1,33 @@
 import React from 'react';
-import { MapPin, Calendar, Star, ExternalLink, Clock } from 'lucide-react';
-
-interface EventData {
-  title?: string;
-  name?: string;
-  description: string;
-  venue_name?: string;
-  venue_city?: string;
-  start_datetime?: string;
-  end_datetime?: string;
-  image_url?: string;
-  event_url?: string;
-  categories?: string[];
-  rating?: number;
-  is_open_now?: boolean;
-  website?: string;
-  [key: string]: any;
-}
+import { MapPin, Clock, Star, Heart } from 'lucide-react';
+import { EventData } from '../api/client';
+import { ImageWithFallback } from './ImageWithFallback';
 
 interface RecommendationCardProps {
   recommendation: {
     type: 'event' | 'restaurant';
-    data: EventData;
+    data: EventData | any;
     relevance_score: number;
     explanation: string;
   };
 }
 
 const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation }) => {
-  const { type, data, explanation } = recommendation;
+  const { type, data } = recommendation;
 
-  const formatDate = (dateString: string | undefined) => {
+  if (type !== 'event') {
+    return null;
+  }
+
+  const eventData = data as EventData;
+  
+  const formatDate = (dateString: string) => {
     try {
       if (!dateString || dateString === 'TBD') return 'Date TBD';
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return dateString;
       return date.toLocaleDateString('en-US', {
         weekday: 'short',
-        year: 'numeric',
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
@@ -48,112 +38,88 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
     }
   };
 
-  const getRatingDisplay = () => {
-    if (type === 'restaurant' && data.rating) {
-      return (
-        <div className="flex items-center space-x-1">
-          <Star className="w-4 h-4 text-yellow-400 fill-current" />
-          <span className="text-sm font-medium">{data.rating}/5</span>
-        </div>
-      );
-    }
-    return null;
-  };
+  const price = eventData.is_free ? 'Free' : (eventData.ticket_min_price || 'TBD');
+  const [liked, setLiked] = React.useState(false);
 
   return (
-    <div className="recommendation-card">
+    <div
+      className="flex-shrink-0 w-[240px] bg-white rounded-xl shadow-md border transition-all cursor-pointer hover:shadow-lg active:shadow-lg active:scale-[0.98] p-3 flex flex-col"
+      style={{ borderColor: '#F5F5F5' }}
+    >
       {/* Event Image */}
-      {data.image_url && (
-        <div className="mb-3">
-          <img
-            src={data.image_url}
-            alt={type === 'event' ? data.title : data.name}
-            className="w-full h-48 object-cover rounded-lg"
-            onError={(e) => {
-              // Hide image if it fails to load
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
-          />
-        </div>
-      )}
-
-      <div className="flex items-start justify-between mb-0.5">
-        <h3 className="text-lg font-bold flex-1 pr-4">
-          {type === 'event' ? data.title : data.name}
-        </h3>
-        {data.event_url && (
-          <a
-            href={data.event_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center space-x-1 px-3 py-1 bg-orange-500 text-white text-sm rounded-md hover:bg-orange-600 transition-colors font-medium flex-shrink-0"
-          >
-            <span>View Details →</span>
-          </a>
-        )}
-      </div>
-      <div className="flex items-center space-x-4 text-sm mb-0.5">
-        <div className="flex items-center space-x-1">
-          <MapPin className="w-4 h-4" />
-          <span>{data.venue_name || data.name}, {data.venue_city}</span>
-        </div>
-        {type === 'event' && (
-          <div className="flex items-center space-x-1">
-            <Calendar className="w-4 h-4" />
-            <span>{formatDate(data.start_datetime)}</span>
+      <div className="relative w-full h-[120px] overflow-hidden rounded mb-3">
+        <ImageWithFallback
+          src={eventData.image_url || ''}
+          alt={eventData.title}
+          className="w-full h-full object-cover"
+        />
+        {/* Star Rating Badge - Top Left */}
+        {eventData.rating && (
+          <div className="absolute top-2 left-2 bg-white/70 backdrop-blur-sm rounded-md px-1.5 py-0.5 flex items-center gap-0.5">
+            <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+            <span className="text-xs" style={{ color: '#221A13' }}>{eventData.rating}</span>
           </div>
         )}
-      </div>
-
-      <p className="mb-1 line-clamp-3">
-        {data.description}
-      </p>
-
-      <div className="flex flex-wrap gap-1 mb-1">
-        {data.categories?.map((category: string, index: number) => (
-          <span
-            key={index}
-            className={`px-1 py-0.5 text-xs rounded font-medium ${
-              category.toLowerCase().includes('free') 
-                ? 'bg-orange-500 text-white' 
-                : 'bg-amber-200 text-amber-800'
+        {/* Heart Icon - Top Right */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setLiked(!liked);
+          }}
+          className="absolute top-2 right-2 transition-opacity hover:opacity-80 z-10"
+        >
+          <Heart
+            className={`w-6 h-6 transition-colors drop-shadow-md ${
+              liked
+                ? 'fill-red-500 text-red-500'
+                : 'fill-white/60 text-white/60'
             }`}
-          >
-            {category}
-          </span>
-        ))}
+          />
+        </button>
       </div>
 
-      {type === 'restaurant' && data.is_open_now !== undefined && (
-        <div className="flex items-center space-x-1 text-sm">
-          <Clock className="w-4 h-4" />
-          <span className={data.is_open_now ? 'text-green-600' : 'text-red-600'}>
-            {data.is_open_now ? 'Open now' : 'Closed'}
-          </span>
-        </div>
-      )}
-      
-      {getRatingDisplay()}
-      
-      {data.website && (
-        <div className="mt-2">
-          <a
-            href={data.website}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center space-x-1 text-sm hover:opacity-80 transition-colors"
-          >
-            <ExternalLink className="w-4 h-4" />
-            <span>Website</span>
-          </a>
-        </div>
-      )}
+      {/* Card Content */}
+      <div className="flex flex-col flex-1 space-y-2.5">
+        <h3 className="line-clamp-2 text-[15px]" style={{ color: '#221A13', fontFamily: 'Abitare Sans, sans-serif' }}>
+          {eventData.title}
+        </h3>
 
-      {explanation && (
-        <div className="mt-2 text-xs italic opacity-75">
-          {explanation}
+        {/* Date/Time and Location */}
+        <div className="flex flex-col gap-1.5 text-xs" style={{ color: '#5E574E' }}>
+          <div className="flex items-center gap-1">
+            <Clock className="w-3.5 h-3.5" style={{ color: '#B46A55' }} />
+            <span>{formatDate(eventData.start_datetime)}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <MapPin className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#B46A55' }} />
+            <span className="truncate">{eventData.venue_name}</span>
+          </div>
         </div>
-      )}
+
+        <p className="text-sm line-clamp-2" style={{ color: '#5E574E', lineHeight: '1.4' }}>
+          {eventData.description}
+        </p>
+
+        {/* Divider */}
+        <div className="border-t pt-2 mt-auto" style={{ borderColor: '#F5F5F5' }} />
+
+        {/* Price and Visit Button */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm" style={{ color: '#221A13' }}>{price}</span>
+          {eventData.event_url && (
+            <a
+              href={eventData.event_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="ml-auto px-5 py-2 text-white rounded-lg text-xs transition-all active:scale-95 hover:opacity-90 shadow-sm"
+              style={{ backgroundColor: '#B46A55' }}
+            >
+              Visit
+            </a>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

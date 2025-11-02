@@ -4,7 +4,7 @@
 
 @layer base {
   html {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Abitare Sans', system-ui, sans-serif;
   }
   :root {
     --background: 0 0% 100%;
@@ -82,6 +82,15 @@
 @layer utilities {
   .animate-fadeIn {
     animation: fadeIn 0.5s ease-in-out;
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 }
 

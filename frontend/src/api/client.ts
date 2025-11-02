@@ -28,24 +28,40 @@ export interface ChatRequest {
   conversation_id?: string | null;  // Optional conversation ID for continuing conversations
 }
 
+export interface EventData {
+  event_id?: string;
+  title: string;
+  description: string;
+  venue_name: string;
+  venue_city: string;
+  start_datetime: string;
+  end_datetime?: string;
+  timezone?: string;
+  categories?: string[];
+  is_free: boolean;
+  ticket_min_price?: string;
+  ticket_max_price?: string;
+  image_url?: string;
+  event_url?: string;
+  organizer_name?: string;
+  rating?: number;
+  [key: string]: any;
+}
+
+export interface RestaurantData {
+  restaurant_id?: string;
+  name: string;
+  description: string;
+  venue_city: string;
+  categories?: string[];
+  is_open_now?: boolean;
+  rating?: number;
+  [key: string]: any;
+}
+
 export interface RecommendationItem {
   type: 'event' | 'restaurant';
-  data: {
-    title?: string;
-    name?: string;
-    description: string;
-    venue_name?: string;
-    venue_city?: string;
-    start_datetime?: string;
-    end_datetime?: string;
-    image_url?: string;
-    event_url?: string;
-    categories?: string[];
-    rating?: number;
-    is_open_now?: boolean;
-    website?: string;
-    [key: string]: any;
-  };
+  data: EventData | RestaurantData;
   relevance_score: number;
   explanation: string;
 }

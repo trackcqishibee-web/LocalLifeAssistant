@@ -48,6 +48,19 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Figma design tokens
+        'figma-bg': '#FCFBF9',
+        'figma-user-bubble': '#E9E6DF',
+        'figma-text-primary': '#221A13',
+        'figma-text-secondary': '#5E574E',
+        'figma-teal': '#76C1B2',
+        'figma-brown': '#B46A55',
+        'figma-border': '#F5F5F5',
+        'figma-border-user': '#EDEBE6',
+      },
+      fontFamily: {
+        'aladin': ['Aladin', 'cursive'],
+        'abitare': ['Abitare Sans', 'sans-serif'],
       },
       borderRadius: {
         lg: "var(--radius)",

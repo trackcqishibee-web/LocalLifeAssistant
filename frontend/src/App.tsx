@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, MessageCircle, MapPin } from 'lucide-react';
+import { Menu, Home, LogIn, UserPlus } from 'lucide-react';
 import ChatInterface from './components/ChatInterface';
 import RegistrationModal from './components/RegistrationModal';
 import LoginModal from './components/LoginModal';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from './components/ui/sheet';
 import { ChatMessage, apiClient } from './api/client';
 import { getOrCreateUserId, setUserId } from './utils/userIdManager';
 import { updateUsageStats, shouldShowRegistrationPrompt, markRegistrationPrompted, getTrialWarningMessage } from './utils/usageTracker';
@@ -14,6 +15,7 @@ const App: React.FC = () => {
   const [llmProvider, setLlmProvider] = useState('openai');
   const [showSettings, setShowSettings] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [userId, setUserIdState] = useState<string>('');
   const [usageStats, setUsageStats] = useState<any>(null);
   const [showRegistrationModal, setShowRegistrationModal] = useState(false);
@@ -203,16 +205,37 @@ const App: React.FC = () => {
       const response = await apiClient.verifyToken(token);
 
       if (response.success) {
-        // Load user's conversations
-        const conversations = await apiClient.listUserConversations(response.user_id);
+        // Update user ID to authenticated user
+        const authenticatedUserId = response.user_id || _user.uid;
+        setUserIdState(authenticatedUserId);
+        setUserId(authenticatedUserId);
 
-        // Load most recent conversation if exists
-        if (conversations.length > 0) {
-          const mostRecent = conversations[0];
-          const conversation = await apiClient.getConversation(response.user_id, mostRecent.conversation_id);
-          setCurrentConversationId(mostRecent.conversation_id);
-          setConversationHistory(conversation.messages);
-          localStorage.setItem('current_conversation_id', mostRecent.conversation_id);
+        // Update usage stats for registered user
+        updateUsageStats({ is_registered: true });
+
+        // Try to load user's conversations (may be empty for new users)
+        try {
+          const conversations = await apiClient.listUserConversations(authenticatedUserId);
+
+          // Load most recent conversation if exists
+          if (conversations && conversations.length > 0) {
+            const mostRecent = conversations[0];
+            const conversation = await apiClient.getConversation(authenticatedUserId, mostRecent.conversation_id);
+            setCurrentConversationId(mostRecent.conversation_id);
+            setConversationHistory(conversation.messages || []);
+            localStorage.setItem('current_conversation_id', mostRecent.conversation_id);
+          } else {
+            // New user - start with empty conversation
+            setConversationHistory([]);
+            setCurrentConversationId(null);
+            localStorage.removeItem('current_conversation_id');
+          }
+        } catch (conversationError: any) {
+          // If listing conversations fails (404 for new users or missing endpoint), just start fresh
+          console.warn('Could not load conversations, starting fresh:', conversationError);
+          setConversationHistory([]);
+          setCurrentConversationId(null);
+          localStorage.removeItem('current_conversation_id');
         }
 
         setShowLoginModal(false);
@@ -254,152 +277,155 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`min-h-screen ${trialWarning ? 'pt-20' : ''}`}>
-      {/* Header */}
-      <header className="bg-white shadow-sm sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-amber-600 rounded-lg flex items-center justify-center">
-                <MapPin className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Local Life Assistant</h1>
-                <p className="text-sm text-gray-500">AI-powered recommendations for your city</p>
-              </div>
-            </div>
-            
-            <div className="flex items-center space-x-4">
-              {/* Authentication Status */}
-              {authLoading ? (
-                <div className="text-sm text-gray-600">Loading...</div>
-              ) : currentUser ? (
-                <div className="flex items-center gap-3">
-                  <div className="text-sm text-gray-700">
-                    Welcome, {currentUser.displayName || currentUser.email?.split('@')[0] || 'User'}
-                  </div>
-                  <button
-                    onClick={handleLogout}
-                    className="text-sm bg-amber-600/80 text-white px-3 py-1 rounded-md hover:bg-amber-700/80 transition-colors"
-                  >
-                    Sign Out
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3">
-                  {usageStats && !usageStats.is_registered && (
-                    <div className="text-sm text-gray-600">
-                      Trial: {usageStats.trial_remaining} interactions left
-                    </div>
-                  )}
-                  <button
-                    onClick={() => setShowRegistrationModal(true)}
-                    className="text-sm bg-amber-600 text-white px-3 py-1 rounded-md hover:bg-amber-700 transition-colors"
-                  >
-                    Sign in / Register
-                  </button>
-                </div>
-              )}
-              
-              <div className="flex items-center space-x-2">
-                <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                <span className="text-sm text-gray-600">
-                  {isConnected ? 'Connected' : 'Disconnected'}
-                </span>
-              </div>
-              
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <Settings className="w-5 h-5" />
-              </button>
-            </div>
+    <div className="h-dvh bg-[#FCFBF9] flex flex-col max-w-md mx-auto">
+      {/* Sticky Header Container */}
+      <div className="sticky top-0 z-50 bg-[#FCFBF9] flex-shrink-0">
+        {/* Status Bar */}
+        <div className="h-11 bg-[#FCFBF9] flex items-center justify-between px-4 text-xs text-slate-700">
+          <span>9:41</span>
+          <div className="flex items-center gap-1">
+            <div className="w-4 h-3 border border-slate-700 rounded-sm" />
+            <div className="w-3 h-3 border border-slate-700 rounded-sm" />
           </div>
         </div>
-      </header>
 
-      {/* Settings Panel */}
-      {showSettings && (
-        <div className="bg-white shadow-sm p-4">
-          <div className="max-w-7xl mx-auto">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  LLM Provider
-                </label>
-                <select
-                  value={llmProvider}
-                  onChange={(e) => setLlmProvider(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
-                >
-                  {availableProviders.map(provider => (
-                    <option key={provider.value} value={provider.value}>
-                      {provider.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="flex items-end">
-                <button
-                  onClick={clearConversation}
-                  className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-                >
-                  Clear Conversation
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Chat Interface */}
-        <div className="bg-white rounded-lg shadow-sm h-[700px] flex flex-col">
-          <div className="p-4 bg-gray-50/50">
-            <div className="flex items-center space-x-2">
-              <MessageCircle className="w-5 h-5 text-amber-600" />
-              <h2 className="text-lg font-semibold text-gray-900">Chat with Assistant</h2>
-            </div>
-          </div>
-          
-          <ChatInterface
-            onNewMessage={handleNewMessage}
-            onRecommendations={handleRecommendations}
-            llmProvider={llmProvider}
-            conversationHistory={conversationHistory}
-            userId={userId}
-            onTrialExceeded={() => setShowRegistrationModal(true)}
-            conversationId={currentConversationId}
-          />
+        {/* Header */}
+        <div className="bg-[#FCFBF9] px-4 py-2.5 border-b border-slate-200/50 flex items-center gap-2">
+          <button
+            onClick={() => setMenuOpen(true)}
+            type="button"
+            className="p-1.5 hover:bg-slate-200/50 rounded-lg transition-colors"
+          >
+            <Menu className="w-5 h-5" style={{ color: 'rgb(118, 193, 178)' }} />
+          </button>
+          <h1
+            className="text-lg"
+            style={{
+              background: 'linear-gradient(135deg, #76C1B2 0%, #B46A55 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              fontFamily: 'Aladin, cursive'
+            }}
+          >
+            LocoMoco. Catch the Vibe. Locally
+          </h1>
         </div>
       </div>
 
+      {/* Side Menu */}
+      <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+        <SheetContent side="left" className="w-[85%] bg-[#FCFBF9] p-0" aria-describedby={undefined}>
+          <SheetHeader className="sr-only">
+            <SheetTitle>Menu</SheetTitle>
+          </SheetHeader>
+          <div className="flex flex-col h-full">
+            {/* Menu Header */}
+            <div className="px-4 py-6 border-b border-slate-200/50">
+              <h2 className="text-lg font-semibold" style={{ color: '#221A13' }}>
+                Menu
+              </h2>
+            </div>
+
+            {/* Menu Items */}
+            <div className="flex-1 px-4 py-6 space-y-4">
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  window.location.href = '/';
+                }}
+                className="w-full flex items-center gap-3 p-4 bg-white/80 backdrop-blur-sm rounded-xl hover:bg-white transition-colors"
+              >
+                <Home className="w-5 h-5" style={{ color: '#76C1B2' }} />
+                <span style={{ color: '#221A13' }}>Home</span>
+              </button>
+
+              {authLoading ? (
+                <div className="text-sm" style={{ color: '#5E574E' }}>Loading...</div>
+              ) : currentUser ? (
+                <div className="space-y-2">
+                  <div className="px-4 py-2 text-sm" style={{ color: '#5E574E' }}>
+                    Welcome, {currentUser.displayName || currentUser.email?.split('@')[0] || 'User'}
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setMenuOpen(false);
+                      await handleLogout();
+                    }}
+                    className="w-full flex items-center gap-3 p-4 bg-white/80 backdrop-blur-sm rounded-xl hover:bg-white transition-colors"
+                  >
+                    <LogIn className="w-5 h-5" style={{ color: '#B46A55' }} />
+                    <span style={{ color: '#221A13' }}>Sign Out</span>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setShowLoginModal(true);
+                    }}
+                    className="w-full flex items-center gap-3 p-4 bg-white/80 backdrop-blur-sm rounded-xl hover:bg-white transition-colors"
+                  >
+                    <LogIn className="w-5 h-5" style={{ color: '#76C1B2' }} />
+                    <span style={{ color: '#221A13' }}>Sign In</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setShowRegistrationModal(true);
+                    }}
+                    className="w-full flex items-center gap-3 p-4 bg-white/80 backdrop-blur-sm rounded-xl hover:bg-white transition-colors"
+                  >
+                    <UserPlus className="w-5 h-5" style={{ color: '#B46A55' }} />
+                    <span style={{ color: '#221A13' }}>Register</span>
+                  </button>
+                  {usageStats && !usageStats.is_registered && (
+                    <div className="px-4 py-2 text-xs" style={{ color: '#5E574E' }}>
+                      Trial: {usageStats.trial_remaining} interactions left
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Chat Interface - Full Height */}
+      <div className="flex-1 min-h-0">
+        <ChatInterface
+          onNewMessage={handleNewMessage}
+          onRecommendations={handleRecommendations}
+          llmProvider={llmProvider}
+          conversationHistory={conversationHistory}
+          userId={userId}
+          onTrialExceeded={() => setShowRegistrationModal(true)}
+          conversationId={currentConversationId}
+        />
+      </div>
 
       {/* Trial Warning Banner */}
       {trialWarning && (
-        <div className="fixed top-0 left-0 right-0 bg-amber-50 border-l-4 border-amber-500 p-4 z-40">
-          <div className="max-w-7xl mx-auto">
-            <p className="text-amber-700">{trialWarning}</p>
-          </div>
+        <div className="fixed top-0 left-0 right-0 bg-amber-50 border-l-4 border-amber-500 p-4 z-40 max-w-md mx-auto">
+          <p className="text-amber-700">{trialWarning}</p>
         </div>
       )}
 
-              {/* Registration Modal */}
-              <RegistrationModal
-                isOpen={showRegistrationModal}
-                onClose={() => setShowRegistrationModal(false)}
-                onRegister={handleRegister}
-                trialRemaining={usageStats?.trial_remaining || 0}
-              />
+      {/* Registration Modal */}
+      <RegistrationModal
+        isOpen={showRegistrationModal}
+        onClose={() => setShowRegistrationModal(false)}
+        onRegister={handleRegister}
+        trialRemaining={usageStats?.trial_remaining || 0}
+      />
 
-              {/* Login Modal */}
-              <LoginModal
-                isOpen={showLoginModal}
-                onClose={() => setShowLoginModal(false)}
-                onLogin={handleLogin}
-              />
+      {/* Login Modal */}
+      <LoginModal
+        isOpen={showLoginModal}
+        onClose={() => setShowLoginModal(false)}
+        onLogin={handleLogin}
+      />
     </div>
   );
 };
