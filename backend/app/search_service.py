@@ -15,10 +15,17 @@ class SearchService:
     """Service for intelligent event search using LLM"""
     
     def __init__(self):
+        self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
-        if not self.openai_api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
-    
+        if self.openrouter_api_key:
+            self.client = openai.OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=self.openrouter_api_key)
+        elif self.openai_api_key:
+            self.client = openai.OpenAI(api_key=self.openai_api_key)
+        else:
+            raise ValueError("Either OPENROUTER_API_KEY or OPENAI_API_KEY environment variable is required")
+
     async def intelligent_event_search(self, query: str, events: List[Dict[str, Any]], user_preferences: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
         Use LLM to intelligently search and rank events based on user query
@@ -91,19 +98,31 @@ Return format:
         
         try:
             logger.info(f"Calling OpenAI API with prompt length: {len(prompt)}")
-            
             # Call OpenAI API (updated for v1.0+)
-            client = openai.OpenAI(api_key=self.openai_api_key)
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a helpful event recommendation assistant. Always return valid JSON objects with selected_events and scores."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=500,
-                temperature=0.1
-            )
-            
+            if self.openrouter_api_key:
+                # Use google/gemini-2.5-flash-lite if OPENROUTER_API_KEY is set because it has the best performance for this task.
+                response = self.client.chat.completions.create(
+                    model = "google/gemini-2.5-flash-lite",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful event recommendation assistant. Always return valid JSON objects with selected_events and scores."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=1000,
+                    temperature=0.1
+                )
+            elif self.openai_api_key:
+                response = self.client.chat.completions.create(
+                    model = "gpt-4.1-nano",
+                    messages=[
+                        {"role": "system", "content": "You are a helpful event recommendation assistant. Always return valid JSON objects with selected_events and scores."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=1000,
+                    temperature=0.1
+                )
+            else:
+                raise ValueError("No LLM API key found")
+
             # logger.info(f"OpenAI API call with {prompt} successful")
             
             # Parse LLM response

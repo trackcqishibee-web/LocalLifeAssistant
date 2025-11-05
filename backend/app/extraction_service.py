@@ -24,10 +24,17 @@ class ExtractionService:
     """Service for extracting user preferences and location from natural language"""
     
     def __init__(self):
+        self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
-        if not self.openai_api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
-    
+        if self.openrouter_api_key:
+            self.client = openai.OpenAI(
+                base_url="https://openrouter.ai/api/v1",
+                api_key=self.openrouter_api_key)
+        elif self.openai_api_key:
+            self.client = openai.OpenAI(api_key=self.openai_api_key)
+        else:
+            raise ValueError("Either OPENROUTER_API_KEY or OPENAI_API_KEY environment variable is required")
+
     def extract_user_preferences(self, user_message: str) -> UserPreferences:
         """
         Extract all user preferences from a single message using LLM
@@ -65,17 +72,29 @@ Examples:
 
 Return only the JSON object:
 """
-
-            # Call OpenAI API for preference extraction
-            response = openai.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a precise preference extraction assistant. Return only valid JSON objects."},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=200,
-                temperature=0.1
-            )
+            if self.openrouter_api_key:
+                # Use meta-llama/llama-3.3-8b-instruct:free if OPENROUTER_API_KEY is set because the task is simple and the model is free.
+                response = self.client.chat.completions.create(
+                    model = "meta-llama/llama-3.3-8b-instruct:free",
+                    messages=[
+                        {"role": "system", "content": "You are a precise preference extraction assistant. Return only valid JSON objects."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=200,
+                    temperature=0.1
+                )
+            elif self.openai_api_key:
+                response = self.client.chat.completions.create(
+                    model = "gpt-4.1-nano",
+                    messages=[
+                        {"role": "system", "content": "You are a precise preference extraction assistant. Return only valid JSON objects."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=200,
+                    temperature=0.1,
+                )
+            else:
+                raise ValueError("No LLM API key found")
             
             extracted_text = response.choices[0].message.content.strip()
             logger.info(f"LLM extraction response: {extracted_text}")
@@ -189,15 +208,29 @@ Examples:
 Return only the city name or "none", nothing else.
 """
 
-            response = openai.chat.completions.create(
-                model="gpt-3.5-turbo",
+            if self.openrouter_api_key:
+                # Use meta-llama/llama-3.3-8b-instruct:free if OPENROUTER_API_KEY is set because the task is simple and the model is free.
+                response = self.client.chat.completions.create(
+                    model = "meta-llama/llama-3.3-8b-instruct:free",
+                    messages=[
+                        {"role": "system", "content": "You are a precise location extraction assistant. Return only city names or 'none'."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=50,
+                    temperature=0.1
+                )
+            elif self.openai_api_key:
+                response = self.client.chat.completions.create(
+                    model = "gpt-4.1-nano",
                 messages=[
                     {"role": "system", "content": "You are a precise location extraction assistant. Return only city names or 'none'."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=50,
                 temperature=0.1
-            )
+                )
+            else:
+                raise ValueError("No LLM API key found")
             
             extracted_city = response.choices[0].message.content.strip().lower()
             
