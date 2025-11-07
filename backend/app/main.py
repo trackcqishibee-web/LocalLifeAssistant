@@ -205,7 +205,10 @@ async def smart_cached_chat(request: ChatRequest):
                 # Trial exceeded - return prompt to register
                 trial_limit = usage_tracker.trial_limit
                 return ChatResponse(
-                    message=f"🔒 You've reached your free trial limit of {trial_limit} interactions! Please register to continue using our service and keep your conversation history.",
+                    message=(
+                        f"🔒 You've reached your free trial limit of {trial_limit} interactions! "
+                        f"Please register to continue using our service and keep your conversation history."
+                    ),
                     recommendations=[],
                     llm_provider_used=request.llm_provider,
                     cache_used=False,
@@ -263,8 +266,17 @@ async def smart_cached_chat(request: ChatRequest):
         # Step 3: Handle missing location for initial responses
         if request.is_initial_response and not location_provided:
             logger.info("No location provided in initial response, asking user for location")
+            supported_cities = event_crawler.eventbrite_crawler.get_supported_cities()
+            formatted_cities = [c.replace('_', ' ').title() for c in supported_cities]
+            cities_list = ", ".join(formatted_cities)
+            location_message = (
+                f"I'd be happy to help you find events! "
+                f"To give you the best recommendations, could you please tell me "
+                f"which city or area you're interested in? "
+                f"(e.g., {cities_list}, or a zipcode)"
+            )
             return ChatResponse(
-                message="I'd be happy to help you find events! To give you the best recommendations, could you please tell me which city or area you're interested in? (e.g., 'New York', 'Los Angeles', 'Chicago', or a zipcode)",
+                message=location_message,
                 recommendations=[],
                 llm_provider_used=request.llm_provider,
                 cache_used=False,
@@ -343,9 +355,16 @@ async def smart_cached_chat(request: ChatRequest):
             location_note = " (I couldn't determine your location, so I'm defaulting to New York)"
         
         if top_events:
-            response_message = f"🎉 Found {len(top_events)} events in {city.title()} that match your search!{location_note} Check out the recommendations below ↓"
+            response_message = (
+                f"🎉 Found {len(top_events)} events in {city.title()} that match your search!"
+                f"{location_note} Check out the recommendations below ↓"
+            )
         else:
-            response_message = f"😔 I couldn't find any events in {city.title()} matching your query.{location_note} Try asking about 'fashion events', 'music concerts', 'halloween parties', or 'free events'."
+            response_message = (
+                f"😔 I couldn't find any events in {city.title()} matching your query."
+                f"{location_note} Try asking about 'fashion events', 'music concerts', "
+                f"'halloween parties', or 'free events'."
+            )
         
         # Step 9: Create extraction summary if preferences were extracted
         extraction_summary = None
@@ -407,7 +426,10 @@ async def stream_chat_response(request: ChatRequest):
             if usage_tracker.check_trial_limit(user_id):
                 # Trial exceeded - return prompt to register
                 trial_limit = usage_tracker.trial_limit
-                trial_message = f"🔒 You've reached your free trial limit of {trial_limit} interactions! Please register to continue using our service and keep your conversation history."
+                trial_message = (
+                    f"🔒 You've reached your free trial limit of {trial_limit} interactions! "
+                    f"Please register to continue using our service and keep your conversation history."
+                )
                 yield f"data: {json.dumps({'type': 'message', 'content': trial_message, 'trial_exceeded': True})}\n\n"
                 yield f"data: {json.dumps({'type': 'done'})}\n\n"
                 return
@@ -475,7 +497,15 @@ async def stream_chat_response(request: ChatRequest):
         # Step 3: Handle missing location for initial responses
         if request.is_initial_response and not location_provided:
             logger.info("No location provided in initial response, asking user for location")
-            location_message = "I'd be happy to help you find events! To give you the best recommendations, could you please tell me which city or area you're interested in? (e.g., 'New York', 'Los Angeles', 'Chicago', or a zipcode)"
+            supported_cities = event_crawler.eventbrite_crawler.get_supported_cities()
+            formatted_cities = [c.replace('_', ' ').title() for c in supported_cities]
+            cities_list = ", ".join(formatted_cities)
+            location_message = (
+                f"I'd be happy to help you find events! "
+                f"To give you the best recommendations, could you please tell me "
+                f"which city or area you're interested in? "
+                f"(e.g., {cities_list}, or a zipcode)"
+            )
             yield f"data: {json.dumps({'type': 'message', 'content': location_message})}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
             return
@@ -607,6 +637,31 @@ async def stream_chat_response(request: ChatRequest):
         
         logger.info(f"Final city decision: {city}, Event type: {extracted_preferences.event_type if extracted_preferences else 'none'}")
         
+        # Step 4.5: Check if city is supported
+        location_id = event_crawler.eventbrite_crawler.get_location_id(city)
+        if location_id is None:
+            logger.warning(f"City '{city}' is not supported")
+            supported_cities = event_crawler.eventbrite_crawler.get_supported_cities()
+            # Format city names for display (replace underscores with spaces and title case)
+            formatted_cities = [c.replace('_', ' ').title() for c in supported_cities]
+            cities_list = ", ".join(formatted_cities)
+            error_message = (
+                f"Sorry, we don't currently support events in {city.title()}. "
+                f"We only support the following cities and their surrounding areas: {cities_list}. "
+                f"Please try one of these cities instead!"
+            )
+            yield f"data: {json.dumps({'type': 'message', 'content': error_message})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+            
+            # Save assistant error message
+            conversation_storage.save_message(user_id, conversation_id, {
+                "role": "assistant",
+                "content": error_message,
+                "timestamp": datetime.now().isoformat(),
+                "recommendations": []
+            })
+            return
+        
         # Step 5: Now proceed with event fetching (only when both location and event type are available)
         yield f"data: {json.dumps({'type': 'status', 'content': f'Searching for events in {city.title()}...'})}\n\n"
         await asyncio.sleep(0.3)
@@ -704,9 +759,16 @@ async def stream_chat_response(request: ChatRequest):
             location_note = " (I couldn't determine your location, so I'm defaulting to New York)"
         
         if top_events:
-            response_message = f"🎉 Found {len(top_events)} events in {city.title()} that match your search!{location_note} Check out the recommendations below ↓"
+            response_message = (
+                f"🎉 Found {len(top_events)} events in {city.title()} that match your search!"
+                f"{location_note} Check out the recommendations below ↓"
+            )
         else:
-            response_message = f"😔 I couldn't find any events in {city.title()} matching your query.{location_note} Try asking about 'fashion events', 'music concerts', 'halloween parties', or 'free events'."
+            response_message = (
+                f"😔 I couldn't find any events in {city.title()} matching your query."
+                f"{location_note} Try asking about 'fashion events', 'music concerts', "
+                f"'halloween parties', or 'free events'."
+            )
         
         # Determine if location was just processed (for follow-up message)
         location_just_processed = request.is_initial_response and location_provided
@@ -815,7 +877,9 @@ async def register_with_token(request: dict = Body(...)):
             "success": True,
             "user_id": real_user_id,
             "migrated_conversations": migrated_count,
-            "message": f"Registration successful! {migrated_count} conversations migrated."
+            "message": (
+                f"Registration successful! {migrated_count} conversations migrated."
+            )
         }
     except ValueError as e:
         logger.error(f"Firebase registration error: {str(e)}")
