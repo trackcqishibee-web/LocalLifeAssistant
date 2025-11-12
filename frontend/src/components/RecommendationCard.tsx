@@ -1,5 +1,5 @@
 import React from 'react';
-import { MapPin, Clock, Star, Heart } from 'lucide-react';
+import { MapPin, Clock, Star } from 'lucide-react';
 import { EventData } from '../api/client';
 import { ImageWithFallback } from './ImageWithFallback';
 
@@ -49,8 +49,6 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
   };
 
   const price = eventData.is_free ? 'Free' : formatPrice(eventData.ticket_min_price);
-  const [liked, setLiked] = React.useState(false);
-
   return (
     <div
       className="flex-shrink-0 w-[240px] bg-white rounded-xl shadow-md border transition-all cursor-pointer hover:shadow-lg active:shadow-lg active:scale-[0.98] p-3 flex flex-col"
@@ -70,22 +68,6 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
             <span className="text-xs" style={{ color: '#221A13' }}>{eventData.rating}</span>
           </div>
         )}
-        {/* Heart Icon - Top Right */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setLiked(!liked);
-          }}
-          className="absolute top-2 right-2 transition-opacity hover:opacity-80 z-10"
-        >
-          <Heart
-            className={`w-6 h-6 transition-colors drop-shadow-md ${
-              liked
-                ? 'fill-red-500 text-red-500'
-                : 'fill-white/60 text-white/60'
-            }`}
-          />
-        </button>
       </div>
 
       {/* Card Content */}

@@ -66,35 +66,36 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   }, [messagesWithRecommendations]);
 
-  // Sync with conversation history
+  // Sync base conversation history while preserving recommendation-only messages
   useEffect(() => {
-    const syncedMessages: ChatMessageWithRecommendations[] = [];
-    
-    conversationHistory.forEach(msg => {
-      // Add the original message
-      syncedMessages.push({
-        ...msg,
-        recommendations: []
-      });
-      
-      // If this message has recommendations, create separate messages for each recommendation
-      if ((msg as any).recommendations && (msg as any).recommendations.length > 0) {
-        (msg as any).recommendations.forEach((rec: any) => {
-          syncedMessages.push({
-            role: 'assistant',
-            content: '', // Empty content - just show the recommendation card
-            timestamp: new Date().toISOString(),
-            recommendations: [rec]
-          });
-        });
+    setMessagesWithRecommendations(prevMessages => {
+      if (conversationHistory.length === 0) {
+        return [];
       }
+
+      const recommendationOnlyMessages = prevMessages.filter(msg => {
+        const hasContent = msg.content && msg.content.trim() !== '';
+        const hasRecommendations = msg.recommendations && msg.recommendations.length > 0;
+        return !hasContent && hasRecommendations;
+      });
+
+      const conversationMessages: ChatMessageWithRecommendations[] = conversationHistory.map(msg => ({
+        ...msg,
+        recommendations: (msg as any).recommendations ?? []
+      }));
+
+      const combinedMessages = [...conversationMessages, ...recommendationOnlyMessages];
+
+      combinedMessages.sort((a, b) => {
+        const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return aTime - bTime;
+      });
+
+      return combinedMessages;
     });
-    
-    setMessagesWithRecommendations(syncedMessages);
-    
-    // Scroll to bottom when messages are synced (including initial message)
-    // Use requestAnimationFrame to ensure DOM is updated before scrolling
-    if (syncedMessages.length > 0) {
+
+    if (conversationHistory.length > 0) {
       requestAnimationFrame(() => {
         setTimeout(() => scrollToBottom(), 50);
       });
@@ -177,17 +178,45 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         },
         // onRecommendation
         (recommendation: any) => {
-          // Create a separate message for each recommendation
-          const recommendationMessage: ChatMessageWithRecommendations = {
-            role: 'assistant',
-            content: undefined, // Use undefined for cleaner detection of recommendation-only messages
-            timestamp: new Date().toISOString(),
-            recommendations: [recommendation]
-          };
-          
-          // Add to local UI state for rendering (don't add to conversation history)
-          setMessagesWithRecommendations(prev => [...prev, recommendationMessage]);
-          
+          setMessagesWithRecommendations(prev => {
+            // If we have no previous messages, create the first recommendation-only message
+            if (prev.length === 0) {
+              return [
+                {
+                  role: 'assistant',
+                  content: undefined,
+                  timestamp: new Date().toISOString(),
+                  recommendations: [recommendation]
+                }
+              ];
+            }
+
+            const updatedMessages = [...prev];
+            const lastIndex = updatedMessages.length - 1;
+            const lastMessage = updatedMessages[lastIndex];
+
+            const isRecommendationOnly =
+              lastMessage.role === 'assistant' &&
+              (!lastMessage.content || lastMessage.content.trim().length === 0);
+
+            if (isRecommendationOnly) {
+              const existingRecommendations = lastMessage.recommendations ?? [];
+              updatedMessages[lastIndex] = {
+                ...lastMessage,
+                recommendations: [...existingRecommendations, recommendation]
+              };
+            } else {
+              updatedMessages.push({
+                role: 'assistant',
+                content: undefined,
+                timestamp: new Date().toISOString(),
+                recommendations: [recommendation]
+              });
+            }
+
+            return updatedMessages;
+          });
+
           // Update recommendations tracking
           onRecommendations([recommendation]);
         },
