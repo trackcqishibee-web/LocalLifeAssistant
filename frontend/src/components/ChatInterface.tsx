@@ -177,17 +177,45 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         },
         // onRecommendation
         (recommendation: any) => {
-          // Create a separate message for each recommendation
-          const recommendationMessage: ChatMessageWithRecommendations = {
-            role: 'assistant',
-            content: undefined, // Use undefined for cleaner detection of recommendation-only messages
-            timestamp: new Date().toISOString(),
-            recommendations: [recommendation]
-          };
-          
-          // Add to local UI state for rendering (don't add to conversation history)
-          setMessagesWithRecommendations(prev => [...prev, recommendationMessage]);
-          
+          setMessagesWithRecommendations(prev => {
+            // If we have no previous messages, create the first recommendation-only message
+            if (prev.length === 0) {
+              return [
+                {
+                  role: 'assistant',
+                  content: undefined,
+                  timestamp: new Date().toISOString(),
+                  recommendations: [recommendation]
+                }
+              ];
+            }
+
+            const updatedMessages = [...prev];
+            const lastIndex = updatedMessages.length - 1;
+            const lastMessage = updatedMessages[lastIndex];
+
+            const isRecommendationOnly =
+              lastMessage.role === 'assistant' &&
+              (!lastMessage.content || lastMessage.content.trim().length === 0);
+
+            if (isRecommendationOnly) {
+              const existingRecommendations = lastMessage.recommendations ?? [];
+              updatedMessages[lastIndex] = {
+                ...lastMessage,
+                recommendations: [...existingRecommendations, recommendation]
+              };
+            } else {
+              updatedMessages.push({
+                role: 'assistant',
+                content: undefined,
+                timestamp: new Date().toISOString(),
+                recommendations: [recommendation]
+              });
+            }
+
+            return updatedMessages;
+          });
+
           // Update recommendations tracking
           onRecommendations([recommendation]);
         },
