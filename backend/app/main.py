@@ -732,7 +732,7 @@ async def stream_chat_response(request: ChatRequest):
             return
         
         # Step 5: Now proceed with event fetching (only when both location and event type are available)
-        yield f"data: {json.dumps({'type': 'status', 'content': f'Searching for events in {city.title()}...'})}\n\n"
+        yield f"data: {json.dumps({'type': 'status', 'content': f'Searching for events in the {city.title()} area...'})}\n\n"
         await asyncio.sleep(0.3)
 
         # Get cached events (will fetch fresh automatically if expired)
