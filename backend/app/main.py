@@ -6,7 +6,7 @@ Combines real-time fetching with intelligent city-based caching
 
 import logging
 import os
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, Request, Response, Body
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,6 +25,7 @@ from .extraction_service import ExtractionService, UserPreferences
 from .usage_tracker import UsageTracker
 from .conversation_storage import ConversationStorage
 from .user_manager import UserManager
+from .location_service import LocationResolver
 
 # Load environment variables from .env file
 load_dotenv('../.env') or load_dotenv('.env') or load_dotenv('/app/.env')
@@ -157,12 +158,43 @@ extraction_service = ExtractionService()
 usage_tracker = UsageTracker()
 conversation_storage = ConversationStorage()
 user_manager = UserManager()
+location_resolver = LocationResolver()
 
 # Conversations are now stored in Firestore
 logger.info("Conversations storage: Firestore")
 
 # Users are now stored in Firestore
 logger.info("Users storage: Firestore")
+
+
+def resolve_city_from_zip_text(
+    user_message: str,
+) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+    """
+    Detect zip codes in the user message and resolve them to supported cities.
+    Returns (city, resolution_metadata)
+    """
+    if not user_message:
+        return None, None
+
+    zip_code = location_resolver.extract_zip_from_text(user_message)
+    if not zip_code:
+        return None, None
+
+    resolved_zip = location_resolver.resolve_zip(zip_code)
+    if not resolved_zip:
+        return None, None
+
+    canonical_city = resolved_zip.get("canonical_city")
+    if not canonical_city:
+        logger.info(f"Zip {zip_code} resolved without canonical city mapping")
+        return None, None
+
+    logger.info(
+        f"Zipcode resolution: {zip_code} -> {canonical_city.title()} "
+        f"(city={resolved_zip.get('city')}, state={resolved_zip.get('state')})"
+    )
+    return canonical_city, resolved_zip
 
 # Routes
 @app.get("/health")
@@ -237,16 +269,32 @@ async def smart_cached_chat(request: ChatRequest):
             "timestamp": datetime.now().isoformat()
         })
         
+        # Detect zip code before running any LLM extraction
+        zip_city = None
+        resolved_zip_data = None
+        zip_city, resolved_zip_data = resolve_city_from_zip_text(request.message)
+        if zip_city:
+            logger.info(f"Detected zip-based city: {zip_city}")
+        
         # Step 1: Extract user preferences if this is an initial response
         extracted_preferences = None
         if request.is_initial_response:
             logger.info("Initial response detected, extracting user preferences")
             extracted_preferences = extraction_service.extract_user_preferences(request.message)
             logger.info(f"Extracted preferences: {extracted_preferences}")
+            if zip_city:
+                if extracted_preferences:
+                    extracted_preferences.location = zip_city
+                else:
+                    extracted_preferences = UserPreferences(location=zip_city)
         
         # Step 2: Determine city to use (prioritize extracted preferences)
         city = None
         location_provided = False
+        if zip_city:
+            city = zip_city.lower()
+            location_provided = True
+            logger.info(f"Using city from detected zip: {city}")
         
         # Priority 1: Use extracted location from preferences
         if extracted_preferences and extracted_preferences.location and extracted_preferences.location != "none":
@@ -261,8 +309,7 @@ async def smart_cached_chat(request: ChatRequest):
                 city = query_city.lower()
                 location_provided = True
                 logger.info(f"Using city from query extraction: {city}")
-        
-        
+
         # Step 3: Handle missing location for initial responses
         if request.is_initial_response and not location_provided:
             logger.info("No location provided in initial response, asking user for location")
@@ -351,7 +398,9 @@ async def smart_cached_chat(request: ChatRequest):
         
         # Step 8: Generate response message
         location_note = ""
-        if not location_provided and city == "new york":
+        if resolved_zip_data:
+            location_note = f" (Based on zip code {resolved_zip_data.get('zip_code')})"
+        elif not location_provided and city == "new york":
             location_note = " (I couldn't determine your location, so I'm defaulting to New York)"
         
         if top_events:
@@ -447,18 +496,35 @@ async def stream_chat_response(request: ChatRequest):
                 "llm_provider": request.llm_provider
             })
 
+        # Detect zip code before any extraction
+        zip_city = None
+        resolved_zip_data = None
+        zip_city, resolved_zip_data = resolve_city_from_zip_text(request.message)
+        if zip_city:
+            logger.info(f"Detected zip-based city: {zip_city}")
+
         # Step 1: Extract user preferences first (so we can save them with message)
         extracted_preferences = None
         if request.is_initial_response:
             logger.info("Initial response detected, extracting user preferences")
             extracted_preferences = extraction_service.extract_user_preferences(request.message)
             logger.info(f"Extracted preferences: {extracted_preferences}")
+            if zip_city:
+                if extracted_preferences:
+                    extracted_preferences.location = zip_city
+                else:
+                    extracted_preferences = UserPreferences(location=zip_city)
         else:
             logger.info("Non-initial response detected")
         
         # Step 2: Determine city to use (prioritize extracted preferences)
         city = None
         location_provided = False
+        
+        if zip_city:
+            city = zip_city.lower()
+            location_provided = True
+            logger.info(f"Using city from detected zip: {city}")
         
         # Priority 1: Use extracted location from preferences
         if extracted_preferences and extracted_preferences.location and extracted_preferences.location != "none":
@@ -479,7 +545,7 @@ async def stream_chat_response(request: ChatRequest):
                     from .extraction_service import UserPreferences
                     extracted_preferences = UserPreferences(location=query_city)
                 logger.info(f"Using city from query extraction: {city}, updated extracted_preferences")
-        
+
         # Save user message with extracted preferences (after we've determined location)
         # Only save for initial responses here - non-initial responses will be saved later
         if request.is_initial_response:
@@ -575,10 +641,13 @@ async def stream_chat_response(request: ChatRequest):
                     if current_preferences.time and current_preferences.time != "none":
                         extracted_preferences.time = current_preferences.time
             
+            if zip_city and extracted_preferences:
+                extracted_preferences.location = zip_city
+            
             event_type_provided = extracted_preferences and extracted_preferences.event_type and extracted_preferences.event_type != "none"
             
             # Use stored location
-            if stored_location:
+            if stored_location and not location_provided:
                 city = stored_location.lower()
                 location_provided = True
                 if extracted_preferences:
@@ -755,7 +824,9 @@ async def stream_chat_response(request: ChatRequest):
         
         # Step 6: Generate and send main response message first
         location_note = ""
-        if not location_provided and city == "new york":
+        if resolved_zip_data:
+            location_note = f" (Based on zip code {resolved_zip_data.get('zip_code')})"
+        elif not location_provided and city == "new york":
             location_note = " (I couldn't determine your location, so I'm defaulting to New York)"
         
         if top_events:
