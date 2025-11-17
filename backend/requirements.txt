@@ -1,7 +1,6 @@
 --only-binary=all
 fastapi>=0.120.0
 uvicorn[standard]>=0.31.1
-chromadb==0.4.22
 openai>=2.6.0
 anthropic==0.7.8
 sentence-transformers==2.2.2
