@@ -168,6 +168,10 @@ def format_city_name(city: str) -> str:
     """Format city name from snake_case to Title Case"""
     return city.replace('_', ' ').title()
 
+def normalize_city_name(city: str) -> str:
+    """Convert Title Case city name to snake_case for backend processing"""
+    return city.lower().replace(' ', '_')
+
 # Routes
 @app.get("/health")
 async def health_check():
@@ -261,12 +265,15 @@ async def stream_chat_response(request: ChatRequest):
         supported_cities = event_crawler.get_supported_cities()
         supported_event_types = event_crawler.get_supported_events()
         
-        if message_lower in supported_cities:
-            # User selected city from button
-            city = message_lower
+        # Normalize city name from Title Case (e.g., "San Francisco") to snake_case (e.g., "san_francisco")
+        normalized_city = normalize_city_name(request.message.strip())
+        
+        if normalized_city in supported_cities:
+            # User selected city from button (Title Case from frontend, convert to snake_case)
+            city = normalized_city
             location_provided = True
             extracted_preferences = UserPreferences(location=city)
-            logger.info(f"Using city from button selection: {city}")
+            logger.info(f"Using city from button selection: {city} (converted from '{request.message}')")
         elif message_lower in supported_event_types:
             # User selected event type from button
             extracted_preferences = UserPreferences(event_type=message_lower)

@@ -37,7 +37,7 @@ const CityButtons: React.FC<CityButtonsProps> = ({ cities, onSelect, disabled = 
           return (
             <button
               key={city}
-              onClick={() => !disabled && onSelect(city)}
+              onClick={() => !disabled && onSelect(formattedName)}
               disabled={disabled}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all hover:shadow-md active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
               style={{
