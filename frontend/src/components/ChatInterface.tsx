@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Loader2 } from 'lucide-react';
 import { ChatMessage, ChatRequest } from '../api/client';
 import { dataService } from '../services/dataService';
-import RecommendationCard from './RecommendationCard';
+import CardGroup from './CardGroup';
 import { ImageWithFallback } from './ImageWithFallback';
 import userAvatarImg from '../assets/images/figma/user-avatar.png';
 import agentAvatarImg from '../assets/images/figma/agent-avatar.png';
@@ -141,6 +141,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         request,
         // onStatus
         (status: string) => {
+          console.log('Status update:', status);
           setCurrentStatus(status);
         },
         // onMessage
@@ -179,6 +180,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         // onRecommendation
         (recommendation: any) => {
           setMessagesWithRecommendations(prev => {
+            // Clear status and extraction summary when first recommendation arrives
+            const hasRecommendations = prev.some(msg => 
+              msg.recommendations && msg.recommendations.length > 0
+            );
+            
+            if (!hasRecommendations) {
+              setCurrentStatus('');
+              setExtractionSummary(null);
+            }
+
             // If we have no previous messages, create the first recommendation-only message
             if (prev.length === 0) {
               return [
@@ -362,11 +373,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               {msg.role === 'user' ? (
                 /* User Message - Right Aligned */
                 <div className="flex justify-end gap-2 items-start">
-                  <div className="rounded-xl rounded-tr-sm px-4 py-3 max-w-[80%] border shadow-sm" style={{ backgroundColor: '#E9E6DF', borderColor: '#EDEBE6' }}>
+                  <div className="rounded-xl rounded-tr-sm px-4 py-3 max-w-[80%] shadow-sm" style={{ backgroundColor: '#E9E6DF' }}>
                     <p className="text-[15px]" style={{ color: '#221A13' }}>{msg.content}</p>
                   </div>
                   {/* User Avatar */}
-                  <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1 border-0" style={{ backgroundColor: '#E9E6DF' }}>
+                  <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1 border-2" style={{ backgroundColor: '#E9E6DF', borderColor: '#D4D0C8' }}>
                     <ImageWithFallback src={userAvatarImg} alt="User" className="w-3/4 h-3/4 object-cover rounded-full" />
                   </div>
                 </div>
@@ -376,13 +387,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   <div className="w-11 h-11 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     {/* Event Cards - Horizontal Scroll */}
-                    <div className="flex gap-3 overflow-x-auto overflow-y-hidden scrollbar-hide horizontal-scroll-mobile pb-2">
-                      {msg.recommendations?.map((rec, recIndex) => (
-                        <div key={recIndex} className="flex-none flex-shrink-0">
-                          <RecommendationCard recommendation={rec} />
-                        </div>
-                      ))}
-                    </div>
+                    {msg.recommendations && msg.recommendations.length > 0 && (
+                      <CardGroup recommendations={msg.recommendations} />
+                    )}
                   </div>
                 </div>
               ) : (
@@ -395,19 +402,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   
                   {/* Bot Message */}
                   <div className="flex-1 min-w-0">
-                    <div className="bg-white rounded-xl rounded-tl-sm px-4 py-3 shadow-md border mb-3" style={{ borderColor: '#F5F5F5' }}>
+                    <div className="rounded-xl rounded-tl-sm px-4 py-3 shadow-md border mb-3" style={{ backgroundColor: 'rgba(118, 193, 178, 0.1)', borderColor: 'rgba(118, 193, 178, 0.1)' }}>
                       <p className="text-[15px]" style={{ color: '#221A13' }}>{msg.content}</p>
                     </div>
 
                     {/* Event Cards - Horizontal Scroll */}
                     {msg.recommendations && msg.recommendations.length > 0 && (
-                      <div className="flex gap-3 overflow-x-auto overflow-y-hidden scrollbar-hide horizontal-scroll-mobile pb-2">
-                        {msg.recommendations.map((rec, recIndex) => (
-                          <div key={recIndex} className="flex-none flex-shrink-0">
-                            <RecommendationCard recommendation={rec} />
-                          </div>
-                        ))}
-                      </div>
+                      <CardGroup recommendations={msg.recommendations} />
                     )}
                   </div>
                 </div>
@@ -416,7 +417,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           );
         })}
         
-        {isLoading && (
+        {(isLoading || (currentStatus && !messagesWithRecommendations.some(msg => 
+          msg.recommendations && msg.recommendations.length > 0
+        ))) && (
           <div className="flex gap-2 items-start">
             {/* Bot Avatar */}
             <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2" style={{ backgroundColor: 'white', borderColor: 'rgba(118, 193, 178, 0.6)' }}>
@@ -424,7 +427,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
             
             {/* Loading Message */}
-            <div className="bg-white rounded-xl rounded-tl-sm px-4 py-3 shadow-md border" style={{ borderColor: '#F5F5F5' }}>
+            <div className="rounded-xl rounded-tl-sm px-4 py-3 shadow-md border" style={{ backgroundColor: 'rgba(118, 193, 178, 0.1)', borderColor: 'rgba(118, 193, 178, 0.1)' }}>
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#76C1B2' }} />
                 <p className="text-[15px]" style={{ color: '#221A13' }}>
@@ -465,7 +468,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             type="text"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder={messagesWithRecommendations.length > 0 ? "What else are you looking for?" : "City, State/ City name/Zipcode"}
+            placeholder={messagesWithRecommendations.some(msg => msg.role === 'user') ? "What else are you looking for?" : "Start here!"}
             className="flex-1 rounded-xl border-[0.5px] border-slate-200 bg-white shadow-md h-14 text-base px-6 placeholder:text-[#5E574E] focus:outline-none focus:ring-2 focus:ring-[#76C1B2]/50"
             style={{ color: '#221A13' }}
             disabled={isLoading}

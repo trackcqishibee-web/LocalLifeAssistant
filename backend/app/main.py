@@ -60,21 +60,20 @@ else:
         "http://127.0.0.1:5173"
     ]
 
-# Always add Render frontend domain for deployment
-render_frontend_domain = "https://locallifeassistant-frontend.onrender.com"
-if render_frontend_domain not in allow_origins:
-    allow_origins.append(render_frontend_domain)
-    logger.info(f"Added Render frontend domain to CORS: {render_frontend_domain}")
+# # Always add Render frontend domain for deployment
+# render_frontend_domain = "https://locallifeassistant-frontend.onrender.com"
+# if render_frontend_domain not in allow_origins:
+#     allow_origins.append(render_frontend_domain)
+#     logger.info(f"Added Render frontend domain to CORS: {render_frontend_domain}")
 
-# Log CORS configuration for debugging
-logger.info(f"DOMAIN_NAME environment variable: '{domain_name}'")
-logger.info(f"Allowed origins: {allow_origins}")
+# # Log CORS configuration for debugging
+# logger.info(f"DOMAIN_NAME environment variable: '{domain_name}'")
 
 # Manual CORS middleware - simplified and more explicit
 @app.middleware("http")
 async def cors_middleware(request, call_next):
     origin = request.headers.get("origin")
-    logger.info(f"CORS middleware - Origin: {origin}, Allowed origins: {allow_origins}")
+    # logger.info(f"CORS middleware - Origin: {origin}, Allowed origins: {allow_origins}")
 
     # Handle preflight requests
     if request.method == "OPTIONS":
@@ -82,7 +81,7 @@ async def cors_middleware(request, call_next):
         # Set the origin header if it's in the allowed origins
         if origin in allow_origins:
             response.headers["Access-Control-Allow-Origin"] = origin
-            logger.info(f"OPTIONS: Set Access-Control-Allow-Origin to {origin}")
+            # logger.info(f"OPTIONS: Set Access-Control-Allow-Origin to {origin}")
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "*"
@@ -98,7 +97,7 @@ async def cors_middleware(request, call_next):
     # Set CORS headers on the response
     if origin in allow_origins:
         response.headers["Access-Control-Allow-Origin"] = origin
-        logger.info(f"GET/POST: Set Access-Control-Allow-Origin to {origin}")
+        # logger.info(f"GET/POST: Set Access-Control-Allow-Origin to {origin}")
     response.headers["Access-Control-Allow-Credentials"] = "true"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "*"
@@ -111,7 +110,7 @@ async def cors_middleware(request, call_next):
 @app.middleware("http")
 async def log_cors_requests(request: Request, call_next):
     origin = request.headers.get("origin")
-    logger.info(f"CORS middleware - Origin: {origin}, Allowed origins: {allow_origins}")
+    # logger.info(f"CORS middleware - Origin: {origin}, Allowed origins: {allow_origins}")
     response = await call_next(request)
     return response
 
@@ -405,8 +404,8 @@ async def smart_cached_chat(request: ChatRequest):
         
         if top_events:
             response_message = (
-                f"🎉 Found {len(top_events)} events in {city.title()} that match your search!"
-                f"{location_note} Check out the recommendations below ↓"
+                f"Found {len(top_events)} events in {city.title()} that match your search!"
+                f"{location_note} Check out the recommendations ↓"
             )
         else:
             response_message = (
@@ -787,18 +786,26 @@ async def stream_chat_response(request: ChatRequest):
         # Start the AI processing task
         ai_task = asyncio.create_task(ai_processing())
         
+        # Send first status message immediately to ensure it's shown
+        yield f"data: {json.dumps({'type': 'status', 'content': analysis_messages[0]})}\n\n"
+        logger.info(f"AI processing message: {analysis_messages[0]}")
+        await asyncio.sleep(0.5)  # Small delay to ensure message is sent
+        
         # Show alternating messages while AI is processing
-        i = 0
+        i = 1
         while not ai_task.done():
             message = analysis_messages[i % 2]  # Alternate between the two messages
             yield f"data: {json.dumps({'type': 'status', 'content': message})}\n\n"
-            await asyncio.sleep(1.5)  # 1.5 second delay between messages
             logger.info(f"AI processing message: {message}")
+            await asyncio.sleep(1.5)  # 1.5 second delay between messages
             i += 1
         
         # Wait for AI processing to complete
         top_events = await ai_task
         logger.info(f"LLM search returned {len(top_events)} events")
+        
+        # Ensure status message is visible for at least 1 second
+        await asyncio.sleep(0.5)
         
         # Debug: Check if events have LLM scores
         if top_events:
@@ -831,8 +838,8 @@ async def stream_chat_response(request: ChatRequest):
         
         if top_events:
             response_message = (
-                f"🎉 Found {len(top_events)} events in {city.title()} that match your search!"
-                f"{location_note} Check out the recommendations below ↓"
+                f"Found {len(top_events)} events in {city.title()} that match your search!"
+                f"{location_note} Check out the recommendations ↓"
             )
         else:
             response_message = (

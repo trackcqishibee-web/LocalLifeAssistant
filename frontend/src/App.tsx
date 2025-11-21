@@ -4,11 +4,37 @@ import ChatInterface from './components/ChatInterface';
 import RegistrationModal from './components/RegistrationModal';
 import LoginModal from './components/LoginModal';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from './components/ui/sheet';
-import { ChatMessage, apiClient } from './api/client';
+import { ChatMessage, apiClient, RecommendationItem } from './api/client';
 import { getOrCreateUserId, setUserId } from './utils/userIdManager';
 import { updateUsageStats, shouldShowRegistrationPrompt, markRegistrationPrompted, getTrialWarningMessage } from './utils/usageTracker';
 import { auth } from './firebase/config';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import { sampleEvents } from './services/sampleEvents';
+
+// Helper function to create initial conversation messages with welcome and sample events
+const createInitialMessages = (): (ChatMessage & { recommendations?: RecommendationItem[] })[] => {
+  const sampleRecommendations: RecommendationItem[] = sampleEvents.map((event, index) => ({
+    type: 'event' as const,
+    data: event,
+    relevance_score: 0.95 - (index * 0.05),
+    explanation: `Sample event from ${event.venue_city}: ${event.title}`
+  }));
+  
+  const welcomeMessage: ChatMessage & { recommendations?: RecommendationItem[] } = {
+    role: 'assistant',
+    content: 'Welcome to LocoMoco! We take you to the coolest local events!',
+    timestamp: new Date().toISOString(),
+    recommendations: sampleRecommendations
+  };
+  
+  const cityPromptMessage: ChatMessage = {
+    role: 'assistant',
+    content: 'What city, state would you like to search for events in?',
+    timestamp: new Date().toISOString()
+  };
+  
+  return [welcomeMessage, cityPromptMessage];
+};
 
 const App: React.FC = () => {
   const [conversationHistory, setConversationHistory] = useState<ChatMessage[]>([]);
@@ -183,14 +209,10 @@ const App: React.FC = () => {
         setCurrentConversationId(newId);
         localStorage.setItem('current_conversation_id', newId);
         
-        // Start conversation with initial agent message
-        const initialMessage: ChatMessage = {
-          role: 'assistant',
-          content: 'Hi! What city, state, or zip code would you like to search for events in?',
-          timestamp: new Date().toISOString()
-        };
-        setConversationHistory([initialMessage]);
-        localStorage.setItem('conversation_history', JSON.stringify([initialMessage]));
+        // Start conversation with welcome message and sample events, followed by city prompt
+        const initialMessages = createInitialMessages();
+        setConversationHistory(initialMessages);
+        localStorage.setItem('conversation_history', JSON.stringify(initialMessages));
         
         console.log('Created new conversation:', newId);
       }
@@ -318,25 +340,17 @@ const App: React.FC = () => {
               localStorage.setItem('current_conversation_id', mostRecent.conversation_id);
               localStorage.setItem('conversation_history', JSON.stringify(conversation.messages || []));
             } else {
-              // New user - start with initial message
-              const initialMessage: ChatMessage = {
-                role: 'assistant',
-                content: 'Hi! What city, state, or zip code would you like to search for events in?',
-                timestamp: new Date().toISOString()
-              };
-              setConversationHistory([initialMessage]);
-              localStorage.setItem('conversation_history', JSON.stringify([initialMessage]));
+              // New user - start with welcome message and sample events
+              const initialMessages = createInitialMessages();
+              setConversationHistory(initialMessages);
+              localStorage.setItem('conversation_history', JSON.stringify(initialMessages));
             }
           } catch (conversationError: any) {
-            // If listing conversations fails, start with initial message
+            // If listing conversations fails, start with welcome message and sample events
             console.warn('Could not load conversations, starting fresh:', conversationError);
-            const initialMessage: ChatMessage = {
-              role: 'assistant',
-              content: 'Hi! What city, state, or zip code would you like to search for events in?',
-              timestamp: new Date().toISOString()
-            };
-            setConversationHistory([initialMessage]);
-            localStorage.setItem('conversation_history', JSON.stringify([initialMessage]));
+            const initialMessages = createInitialMessages();
+            setConversationHistory(initialMessages);
+            localStorage.setItem('conversation_history', JSON.stringify(initialMessages));
           }
         }
 
