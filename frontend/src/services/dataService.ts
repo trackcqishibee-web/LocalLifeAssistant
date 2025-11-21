@@ -1,4 +1,4 @@
-import { ChatRequest, ChatResponse, RecommendationRequest } from '../api/client';
+import { ChatRequest, RecommendationRequest } from '../api/client';
 import { apiClient } from '../api/client';
 
 // Export IDataService interface for use in mockData

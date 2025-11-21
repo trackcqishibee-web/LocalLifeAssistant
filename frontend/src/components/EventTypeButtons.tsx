@@ -1,7 +1,5 @@
 import React from 'react';
 import musicIcon from '../assets/images/figma/music-icon.png';
-import wellnessIcon from '../assets/images/figma/wellness-icon.png';
-import luckyIcon from '../assets/images/figma/lucky-icon.png';
 import tapIcon from '../assets/images/figma/tap-icon.png';
 
 interface EventTypeButtonsProps {

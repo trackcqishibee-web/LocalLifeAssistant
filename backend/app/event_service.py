@@ -58,7 +58,7 @@ class EventCrawler:
             normalized_city = city_name.lower().strip()
             all_events = self.unified_service.get_events(normalized_city, category=category)
             logger.info(f"📊 Total events collected: {len(all_events)} from event_api providers for {city_name}/{category}")
-        return all_events
+            return all_events
         except Exception as e:
             logger.error(f"Error fetching events from event_api: {e}", exc_info=True)
             return []
