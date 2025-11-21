@@ -786,13 +786,18 @@ async def stream_chat_response(request: ChatRequest):
         # Start the AI processing task
         ai_task = asyncio.create_task(ai_processing())
         
+        # Send first status message immediately to ensure it's shown
+        yield f"data: {json.dumps({'type': 'status', 'content': analysis_messages[0]})}\n\n"
+        logger.info(f"AI processing message: {analysis_messages[0]}")
+        await asyncio.sleep(0.5)  # Small delay to ensure message is sent
+        
         # Show alternating messages while AI is processing
-        i = 0
+        i = 1
         while not ai_task.done():
             message = analysis_messages[i % 2]  # Alternate between the two messages
             yield f"data: {json.dumps({'type': 'status', 'content': message})}\n\n"
-            await asyncio.sleep(1.5)  # 1.5 second delay between messages
             logger.info(f"AI processing message: {message}")
+            await asyncio.sleep(1.5)  # 1.5 second delay between messages
             i += 1
         
         # Wait for AI processing to complete
