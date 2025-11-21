@@ -60,21 +60,20 @@ else:
         "http://127.0.0.1:5173"
     ]
 
-# Always add Render frontend domain for deployment
-render_frontend_domain = "https://locallifeassistant-frontend.onrender.com"
-if render_frontend_domain not in allow_origins:
-    allow_origins.append(render_frontend_domain)
-    logger.info(f"Added Render frontend domain to CORS: {render_frontend_domain}")
+# # Always add Render frontend domain for deployment
+# render_frontend_domain = "https://locallifeassistant-frontend.onrender.com"
+# if render_frontend_domain not in allow_origins:
+#     allow_origins.append(render_frontend_domain)
+#     logger.info(f"Added Render frontend domain to CORS: {render_frontend_domain}")
 
-# Log CORS configuration for debugging
-logger.info(f"DOMAIN_NAME environment variable: '{domain_name}'")
-logger.info(f"Allowed origins: {allow_origins}")
+# # Log CORS configuration for debugging
+# logger.info(f"DOMAIN_NAME environment variable: '{domain_name}'")
 
 # Manual CORS middleware - simplified and more explicit
 @app.middleware("http")
 async def cors_middleware(request, call_next):
     origin = request.headers.get("origin")
-    logger.info(f"CORS middleware - Origin: {origin}, Allowed origins: {allow_origins}")
+    # logger.info(f"CORS middleware - Origin: {origin}, Allowed origins: {allow_origins}")
 
     # Handle preflight requests
     if request.method == "OPTIONS":
@@ -82,7 +81,7 @@ async def cors_middleware(request, call_next):
         # Set the origin header if it's in the allowed origins
         if origin in allow_origins:
             response.headers["Access-Control-Allow-Origin"] = origin
-            logger.info(f"OPTIONS: Set Access-Control-Allow-Origin to {origin}")
+            # logger.info(f"OPTIONS: Set Access-Control-Allow-Origin to {origin}")
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "*"
@@ -98,7 +97,7 @@ async def cors_middleware(request, call_next):
     # Set CORS headers on the response
     if origin in allow_origins:
         response.headers["Access-Control-Allow-Origin"] = origin
-        logger.info(f"GET/POST: Set Access-Control-Allow-Origin to {origin}")
+        # logger.info(f"GET/POST: Set Access-Control-Allow-Origin to {origin}")
     response.headers["Access-Control-Allow-Credentials"] = "true"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "*"
@@ -111,7 +110,7 @@ async def cors_middleware(request, call_next):
 @app.middleware("http")
 async def log_cors_requests(request: Request, call_next):
     origin = request.headers.get("origin")
-    logger.info(f"CORS middleware - Origin: {origin}, Allowed origins: {allow_origins}")
+    # logger.info(f"CORS middleware - Origin: {origin}, Allowed origins: {allow_origins}")
     response = await call_next(request)
     return response
 
@@ -405,8 +404,8 @@ async def smart_cached_chat(request: ChatRequest):
         
         if top_events:
             response_message = (
-                f"🎉 Found {len(top_events)} events in {city.title()} that match your search!"
-                f"{location_note} Check out the recommendations below ↓"
+                f"Found {len(top_events)} events in {city.title()} that match your search!"
+                f"{location_note} Check out the recommendations ↓"
             )
         else:
             response_message = (
@@ -831,8 +830,8 @@ async def stream_chat_response(request: ChatRequest):
         
         if top_events:
             response_message = (
-                f"🎉 Found {len(top_events)} events in {city.title()} that match your search!"
-                f"{location_note} Check out the recommendations below ↓"
+                f"Found {len(top_events)} events in {city.title()} that match your search!"
+                f"{location_note} Check out the recommendations ↓"
             )
         else:
             response_message = (

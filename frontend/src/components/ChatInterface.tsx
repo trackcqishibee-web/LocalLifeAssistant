@@ -456,7 +456,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             type="text"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder={messagesWithRecommendations.length > 0 ? "What else are you looking for?" : "City, State/ City name/Zipcode"}
+            placeholder={messagesWithRecommendations.some(msg => msg.role === 'user') ? "What else are you looking for?" : "Start here!"}
             className="flex-1 rounded-xl border-[0.5px] border-slate-200 bg-white shadow-md h-14 text-base px-6 placeholder:text-[#5E574E] focus:outline-none focus:ring-2 focus:ring-[#76C1B2]/50"
             style={{ color: '#221A13' }}
             disabled={isLoading}
