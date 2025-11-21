@@ -180,6 +180,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         // onRecommendation
         (recommendation: any) => {
           setMessagesWithRecommendations(prev => {
+            // Clear status and extraction summary when first recommendation arrives
+            const hasRecommendations = prev.some(msg => 
+              msg.recommendations && msg.recommendations.length > 0
+            );
+            
+            if (!hasRecommendations) {
+              setCurrentStatus('');
+              setExtractionSummary(null);
+            }
+
             // If we have no previous messages, create the first recommendation-only message
             if (prev.length === 0) {
               return [
@@ -407,7 +417,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           );
         })}
         
-        {isLoading && (
+        {isLoading && !messagesWithRecommendations.some(msg => 
+          msg.recommendations && msg.recommendations.length > 0
+        ) && (
           <div className="flex gap-2 items-start">
             {/* Bot Avatar */}
             <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2" style={{ backgroundColor: 'white', borderColor: 'rgba(118, 193, 178, 0.6)' }}>

@@ -92,7 +92,7 @@ class MockDataService implements IDataService {
     }));
 
     return {
-      message: `🎉 Found ${recommendations.length} events that match your search! Check out the recommendations below ↓`,
+      message: `Found ${recommendations.length} events that match your search! Check out the recommendations ↓`,
       recommendations,
       llm_provider_used: 'mock',
       cache_used: false,
@@ -127,9 +127,6 @@ class MockDataService implements IDataService {
       await new Promise(resolve => setTimeout(resolve, 200));
 
       // Stream recommendations one by one
-      onStatus(`Preparing ${mockEvents.length} recommendations...`);
-      await new Promise(resolve => setTimeout(resolve, 300));
-
       for (const event of mockEvents) {
         const recommendation: RecommendationItem = {
           type: 'event',
