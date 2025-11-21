@@ -49,13 +49,15 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
   };
 
   const price = eventData.is_free ? 'Free' : formatPrice(eventData.ticket_min_price);
+  
   return (
     <div
-      className="flex-shrink-0 w-[240px] bg-white rounded-xl shadow-md border transition-all cursor-pointer hover:shadow-lg active:shadow-lg active:scale-[0.98] p-3 flex flex-col"
-      style={{ borderColor: '#F5F5F5' }}
+      data-card
+      className="flex-shrink-0 w-[240px] bg-white rounded-xl shadow-md border-2 transition-all cursor-pointer hover:shadow-lg active:shadow-lg active:scale-[0.98] p-3 flex flex-col"
+      style={{ borderColor: '#E0E0E0' }}
     >
       {/* Event Image */}
-      <div className="relative w-full h-[120px] overflow-hidden rounded mb-3">
+      <div className="relative w-full h-[120px] overflow-hidden rounded mb-3 flex-shrink-0">
         <ImageWithFallback
           src={eventData.image_url || ''}
           alt={eventData.title}
@@ -71,13 +73,13 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
       </div>
 
       {/* Card Content */}
-      <div className="flex flex-col flex-1 space-y-2.5">
-        <h3 className="line-clamp-2 text-[15px]" style={{ color: '#221A13', fontFamily: 'Abitare Sans, sans-serif' }}>
+      <div className="flex flex-col flex-1 min-h-0 space-y-2.5">
+        <h3 className="line-clamp-2 text-[15px] flex-shrink-0" style={{ color: '#221A13', fontFamily: 'Abitare Sans, sans-serif' }}>
           {eventData.title}
         </h3>
 
         {/* Date/Time and Location */}
-        <div className="flex flex-col gap-1.5 text-xs" style={{ color: '#5E574E' }}>
+        <div className="flex flex-col gap-1.5 text-xs flex-shrink-0" style={{ color: '#5E574E' }}>
           <div className="flex items-center gap-1">
             <Clock className="w-3.5 h-3.5" style={{ color: '#B46A55' }} />
             <span>{formatDate(eventData.start_datetime)}</span>
@@ -88,15 +90,18 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
           </div>
         </div>
 
-        <p className="text-sm line-clamp-2" style={{ color: '#5E574E', lineHeight: '1.4' }}>
+        <p className="text-sm line-clamp-2 flex-shrink-0" style={{ color: '#5E574E', lineHeight: '1.4' }}>
           {eventData.description}
         </p>
 
+        {/* Spacer to push footer down */}
+        <div className="flex-1" />
+
         {/* Divider */}
-        <div className="border-t pt-2 mt-auto" style={{ borderColor: '#F5F5F5' }} />
+        <div className="border-t-2 pt-2 flex-shrink-0" style={{ borderColor: '#E0E0E0' }} />
 
         {/* Price and Visit Button */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <span className="text-sm" style={{ color: '#221A13' }}>{price}</span>
           {eventData.event_url && (
             <a

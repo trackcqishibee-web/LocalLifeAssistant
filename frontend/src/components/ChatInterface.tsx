@@ -3,6 +3,7 @@ import { Send, Loader2 } from 'lucide-react';
 import { ChatMessage, ChatRequest } from '../api/client';
 import { dataService } from '../services/dataService';
 import RecommendationCard from './RecommendationCard';
+import CardGroup from './CardGroup';
 import { ImageWithFallback } from './ImageWithFallback';
 import userAvatarImg from '../assets/images/figma/user-avatar.png';
 import agentAvatarImg from '../assets/images/figma/agent-avatar.png';
@@ -362,11 +363,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               {msg.role === 'user' ? (
                 /* User Message - Right Aligned */
                 <div className="flex justify-end gap-2 items-start">
-                  <div className="rounded-xl rounded-tr-sm px-4 py-3 max-w-[80%] border shadow-sm" style={{ backgroundColor: '#E9E6DF', borderColor: '#EDEBE6' }}>
+                  <div className="rounded-xl rounded-tr-sm px-4 py-3 max-w-[80%] shadow-sm" style={{ backgroundColor: '#E9E6DF' }}>
                     <p className="text-[15px]" style={{ color: '#221A13' }}>{msg.content}</p>
                   </div>
                   {/* User Avatar */}
-                  <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1 border-0" style={{ backgroundColor: '#E9E6DF' }}>
+                  <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1 border-2" style={{ backgroundColor: '#E9E6DF', borderColor: '#D4D0C8' }}>
                     <ImageWithFallback src={userAvatarImg} alt="User" className="w-3/4 h-3/4 object-cover rounded-full" />
                   </div>
                 </div>
@@ -376,13 +377,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   <div className="w-11 h-11 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     {/* Event Cards - Horizontal Scroll */}
-                    <div className="flex gap-3 overflow-x-auto overflow-y-hidden scrollbar-hide horizontal-scroll-mobile pb-2">
-                      {msg.recommendations?.map((rec, recIndex) => (
-                        <div key={recIndex} className="flex-none flex-shrink-0">
-                          <RecommendationCard recommendation={rec} />
-                        </div>
-                      ))}
-                    </div>
+                    {msg.recommendations && msg.recommendations.length > 0 && (
+                      <CardGroup recommendations={msg.recommendations} />
+                    )}
                   </div>
                 </div>
               ) : (
@@ -395,19 +392,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   
                   {/* Bot Message */}
                   <div className="flex-1 min-w-0">
-                    <div className="bg-white rounded-xl rounded-tl-sm px-4 py-3 shadow-md border mb-3" style={{ borderColor: '#F5F5F5' }}>
+                    <div className="rounded-xl rounded-tl-sm px-4 py-3 shadow-md border mb-3" style={{ backgroundColor: 'rgba(118, 193, 178, 0.1)', borderColor: 'rgba(118, 193, 178, 0.1)' }}>
                       <p className="text-[15px]" style={{ color: '#221A13' }}>{msg.content}</p>
                     </div>
 
                     {/* Event Cards - Horizontal Scroll */}
                     {msg.recommendations && msg.recommendations.length > 0 && (
-                      <div className="flex gap-3 overflow-x-auto overflow-y-hidden scrollbar-hide horizontal-scroll-mobile pb-2">
-                        {msg.recommendations.map((rec, recIndex) => (
-                          <div key={recIndex} className="flex-none flex-shrink-0">
-                            <RecommendationCard recommendation={rec} />
-                          </div>
-                        ))}
-                      </div>
+                      <CardGroup recommendations={msg.recommendations} />
                     )}
                   </div>
                 </div>
@@ -424,7 +415,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             </div>
             
             {/* Loading Message */}
-            <div className="bg-white rounded-xl rounded-tl-sm px-4 py-3 shadow-md border" style={{ borderColor: '#F5F5F5' }}>
+            <div className="rounded-xl rounded-tl-sm px-4 py-3 shadow-md border" style={{ backgroundColor: 'rgba(118, 193, 178, 0.1)', borderColor: 'rgba(118, 193, 178, 0.1)' }}>
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#76C1B2' }} />
                 <p className="text-[15px]" style={{ color: '#221A13' }}>
