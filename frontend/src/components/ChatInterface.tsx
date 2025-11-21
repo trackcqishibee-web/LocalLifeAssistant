@@ -141,6 +141,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         request,
         // onStatus
         (status: string) => {
+          console.log('Status update:', status);
           setCurrentStatus(status);
         },
         // onMessage
@@ -416,9 +417,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           );
         })}
         
-        {isLoading && !messagesWithRecommendations.some(msg => 
+        {(isLoading || (currentStatus && !messagesWithRecommendations.some(msg => 
           msg.recommendations && msg.recommendations.length > 0
-        ) && (
+        ))) && (
           <div className="flex gap-2 items-start">
             {/* Bot Avatar */}
             <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2" style={{ backgroundColor: 'white', borderColor: 'rgba(118, 193, 178, 0.6)' }}>

@@ -804,6 +804,9 @@ async def stream_chat_response(request: ChatRequest):
         top_events = await ai_task
         logger.info(f"LLM search returned {len(top_events)} events")
         
+        # Ensure status message is visible for at least 1 second
+        await asyncio.sleep(0.5)
+        
         # Debug: Check if events have LLM scores
         if top_events:
             first_event = top_events[0]
