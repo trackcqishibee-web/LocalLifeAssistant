@@ -94,13 +94,6 @@ class APIClient {
     this.baseURL = baseURL;
   }
 
-  async chat(request: ChatRequest): Promise<ChatResponse> {
-    const url = `${this.baseURL}/api/chat`;
-    console.log('🔗 Chat API Call:', url);
-    const response = await axios.post(url, request);
-    return response.data;
-  }
-
   async chatStream(
     request: ChatRequest,
     onStatus: (status: string) => void,
@@ -227,6 +220,22 @@ class APIClient {
   async healthCheck(): Promise<any> {
     const response = await axios.get(`${this.baseURL}/health`);
     return response.data;
+  }
+
+  async getSupportedEventTypes(): Promise<string[]> {
+    const response = await axios.get(`${this.baseURL}/api/supported-event-types`);
+    if (response.data.success) {
+      return response.data.event_types || [];
+    }
+    return [];
+  }
+
+  async getSupportedCities(): Promise<string[]> {
+    const response = await axios.get(`${this.baseURL}/api/supported-cities`);
+    if (response.data.success) {
+      return response.data.cities || [];
+    }
+    return [];
   }
 
 

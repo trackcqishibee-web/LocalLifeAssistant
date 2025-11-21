@@ -3,7 +3,6 @@ import { apiClient } from '../api/client';
 
 // Export IDataService interface for use in mockData
 export interface IDataService {
-  chat(request: ChatRequest): Promise<ChatResponse>;
   chatStream(
     request: ChatRequest,
     onStatus: (status: string) => void,
@@ -30,10 +29,6 @@ const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA === 'true';
 
 // Real implementation - delegates to apiClient
 class RealDataService implements IDataService {
-  async chat(request: ChatRequest): Promise<ChatResponse> {
-    return apiClient.chat(request);
-  }
-
   async chatStream(
     request: ChatRequest,
     onStatus: (status: string) => void,
