@@ -327,3 +327,185 @@ class CacheManager:
         except Exception as e:
             logger.error(f"Error getting cache stats: {e}")
             return {'error': str(e)}
+
+    def _get_popular_events_cache_key(self) -> str:
+        """Get cache key for popular events"""
+        return "popular_events_usa"
+
+    def _get_popular_events_file_path(self) -> str:
+        """Get file path for popular events cache"""
+        return os.path.join(self.cache_dir, "popular_events_usa.json")
+
+    def cache_popular_events(self, events: List[Dict[str, Any]], cities_crawled: Optional[List[str]] = None) -> bool:
+        """Cache popular events (top 1 per city) - saves locally first, then to Firebase in background"""
+        try:
+            # Calculate next crawl time (6 hours from now)
+            next_crawl = datetime.now() + timedelta(hours=6)
+            
+            cache_data = {
+                'events': events,
+                'cached_at': datetime.now().isoformat(),
+                'count': len(events),
+                'cities_crawled': cities_crawled or [],
+                'next_crawl_at': next_crawl.isoformat()
+            }
+
+            # Cache in local memory (fastest access)
+            cache_key = self._get_popular_events_cache_key()
+            self.memory_cache[cache_key] = cache_data
+
+            # Cache to local disk (persistence)
+            try:
+                file_path = self._get_popular_events_file_path()
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(cache_data, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.error(f"Error saving popular events cache to disk: {e}")
+
+            # Cache in Firebase (distributed backup) - in background to not block
+            asyncio.create_task(self._cache_popular_events_to_firebase_async(cache_data))
+
+            logger.info(f"Cached {len(events)} popular events locally and in Firebase (async)")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error caching popular events: {e}")
+            return False
+
+    async def _cache_popular_events_to_firebase_async(self, cache_data: Dict[str, Any]):
+        """Async method to save popular events cache data to Firebase in the background"""
+        try:
+            cache_key = self._get_popular_events_cache_key()
+            self.db.collection('event_cache').document(cache_key).set(cache_data)
+            logger.debug(f"Successfully cached {cache_data['count']} popular events to Firebase")
+        except Exception as e:
+            logger.error(f"Error caching popular events to Firebase: {e}")
+
+    def get_popular_events(self) -> Optional[List[Dict[str, Any]]]:
+        """Get cached popular events - checks local cache first, then Firebase"""
+        try:
+            cache_key = self._get_popular_events_cache_key()
+
+            # Check local memory cache first (fastest)
+            if cache_key in self.memory_cache:
+                cache_data = self.memory_cache[cache_key]
+                if self._is_cache_valid(cache_data.get('cached_at', '')):
+                    events = cache_data.get('events', [])
+                    logger.info(f"Retrieved {len(events)} popular events from local memory cache")
+                    return events
+                else:
+                    # Remove expired entry from memory
+                    del self.memory_cache[cache_key]
+                    logger.debug("Removed expired popular events cache from memory")
+
+            # Check local file cache
+            file_path = self._get_popular_events_file_path()
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        cache_data = json.load(f)
+
+                    if self._is_cache_valid(cache_data.get('cached_at', '')):
+                        # Load into memory cache for faster future access
+                        self.memory_cache[cache_key] = cache_data
+                        events = cache_data.get('events', [])
+                        logger.info(f"Retrieved {len(events)} popular events from local file cache")
+                        return events
+                    else:
+                        # Remove expired file
+                        os.remove(file_path)
+                        logger.debug("Removed expired popular events cache file")
+                except Exception as e:
+                    logger.warning(f"Error reading popular events cache file: {e}")
+
+            # Fallback to Firebase (slower)
+            cache_doc = self.db.collection('event_cache').document(cache_key).get()
+
+            if not cache_doc.exists:
+                logger.info("Popular events cache doesn't exist in Firebase")
+                return None
+
+            cache_data = cache_doc.to_dict()
+
+            if not self._is_cache_valid(cache_data.get('cached_at', '')):
+                logger.info("Popular events cache is expired in Firebase")
+                return None
+
+            # Cache in local memory and disk for future use
+            events = cache_data.get('events', [])
+            self.memory_cache[cache_key] = cache_data
+            try:
+                file_path = self._get_popular_events_file_path()
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(cache_data, f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                logger.warning(f"Error saving popular events cache to disk: {e}")
+
+            logger.info(f"Retrieved {len(events)} popular events from Firebase (cached locally)")
+            return events
+
+        except Exception as e:
+            logger.error(f"Error reading popular events cache: {e}")
+            return None
+
+    def get_popular_events_cache_metadata(self) -> Optional[Dict[str, Any]]:
+        """Get metadata about popular events cache (age, next crawl time, etc.)"""
+        try:
+            cache_key = self._get_popular_events_cache_key()
+            
+            # Check local memory cache first
+            if cache_key in self.memory_cache:
+                cache_data = self.memory_cache[cache_key]
+                cached_at = cache_data.get('cached_at')
+                if cached_at:
+                    cache_time = datetime.fromisoformat(cached_at)
+                    age = datetime.now() - cache_time
+                    return {
+                        'cached_at': cached_at,
+                        'age_hours': age.total_seconds() / 3600,
+                        'next_crawl_at': cache_data.get('next_crawl_at'),
+                        'count': cache_data.get('count', 0),
+                        'cities_crawled': cache_data.get('cities_crawled', [])
+                    }
+
+            # Check local file cache
+            file_path = self._get_popular_events_file_path()
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        cache_data = json.load(f)
+                    cached_at = cache_data.get('cached_at')
+                    if cached_at:
+                        cache_time = datetime.fromisoformat(cached_at)
+                        age = datetime.now() - cache_time
+                        return {
+                            'cached_at': cached_at,
+                            'age_hours': age.total_seconds() / 3600,
+                            'next_crawl_at': cache_data.get('next_crawl_at'),
+                            'count': cache_data.get('count', 0),
+                            'cities_crawled': cache_data.get('cities_crawled', [])
+                        }
+                except Exception:
+                    pass
+
+            # Fallback to Firebase
+            cache_doc = self.db.collection('event_cache').document(cache_key).get()
+            if cache_doc.exists:
+                cache_data = cache_doc.to_dict()
+                cached_at = cache_data.get('cached_at')
+                if cached_at:
+                    cache_time = datetime.fromisoformat(cached_at)
+                    age = datetime.now() - cache_time
+                    return {
+                        'cached_at': cached_at,
+                        'age_hours': age.total_seconds() / 3600,
+                        'next_crawl_at': cache_data.get('next_crawl_at'),
+                        'count': cache_data.get('count', 0),
+                        'cities_crawled': cache_data.get('cities_crawled', [])
+                    }
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Error getting popular events cache metadata: {e}")
+            return None

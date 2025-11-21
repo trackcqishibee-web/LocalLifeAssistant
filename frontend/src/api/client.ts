@@ -229,6 +229,13 @@ class APIClient {
     return response.data;
   }
 
+  async getPopularEvents(limit: number = 12): Promise<{ events: RecommendationItem[]; count: number; cache_metadata?: any }> {
+    const response = await axios.get(`${this.baseURL}/api/popular-events`, {
+      params: { limit }
+    });
+    return response.data;
+  }
+
 
   async getUserUsage(userId: string): Promise<any> {
     const response = await axios.get(`${this.baseURL}/api/usage/${userId}`);

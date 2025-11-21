@@ -11,20 +11,35 @@ import { auth } from './firebase/config';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { sampleEvents } from './services/sampleEvents';
 
-// Helper function to create initial conversation messages with welcome and sample events
-const createInitialMessages = (): (ChatMessage & { recommendations?: RecommendationItem[] })[] => {
-  const sampleRecommendations: RecommendationItem[] = sampleEvents.map((event, index) => ({
-    type: 'event' as const,
-    data: event,
-    relevance_score: 0.95 - (index * 0.05),
-    explanation: `Sample event from ${event.venue_city}: ${event.title}`
-  }));
+// Helper function to create initial conversation messages with welcome and popular events
+const createInitialMessages = async (): Promise<(ChatMessage & { recommendations?: RecommendationItem[] })[]> => {
+  let recommendations: RecommendationItem[] = [];
+  
+  try {
+    // Fetch popular events from API
+    const response = await apiClient.getPopularEvents(12);
+    if (response.events && response.events.length > 0) {
+      recommendations = response.events;
+      console.log(`Loaded ${recommendations.length} popular events from API`);
+    } else {
+      throw new Error('No events returned from API');
+    }
+  } catch (error) {
+    console.warn('Failed to fetch popular events, using sample events as fallback:', error);
+    // Fallback to sample events if API call fails
+    recommendations = sampleEvents.map((event, index) => ({
+      type: 'event' as const,
+      data: event,
+      relevance_score: 0.95 - (index * 0.05),
+      explanation: `Sample event from ${event.venue_city}: ${event.title}`
+    }));
+  }
   
   const welcomeMessage: ChatMessage & { recommendations?: RecommendationItem[] } = {
     role: 'assistant',
     content: 'Welcome to LocoMoco! We take you to the coolest local events!',
     timestamp: new Date().toISOString(),
-    recommendations: sampleRecommendations
+    recommendations: recommendations
   };
   
   const cityPromptMessage: ChatMessage = {
@@ -209,8 +224,8 @@ const App: React.FC = () => {
         setCurrentConversationId(newId);
         localStorage.setItem('current_conversation_id', newId);
         
-        // Start conversation with welcome message and sample events, followed by city prompt
-        const initialMessages = createInitialMessages();
+        // Start conversation with welcome message and popular events, followed by city prompt
+        const initialMessages = await createInitialMessages();
         setConversationHistory(initialMessages);
         localStorage.setItem('conversation_history', JSON.stringify(initialMessages));
         
@@ -340,15 +355,15 @@ const App: React.FC = () => {
               localStorage.setItem('current_conversation_id', mostRecent.conversation_id);
               localStorage.setItem('conversation_history', JSON.stringify(conversation.messages || []));
             } else {
-              // New user - start with welcome message and sample events
-              const initialMessages = createInitialMessages();
+              // New user - start with welcome message and popular events
+              const initialMessages = await createInitialMessages();
               setConversationHistory(initialMessages);
               localStorage.setItem('conversation_history', JSON.stringify(initialMessages));
             }
           } catch (conversationError: any) {
-            // If listing conversations fails, start with welcome message and sample events
+            // If listing conversations fails, start with welcome message and popular events
             console.warn('Could not load conversations, starting fresh:', conversationError);
-            const initialMessages = createInitialMessages();
+            const initialMessages = await createInitialMessages();
             setConversationHistory(initialMessages);
             localStorage.setItem('conversation_history', JSON.stringify(initialMessages));
           }

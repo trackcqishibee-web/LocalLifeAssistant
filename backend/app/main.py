@@ -26,6 +26,7 @@ from .usage_tracker import UsageTracker
 from .conversation_storage import ConversationStorage
 from .user_manager import UserManager
 from .location_service import LocationResolver
+from .scheduler_service import CityEventsScheduler
 
 # Load environment variables from .env file
 load_dotenv('../.env') or load_dotenv('.env') or load_dotenv('/app/.env')
@@ -165,6 +166,9 @@ logger.info("Conversations storage: Firestore")
 # Users are now stored in Firestore
 logger.info("Users storage: Firestore")
 
+# Initialize scheduler for proactive event fetching
+city_events_scheduler = CityEventsScheduler(event_crawler, cache_manager)
+
 
 def resolve_city_from_zip_text(
     user_message: str,
@@ -219,6 +223,65 @@ async def get_stats():
     except Exception as e:
         logger.error(f"Error getting stats: {e}")
         return {"status": "error", "message": str(e)}
+
+@app.get("/api/popular-events")
+async def get_popular_events(limit: int = 12):
+    """Get popular events (top 1 per city) for landing page"""
+    try:
+        popular_events = cache_manager.get_popular_events()
+        metadata = cache_manager.get_popular_events_cache_metadata()
+        
+        if not popular_events:
+            return {
+                "events": [],
+                "count": 0,
+                "cache_metadata": None
+            }
+        
+        # Limit the number of events returned
+        limited_events = popular_events[:limit]
+        
+        # Convert to RecommendationItem format
+        recommendations = []
+        for event in limited_events:
+            recommendations.append({
+                "type": "event",
+                "data": event,
+                "relevance_score": 0.95,  # High score for popular events
+                "explanation": f"Popular event in {event.get('venue_city', 'Unknown')}: {event.get('title', 'Event')}"
+            })
+        
+        return {
+            "events": recommendations,
+            "count": len(recommendations),
+            "cache_metadata": metadata
+        }
+    except Exception as e:
+        logger.error(f"Error getting popular events: {e}")
+        return {
+            "events": [],
+            "count": 0,
+            "cache_metadata": None,
+            "error": str(e)
+        }
+
+@app.post("/api/test/trigger-crawl")
+async def trigger_crawl_test():
+    """Test endpoint to manually trigger a crawl (for testing only)"""
+    try:
+        logger.info("🧪 Test: Manually triggering crawl...")
+        result = await city_events_scheduler._crawl_all_cities()
+        return {
+            "success": True,
+            "message": "Crawl completed",
+            "result": result
+        }
+    except Exception as e:
+        logger.error(f"Error in test crawl: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def smart_cached_chat(request: ChatRequest):
@@ -1069,13 +1132,31 @@ async def get_cache_stats():
             "error": str(e)
         }
 
-if __name__ == "__main__":
-    logger.info("Starting Smart Cached RAG Local Life Assistant...")
-    logger.info("Features: City-based caching + Real-time events + Rate limit protection")
-    logger.info(f"Cache TTL: {CACHE_TTL_HOURS} hours")
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on application startup"""
+    logger.info("🚀 Application startup: Initializing services...")
     
     # Clean up old cache on startup
     cache_manager.cleanup_old_cache()
+    
+    # Start the city events scheduler
+    city_events_scheduler.start()
+    logger.info("✅ City events scheduler started (runs every 6 hours)")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on application shutdown"""
+    logger.info("🛑 Application shutdown: Stopping services...")
+    
+    # Stop the scheduler
+    city_events_scheduler.stop()
+    logger.info("✅ City events scheduler stopped")
+
+if __name__ == "__main__":
+    logger.info("Starting Smart Cached RAG Local Life Assistant...")
+    logger.info("Features: City-based caching + Real-time events + Rate limit protection + Proactive event fetching")
+    logger.info(f"Cache TTL: {CACHE_TTL_HOURS} hours")
     
     # Use PORT environment variable for Render deployment, fallback to 8000 for local development
     port = int(os.getenv("PORT", 8000))
