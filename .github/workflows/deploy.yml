@@ -66,6 +66,14 @@ jobs:
           export OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
           export FIREBASE_CREDENTIALS_PATH="${{ secrets.FIREBASE_CREDENTIALS_PATH }}"
           export EMAIL="${{ secrets.ADMIN_EMAIL }}"
+          
+          # Event API Keys (optional - default to empty if not set)
+          export TICKETMASTER_KEY="${{ secrets.TICKETMASTER_KEY || '' }}"
+          export EVENTBRITE_TOKEN="${{ secrets.EVENTBRITE_TOKEN || '' }}"
+          export MEETUP_TOKEN="${{ secrets.MEETUP_TOKEN || '' }}"
+          export ALLEVENTS_KEY="${{ secrets.ALLEVENTS_KEY || '' }}"
+          export SERPAPI_KEY="${{ secrets.SERPAPI_KEY || '' }}"
+          export PREDICTHQ_TOKEN="${{ secrets.PREDICTHQ_TOKEN || '' }}"
 
           # Run automated deployment
           ./auto-deploy.sh

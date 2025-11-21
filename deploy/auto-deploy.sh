@@ -107,6 +107,14 @@ configure_environment() {
 # OpenAI API Configuration
 OPENAI_API_KEY=$OPENAI_API_KEY
 
+# Event API Keys (optional - providers will handle missing keys gracefully)
+TICKETMASTER_KEY=${TICKETMASTER_KEY:-}
+EVENTBRITE_TOKEN=${EVENTBRITE_TOKEN:-}
+MEETUP_TOKEN=${MEETUP_TOKEN:-}
+ALLEVENTS_KEY=${ALLEVENTS_KEY:-}
+SERPAPI_KEY=${SERPAPI_KEY:-}
+PREDICTHQ_TOKEN=${PREDICTHQ_TOKEN:-}
+
 # Server Configuration
 PORT=8000
 HOST=0.0.0.0
