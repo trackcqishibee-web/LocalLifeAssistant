@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Loader2 } from 'lucide-react';
 import { ChatMessage, ChatRequest } from '../api/client';
 import { dataService } from '../services/dataService';
-import RecommendationCard from './RecommendationCard';
 import CardGroup from './CardGroup';
 import { ImageWithFallback } from './ImageWithFallback';
 import userAvatarImg from '../assets/images/figma/user-avatar.png';
