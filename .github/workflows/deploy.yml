@@ -2,7 +2,7 @@ name: 🚀 Deploy to Production
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, feature/proactive-events-scheduler ]
   workflow_dispatch:
 
 # Prevent concurrent deployments
