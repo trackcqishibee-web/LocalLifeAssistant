@@ -141,6 +141,45 @@ class ConversationStorage:
             logger.error(f"Error updating metadata: {e}")
             raise
 
+    async def save_message_async(self, user_id: str, conversation_id: str, message_data: Dict[str, Any]):
+        """Async method to save message to Firebase in the background (non-blocking)"""
+        try:
+            conv_ref = self.db.collection('users').document(user_id).collection('conversations').document(conversation_id)
+
+            # Add message ID if not present
+            if "message_id" not in message_data:
+                # Get current conversation to count messages
+                conv_doc = conv_ref.get()
+                if conv_doc.exists:
+                    current_messages = conv_doc.to_dict().get('messages', [])
+                    message_data["message_id"] = f"msg_{len(current_messages) + 1}"
+                else:
+                    message_data["message_id"] = "msg_1"
+
+            # Add message to array
+            conv_ref.update({
+                'messages': firestore.ArrayUnion([message_data]),
+                'last_message_at': datetime.now().isoformat()
+            })
+
+            logger.debug(f"Saved message to conversation {conversation_id} (async)")
+        except Exception as e:
+            logger.error(f"Error saving message to conversation {conversation_id} (async): {e}")
+
+    async def update_metadata_async(self, user_id: str, conversation_id: str, metadata: Dict[str, Any]):
+        """Async method to update conversation metadata in the background (non-blocking)"""
+        try:
+            conv_ref = self.db.collection('users').document(user_id).collection('conversations').document(conversation_id)
+
+            conv_ref.update({
+                'metadata': metadata,
+                'last_message_at': datetime.now().isoformat()
+            })
+
+            logger.debug(f"Updated metadata for conversation {conversation_id} (async)")
+        except Exception as e:
+            logger.error(f"Error updating metadata for conversation {conversation_id} (async): {e}")
+
     def migrate_user_conversations(self, old_user_id: str, new_user_id: str) -> int:
         """Migrate all conversations from anonymous user to registered user"""
         try:

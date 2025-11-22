@@ -287,13 +287,14 @@ async def stream_chat_response(request: ChatRequest):
         if request.is_initial_response:
             prefs_dict = extracted_preferences.dict() if extracted_preferences else None
             logger.info(f"Saving initial user message with extracted_preferences: {prefs_dict}")
-            conversation_storage.save_message(user_id, conversation_id, {
+            # Save in background (non-blocking)
+            asyncio.create_task(conversation_storage.save_message_async(user_id, conversation_id, {
                 "role": "user",
                 "content": request.message,
                 "timestamp": datetime.now().isoformat(),
                 "extracted_preferences": prefs_dict
-            })
-            logger.info(f"Saved user message for conversation {conversation_id}, location in prefs: {prefs_dict.get('location') if prefs_dict else 'None'}")
+            }))
+            logger.info(f"Queued user message save for conversation {conversation_id}, location in prefs: {prefs_dict.get('location') if prefs_dict else 'None'}")
         
         
         # Step 3: For non-initial responses, retrieve location from conversation
@@ -349,12 +350,13 @@ async def stream_chat_response(request: ChatRequest):
                 logger.info(f"Using stored location: {stored_location}")
             
             # Save user message with combined preferences (location + event type)
-            conversation_storage.save_message(user_id, conversation_id, {
+            # Save in background (non-blocking)
+            asyncio.create_task(conversation_storage.save_message_async(user_id, conversation_id, {
                 "role": "user",
                 "content": request.message,
                 "timestamp": datetime.now().isoformat(),
                 "extracted_preferences": extracted_preferences.dict() if extracted_preferences else None
-            })
+            }))
         
         # Step 4: Default fallback for non-initial responses or when location still missing
         if not city:
@@ -375,14 +377,14 @@ async def stream_chat_response(request: ChatRequest):
             yield f"data: {json.dumps({'type': 'message', 'content': follow_up_message, 'location_processed': True, 'usage_stats': usage_stats, 'trial_exceeded': False, 'conversation_id': conversation_id})}\n\n"
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
             
-            # Save assistant message with stored location
-            conversation_storage.save_message(user_id, conversation_id, {
+            # Save assistant message with stored location (in background, non-blocking)
+            asyncio.create_task(conversation_storage.save_message_async(user_id, conversation_id, {
                 "role": "assistant",
                 "content": follow_up_message,
                 "timestamp": datetime.now().isoformat(),
                 "recommendations": [],
                 "extracted_preferences": extracted_preferences.dict() if extracted_preferences else None
-            })
+            }))
             return
         
         # Step 3: Pre-cache all event types for this city (if not already cached)
@@ -535,8 +537,8 @@ async def stream_chat_response(request: ChatRequest):
             yield f"data: {json.dumps({'type': 'recommendation', 'data': formatted_rec})}\n\n"
             await asyncio.sleep(0.2)  # Small delay between recommendations
         
-        # Save assistant response
-        conversation_storage.save_message(user_id, conversation_id, {
+        # Save assistant response (in background, non-blocking)
+        asyncio.create_task(conversation_storage.save_message_async(user_id, conversation_id, {
             "role": "assistant",
             "content": response_message,
             "timestamp": datetime.now().isoformat(),
@@ -544,12 +546,12 @@ async def stream_chat_response(request: ChatRequest):
             "extracted_preferences": extracted_preferences.dict() if extracted_preferences else None,
             "cache_used": cache_used,
             "cache_age_hours": cache_age_hours
-        })
+        }))
 
-        # Update conversation metadata
-        conversation_storage.update_metadata(user_id, conversation_id, {
+        # Update conversation metadata (in background, non-blocking)
+        asyncio.create_task(conversation_storage.update_metadata_async(user_id, conversation_id, {
             "last_message_at": datetime.now().isoformat()
-        })
+        }))
         
         # Signal completion
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
