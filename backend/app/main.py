@@ -409,12 +409,10 @@ async def stream_chat_response(request: ChatRequest):
                 # Using cached events
                 logger.info(f"Using cached events for {city} (age: {cache_age_hours:.1f}h)")
                 cache_used = True
-                yield f"data: {json.dumps({'type': 'status', 'content': f'Found cached events for {format_city_name(city)} (from {cache_age_hours:.1f}h ago)'})}\n\n"
             else:
                 # Freshly fetched events
                 logger.info(f"Fetched {len(events)} fresh events for {city}")
                 cache_used = False
-                yield f"data: {json.dumps({'type': 'status', 'content': f'Found {len(events)} fresh events for {format_city_name(city)}'})}\n\n"
         else:
             logger.warning(f"Failed to get any events for {city}")
             events = []
@@ -422,12 +420,6 @@ async def stream_chat_response(request: ChatRequest):
             cache_age_hours = None
         
         # Step 4: LLM-powered intelligent event search with preferences
-        # Alternate between two similar messages to keep users engaged
-        analysis_messages = [
-            "Analyzing events with AI to find the best matches...",
-            "Using AI to rank and filter the most relevant events..."
-        ]
-        
         logger.info(f"Starting LLM search for query: '{request.message}' with {len(events)} events")
         
         # Convert UserPreferences object to dict for search service
@@ -440,37 +432,13 @@ async def stream_chat_response(request: ChatRequest):
                 'event_type': extracted_preferences.event_type
             }
         
-        # Create a task for the AI processing
-        async def ai_processing():
-            return await search_service.intelligent_event_search(
-                request.message, 
-                events, 
-                user_preferences=user_preferences_dict
-            )
-        
-        # Start the AI processing task
-        ai_task = asyncio.create_task(ai_processing())
-        
-        # Send first status message immediately to ensure it's shown
-        yield f"data: {json.dumps({'type': 'status', 'content': analysis_messages[0]})}\n\n"
-        logger.info(f"AI processing message: {analysis_messages[0]}")
-        await asyncio.sleep(0.5)  # Small delay to ensure message is sent
-        
-        # Show alternating messages while AI is processing
-        i = 1
-        while not ai_task.done():
-            message = analysis_messages[i % 2]  # Alternate between the two messages
-            yield f"data: {json.dumps({'type': 'status', 'content': message})}\n\n"
-            logger.info(f"AI processing message: {message}")
-            await asyncio.sleep(1.5)  # 1.5 second delay between messages
-            i += 1
-        
-        # Wait for AI processing to complete
-        top_events = await ai_task
+        # Run AI processing directly (no status messages to avoid timing issues)
+        top_events = await search_service.intelligent_event_search(
+            request.message, 
+            events, 
+            user_preferences=user_preferences_dict
+        )
         logger.info(f"LLM search returned {len(top_events)} events")
-        
-        # Ensure status message is visible for at least 1 second
-        await asyncio.sleep(0.5)
         
         # Debug: Check if events have LLM scores
         if top_events:
@@ -516,6 +484,10 @@ async def stream_chat_response(request: ChatRequest):
         
         # Send the main message first
         yield f"data: {json.dumps({'type': 'message', 'content': response_message, 'extraction_summary': extraction_summary, 'usage_stats': usage_stats, 'trial_exceeded': False, 'conversation_id': conversation_id, 'location_processed': location_just_processed})}\n\n"
+        
+        # # Longer delay to ensure message is fully rendered before recommendations start
+        # # This prevents the message from appearing after recommendations
+        # await asyncio.sleep(0.8)
         
         # Step 7: Format recommendations and stream them one by one
         formatted_recommendations = []
