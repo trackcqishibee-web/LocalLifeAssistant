@@ -410,6 +410,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         },
         // onMessage
         (messageContent: string, metadata?: any) => {
+          // Clear status immediately when main message arrives
+          setCurrentStatus('');
+          
           // Create the main message without recommendations (they're separate now)
           const assistantMessage: ChatMessageWithRecommendations = {
             role: 'assistant',
@@ -466,6 +469,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               msg.recommendations && msg.recommendations.length > 0
             );
             
+            // Always clear status when recommendations start arriving
             if (!hasRecommendations) {
               setCurrentStatus('');
               setExtractionSummary(null);
@@ -487,17 +491,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             const lastIndex = updatedMessages.length - 1;
             const lastMessage = updatedMessages[lastIndex];
 
-            const isRecommendationOnly =
-              lastMessage.role === 'assistant' &&
-              (!lastMessage.content || lastMessage.content.trim().length === 0);
-
-            if (isRecommendationOnly) {
+            // If last message is an assistant message (with or without content), add recommendations to it
+            // This ensures the message appears before recommendations
+            if (lastMessage && lastMessage.role === 'assistant') {
               const existingRecommendations = lastMessage.recommendations ?? [];
               updatedMessages[lastIndex] = {
                 ...lastMessage,
                 recommendations: [...existingRecommendations, recommendation]
               };
             } else {
+              // Only create new message if there's no assistant message to attach to
               updatedMessages.push({
                 role: 'assistant',
                 content: undefined,
@@ -721,7 +724,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         
         {(isLoading || (currentStatus && !messagesWithRecommendations.some(msg => 
           msg.recommendations && msg.recommendations.length > 0
-        ))) && (
+        ))) && !messagesWithRecommendations.some(msg => 
+          msg.recommendations && msg.recommendations.length > 0
+        ) && (
           <div className="flex gap-2 items-start">
             {/* Bot Avatar */}
             <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2" style={{ backgroundColor: 'white', borderColor: 'rgba(118, 193, 178, 0.6)' }}>
