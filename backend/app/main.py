@@ -387,7 +387,6 @@ async def stream_chat_response(request: ChatRequest):
         
         # Step 3: Pre-cache all event types for this city (if not already cached)
         # This allows frontend to show event type buttons and retrieve instantly
-        yield f"data: {json.dumps({'type': 'status', 'content': f'Loading events for {format_city_name(city)}...'})}\n\n"
         cache_manager.cache_all_event_types_for_city(city, event_crawler)
         
         # Determine event type/category for current request
