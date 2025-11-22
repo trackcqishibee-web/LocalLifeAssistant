@@ -722,11 +722,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           );
         })}
         
-        {(isLoading || (currentStatus && !messagesWithRecommendations.some(msg => 
-          msg.recommendations && msg.recommendations.length > 0
-        ))) && !messagesWithRecommendations.some(msg => 
-          msg.recommendations && msg.recommendations.length > 0
-        ) && (
+        {(() => {
+          const lastMessage = messagesWithRecommendations[messagesWithRecommendations.length - 1];
+          const lastMessageIsUser = lastMessage?.role === 'user';
+          // Check if there's an assistant message AFTER the last user message
+          const lastUserMessageIndex = messagesWithRecommendations.map((m, i) => m.role === 'user' ? i : -1).filter(i => i !== -1).pop() ?? -1;
+          const hasNewAssistantMessage = messagesWithRecommendations.slice(lastUserMessageIndex + 1).some(msg => 
+            msg.role === 'assistant' && msg.content
+          );
+          const shouldShow = isLoading && lastMessageIsUser && !hasNewAssistantMessage;
+          console.log('Loading bubble check:', { 
+            isLoading, 
+            currentStatus, 
+            lastMessageIsUser, 
+            hasNewAssistantMessage, 
+            shouldShow, 
+            messagesCount: messagesWithRecommendations.length,
+            lastMessageRole: lastMessage?.role,
+            lastUserMessageIndex
+          });
+          return shouldShow;
+        })() && (
           <div className="flex gap-2 items-start">
             {/* Bot Avatar */}
             <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2" style={{ backgroundColor: 'white', borderColor: 'rgba(118, 193, 178, 0.6)' }}>
@@ -738,7 +754,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#76C1B2' }} />
                 <p className="text-[15px]" style={{ color: '#221A13' }}>
-                  {currentStatus || extractionSummary || ''}
+                  {currentStatus || extractionSummary || (isLoading ? 'Searching...' : '')}
                 </p>
               </div>
             </div>
