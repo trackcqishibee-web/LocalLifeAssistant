@@ -444,19 +444,19 @@ async def stream_chat_response(request: ChatRequest):
         
         # Step 5: Create extraction summary if preferences were extracted
         extraction_summary = None
-        if extracted_preferences:
-            summary_parts = []
-            if extracted_preferences.location and extracted_preferences.location != "none":
-                summary_parts.append(f"📍 {extracted_preferences.location}")
-            if extracted_preferences.date and extracted_preferences.date != "none":
-                summary_parts.append(f"📅 {extracted_preferences.date}")
-            if extracted_preferences.time and extracted_preferences.time != "none":
-                summary_parts.append(f"🕐 {extracted_preferences.time}")
-            if extracted_preferences.event_type and extracted_preferences.event_type != "none":
-                summary_parts.append(f"🎭 {extracted_preferences.event_type}")
-            
-            if summary_parts:
-                extraction_summary = " • ".join(summary_parts)
+        # if extracted_preferences:
+        #     summary_parts = []
+        #     if extracted_preferences.location and extracted_preferences.location != "none":
+        #         summary_parts.append(f"📍 {extracted_preferences.location}")
+        #     if extracted_preferences.date and extracted_preferences.date != "none":
+        #         summary_parts.append(f"📅 {extracted_preferences.date}")
+        #     if extracted_preferences.time and extracted_preferences.time != "none":
+        #         summary_parts.append(f"🕐 {extracted_preferences.time}")
+        #     if extracted_preferences.event_type and extracted_preferences.event_type != "none":
+        #         summary_parts.append(f"🎭 {extracted_preferences.event_type}")
+        #     
+        #     if summary_parts:
+        #         extraction_summary = " • ".join(summary_parts)
         
         # Step 6: Generate and send main response message first
         location_note = ""
