@@ -396,9 +396,6 @@ async def stream_chat_response(request: ChatRequest):
             event_type = extracted_preferences.event_type.lower()
         
         # Step 6: Get cached events for the selected event type (should be instant now)
-        yield f"data: {json.dumps({'type': 'status', 'content': f'Searching for {event_type} events in the {format_city_name(city)} area...'})}\n\n"
-        await asyncio.sleep(0.3)
-
         # Get cached events (should be instant since we pre-cached)
         cached_events = cache_manager.get_cached_events(city, event_type=event_type, event_crawler=None)
         cache_age_hours = cache_manager.get_cache_age(city, event_type=event_type)
