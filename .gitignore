@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+frontend/package-lock.json
+package-lock.json
+.cursor/plans/
+figma/
+notcommit/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+
+# macOS system files
+.DS_Store
+*/.DS_Store
+
+# Logs
+*.log
+
+# Database and cache
+chroma_db/
+cache/
+
+
+# Build outputs
+.vite/
+dist/
+build/
+
+# secrets
+backend/firebase-service-account.json

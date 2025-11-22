@@ -1,0 +1,118 @@
+name: 🚀 Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+# Prevent concurrent deployments
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+    - name: 🔧 Configure SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+    
+    - name: 📥 Download deployment scripts
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+          cd /tmp
+          # Clean up any existing deployment scripts to avoid cache issues
+          rm -f auto-deploy.sh* 01-server-setup.sh* 02-app-deploy.sh* 03-nginx-setup.sh* 04-ssl-setup.sh* reboot-recovery.sh*
+          
+          # Download all deployment scripts (fresh copy with cache busting)
+          wget -q -O auto-deploy.sh "https://raw.githubusercontent.com/${{ secrets.DEPLOY_GITHUB_REPO }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/auto-deploy.sh?t=$(date +%s)"
+          wget -q -O 01-server-setup.sh "https://raw.githubusercontent.com/${{ secrets.DEPLOY_GITHUB_REPO }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/01-server-setup.sh?t=$(date +%s)"
+          wget -q -O 02-app-deploy.sh "https://raw.githubusercontent.com/${{ secrets.DEPLOY_GITHUB_REPO }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/02-app-deploy.sh?t=$(date +%s)"
+          wget -q -O 03-nginx-setup.sh "https://raw.githubusercontent.com/${{ secrets.DEPLOY_GITHUB_REPO }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/03-nginx-setup.sh?t=$(date +%s)"
+          wget -q -O 04-ssl-setup.sh "https://raw.githubusercontent.com/${{ secrets.DEPLOY_GITHUB_REPO }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/04-ssl-setup.sh?t=$(date +%s)"
+          wget -q -O reboot-recovery.sh "https://raw.githubusercontent.com/${{ secrets.DEPLOY_GITHUB_REPO }}/${{ secrets.DEPLOY_GITHUB_BRANCH }}/deploy/reboot-recovery.sh?t=$(date +%s)"
+
+          # Make all scripts executable
+          chmod +x *.sh
+        EOF
+    
+    - name: 🔐 Setup Firebase credentials
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOFCREDS'
+          # Create Firebase credentials file from secret
+          mkdir -p /home/${{ secrets.SSH_USER }}
+          cat > /home/${{ secrets.SSH_USER }}/firebase-service-account.json << 'EOFJSON'
+        ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        EOFJSON
+          chmod 600 /home/${{ secrets.SSH_USER }}/firebase-service-account.json
+          echo "✅ Firebase credentials file created"
+        EOFCREDS
+    
+    - name: 🚀 Deploy application
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+          cd /tmp
+
+          # Set environment variables
+          export DOMAIN_NAME="${{ secrets.DOMAIN_NAME }}"
+          export GITHUB_REPO="${{ secrets.DEPLOY_GITHUB_REPO }}"
+          export GITHUB_BRANCH="${{ secrets.DEPLOY_GITHUB_BRANCH }}"
+          export OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
+          export FIREBASE_CREDENTIALS_PATH="${{ secrets.FIREBASE_CREDENTIALS_PATH }}"
+          export EMAIL="${{ secrets.ADMIN_EMAIL }}"
+          
+          # Event API Keys (optional - default to empty if not set)
+          export TICKETMASTER_KEY="${{ secrets.TICKETMASTER_KEY || '' }}"
+          export EVENTBRITE_TOKEN="${{ secrets.EVENTBRITE_TOKEN || '' }}"
+          export MEETUP_TOKEN="${{ secrets.MEETUP_TOKEN || '' }}"
+          export ALLEVENTS_KEY="${{ secrets.ALLEVENTS_KEY || '' }}"
+          export SERPAPI_KEY="${{ secrets.SERPAPI_KEY || '' }}"
+          export PREDICTHQ_TOKEN="${{ secrets.PREDICTHQ_TOKEN || '' }}"
+
+          # Run automated deployment
+          ./auto-deploy.sh
+        EOF
+    
+    - name: 🔍 Health check
+      run: |
+        ssh -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SERVER_IP }} << 'EOF'
+          echo "🔍 Performing post-deployment health check..."
+          
+          # Check if services are running
+          if systemctl is-active --quiet locallifeassistant-backend; then
+            echo "✅ Backend service is running"
+          else
+            echo "❌ Backend service is not running"
+            exit 1
+          fi
+          
+          if systemctl is-active --quiet nginx; then
+            echo "✅ Nginx service is running"
+          else
+            echo "❌ Nginx service is not running"
+            exit 1
+          fi
+          
+          # Test backend health endpoint
+          if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+            echo "✅ Backend health check passed"
+          else
+            echo "❌ Backend health check failed"
+            exit 1
+          fi
+          
+          echo "🎉 All health checks passed!"
+        EOF
+    
+    - name: 📊 Deployment summary
+      run: |
+        echo "🎉 Deployment completed successfully!"
+        echo "🌐 EC2 Instance: ${{ secrets.SERVER_IP }}"
+        echo "🌍 Domain: https://${{ secrets.DOMAIN_NAME }}"
+        echo "📝 Branch: ${{ secrets.DEPLOY_GITHUB_BRANCH }}"

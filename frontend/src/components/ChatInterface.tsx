@@ -1,0 +1,796 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { Send, Loader2 } from 'lucide-react';
+import { ChatMessage, ChatRequest, apiClient } from '../api/client';
+import { dataService } from '../services/dataService';
+import CardGroup from './CardGroup';
+import { ImageWithFallback } from './ImageWithFallback';
+import EventTypeButtons from './EventTypeButtons';
+import CityButtons from './CityButtons';
+import userAvatarImg from '../assets/images/figma/user-avatar.png';
+import agentAvatarImg from '../assets/images/figma/agent-avatar.png';
+// import refreshIcon from '../assets/images/figma/refresh-icon.png'; // Hidden for now
+
+interface ChatMessageWithRecommendations {
+  role: 'user' | 'assistant';
+  content?: string; // Optional to allow undefined for recommendation-only messages
+  timestamp?: string;
+  recommendations?: any[];
+  showCityButtons?: boolean;
+  showEventTypeButtons?: boolean;
+}
+
+interface ChatInterfaceProps {
+  onNewMessage: (message: ChatMessage) => void;
+  onRecommendations: (recommendations: any[]) => void;
+  llmProvider: string;
+  conversationHistory: ChatMessage[];
+  userId: string;
+  onTrialExceeded: () => void;
+  conversationId: string | null;
+}
+
+const ChatInterface: React.FC<ChatInterfaceProps> = ({
+  onNewMessage,
+  onRecommendations,
+  llmProvider,
+  conversationHistory,
+  userId,
+  onTrialExceeded,
+  conversationId
+}) => {
+  const [message, setMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [extractionSummary, setExtractionSummary] = useState<string | null>(null);
+  const [messagesWithRecommendations, setMessagesWithRecommendations] = useState<ChatMessageWithRecommendations[]>([]);
+  const [currentStatus, setCurrentStatus] = useState<string>('');
+  const [supportedCities, setSupportedCities] = useState<string[]>([]);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+  };
+
+  const scrollToBottomSmooth = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Load supported cities on mount
+  useEffect(() => {
+    const loadCities = async () => {
+      try {
+        console.log('Loading supported cities...');
+        const cities = await apiClient.getSupportedCities();
+        console.log('Loaded cities:', cities);
+        setSupportedCities(cities);
+      } catch (error) {
+        console.error('Error loading supported cities:', error);
+        // Set default cities as fallback
+        setSupportedCities(['san_francisco', 'new_york', 'los_angeles', 'miami', 'chicago', 'seattle', 'boston']);
+      }
+    };
+    loadCities();
+  }, []);
+
+  // Scroll to bottom when new content is added (but not for recommendation-only messages)
+  useEffect(() => {
+    const lastMessage = messagesWithRecommendations[messagesWithRecommendations.length - 1];
+    if (lastMessage) {
+      // Check if this is a recommendation-only message
+      const hasContent = lastMessage.content && lastMessage.content.trim() !== '';
+      const isRecommendationOnly = !hasContent && lastMessage.recommendations && lastMessage.recommendations.length > 0;
+
+      // Don't scroll for recommendation-only messages
+      if (!isRecommendationOnly) {
+        scrollToBottomSmooth();
+      }
+    }
+  }, [messagesWithRecommendations]);
+
+  // Sync base conversation history while preserving recommendation-only messages
+  useEffect(() => {
+    setMessagesWithRecommendations(prevMessages => {
+      if (conversationHistory.length === 0) {
+        return [];
+      }
+
+      const recommendationOnlyMessages = prevMessages.filter(msg => {
+        const hasContent = msg.content && msg.content.trim() !== '';
+        const hasRecommendations = msg.recommendations && msg.recommendations.length > 0;
+        return !hasContent && hasRecommendations;
+      });
+
+      const conversationMessages: ChatMessageWithRecommendations[] = conversationHistory.map(msg => {
+        const content = msg.content?.toLowerCase() || '';
+        const shouldShowCityButtons = content.includes('what city') || 
+            content.includes('city, state') ||
+            content.includes('search for events in') ||
+            content.includes('city, state would you like');
+        
+        const shouldShowEventTypeButtons = content.includes('what kind of events') ||
+            content.includes('what kind of') ||
+            content.includes('events are you interested') ||
+            content.includes('great! what kind');
+        
+        return {
+          ...msg,
+          recommendations: (msg as any).recommendations ?? [],
+          showCityButtons: shouldShowCityButtons,
+          showEventTypeButtons: shouldShowEventTypeButtons
+        };
+      });
+
+      const combinedMessages = [...conversationMessages, ...recommendationOnlyMessages];
+
+      combinedMessages.sort((a, b) => {
+        const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+        const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+        return aTime - bTime;
+      });
+
+      return combinedMessages;
+    });
+
+    if (conversationHistory.length > 0) {
+      requestAnimationFrame(() => {
+        setTimeout(() => scrollToBottom(), 50);
+      });
+    }
+  }, [conversationHistory]);
+
+  const handleCitySelect = async (city: string) => {
+    if (isLoading) return;
+    
+    // Create user message with city
+    const userMessage: ChatMessageWithRecommendations = {
+      role: 'user',
+      content: city,
+      timestamp: new Date().toISOString(),
+      recommendations: []
+    };
+
+    onNewMessage(userMessage as ChatMessage);
+    setMessagesWithRecommendations(prev => [...prev, userMessage]);
+    setIsLoading(true);
+    setExtractionSummary(null);
+    setCurrentStatus('');
+
+    try {
+      const request: ChatRequest = {
+        message: city,
+        conversation_history: conversationHistory,
+        llm_provider: llmProvider,
+        is_initial_response: conversationHistory.length <= 1,
+        user_id: userId,
+        conversation_id: conversationId
+      };
+
+      await dataService.chatStream(
+        request,
+        (status: string) => {
+          setCurrentStatus(status);
+        },
+        (messageContent: string, metadata?: any) => {
+          const assistantMessage: ChatMessageWithRecommendations = {
+            role: 'assistant',
+            content: messageContent,
+            timestamp: new Date().toISOString(),
+            recommendations: []
+          };
+          
+          onNewMessage(assistantMessage as ChatMessage);
+          setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
+          
+          // Show event type buttons if location was processed
+          if (metadata?.location_processed) {
+            assistantMessage.showEventTypeButtons = true;
+          }
+          
+          if (metadata?.trial_exceeded) {
+            onTrialExceeded();
+          }
+          if (metadata?.conversation_id && metadata.conversation_id !== conversationId) {
+            localStorage.setItem('current_conversation_id', metadata.conversation_id);
+          }
+          if (metadata?.extraction_summary) {
+            setExtractionSummary(metadata.extraction_summary);
+          }
+        },
+        (recommendation: any) => {
+          setMessagesWithRecommendations(prev => {
+            if (prev.length === 0) {
+              return [{
+                role: 'assistant',
+                content: undefined,
+                timestamp: new Date().toISOString(),
+                recommendations: [recommendation]
+              }];
+            }
+
+            const updatedMessages = [...prev];
+            const lastIndex = updatedMessages.length - 1;
+            const lastMessage = updatedMessages[lastIndex];
+
+            const isRecommendationOnly =
+              lastMessage.role === 'assistant' &&
+              (!lastMessage.content || lastMessage.content.trim().length === 0);
+
+            if (isRecommendationOnly) {
+              updatedMessages[lastIndex] = {
+                ...lastMessage,
+                recommendations: [...(lastMessage.recommendations ?? []), recommendation]
+              };
+            } else {
+              updatedMessages.push({
+                role: 'assistant',
+                content: undefined,
+                timestamp: new Date().toISOString(),
+                recommendations: [recommendation]
+              });
+            }
+
+            return updatedMessages;
+          });
+          onRecommendations([recommendation]);
+        },
+        (error: string) => {
+          console.error('Streaming error:', error);
+          const errorMessage: ChatMessage = {
+            role: 'assistant',
+            content: `Sorry, I encountered an error: ${error}`,
+            timestamp: new Date().toISOString()
+          };
+          onNewMessage(errorMessage);
+        },
+        () => {
+          setIsLoading(false);
+          setCurrentStatus('');
+          setExtractionSummary(null);
+        }
+      );
+    } catch (error) {
+      console.error('Error sending city:', error);
+      setIsLoading(false);
+      setCurrentStatus('');
+    }
+  };
+
+  const handleEventTypeSelect = async (eventType: string) => {
+    if (isLoading) return;
+    
+    // Create user message with event type
+    const userMessage: ChatMessageWithRecommendations = {
+      role: 'user',
+      content: eventType,
+      timestamp: new Date().toISOString(),
+      recommendations: []
+    };
+
+    onNewMessage(userMessage as ChatMessage);
+    setMessagesWithRecommendations(prev => [...prev, userMessage]);
+    setIsLoading(true);
+    setExtractionSummary(null);
+    setCurrentStatus('');
+
+    try {
+      const request: ChatRequest = {
+        message: eventType,
+        conversation_history: conversationHistory,
+        llm_provider: llmProvider,
+        is_initial_response: false,
+        user_id: userId,
+        conversation_id: conversationId
+      };
+
+      await dataService.chatStream(
+        request,
+        (status: string) => {
+          setCurrentStatus(status);
+        },
+        (messageContent: string, metadata?: any) => {
+          const assistantMessage: ChatMessageWithRecommendations = {
+            role: 'assistant',
+            content: messageContent,
+            timestamp: new Date().toISOString(),
+            recommendations: []
+          };
+          
+          onNewMessage(assistantMessage as ChatMessage);
+          setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
+          
+          if (metadata?.trial_exceeded) {
+            onTrialExceeded();
+          }
+          if (metadata?.conversation_id && metadata.conversation_id !== conversationId) {
+            localStorage.setItem('current_conversation_id', metadata.conversation_id);
+          }
+          if (metadata?.extraction_summary) {
+            setExtractionSummary(metadata.extraction_summary);
+          }
+        },
+        (recommendation: any) => {
+          setMessagesWithRecommendations(prev => {
+            if (prev.length === 0) {
+              return [{
+                role: 'assistant',
+                content: undefined,
+                timestamp: new Date().toISOString(),
+                recommendations: [recommendation]
+              }];
+            }
+
+            const updatedMessages = [...prev];
+            const lastIndex = updatedMessages.length - 1;
+            const lastMessage = updatedMessages[lastIndex];
+
+            const isRecommendationOnly =
+              lastMessage.role === 'assistant' &&
+              (!lastMessage.content || lastMessage.content.trim().length === 0);
+
+            if (isRecommendationOnly) {
+              updatedMessages[lastIndex] = {
+                ...lastMessage,
+                recommendations: [...(lastMessage.recommendations ?? []), recommendation]
+              };
+            } else {
+              updatedMessages.push({
+                role: 'assistant',
+                content: undefined,
+                timestamp: new Date().toISOString(),
+                recommendations: [recommendation]
+              });
+            }
+
+            return updatedMessages;
+          });
+          onRecommendations([recommendation]);
+        },
+        (error: string) => {
+          console.error('Streaming error:', error);
+          const errorMessage: ChatMessage = {
+            role: 'assistant',
+            content: `Sorry, I encountered an error: ${error}`,
+            timestamp: new Date().toISOString()
+          };
+          onNewMessage(errorMessage);
+        },
+        () => {
+          setIsLoading(false);
+          setCurrentStatus('');
+          setExtractionSummary(null);
+        }
+      );
+    } catch (error) {
+      console.error('Error sending event type:', error);
+      setIsLoading(false);
+      setCurrentStatus('');
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!message.trim() || isLoading) return;
+
+    const userMessage: ChatMessageWithRecommendations = {
+      role: 'user',
+      content: message.trim(),
+      timestamp: new Date().toISOString(),
+      recommendations: []
+    };
+
+    onNewMessage(userMessage as ChatMessage);
+    setMessagesWithRecommendations(prev => [...prev, userMessage]);
+    setMessage('');
+    setIsLoading(true);
+    setExtractionSummary(null);
+    setCurrentStatus('');
+
+    try {
+      // Detect if this is the first user message (initial response to welcome message)
+      // Check if conversationHistory only has the initial agent message or is empty
+      const hasOnlyInitialMessage = conversationHistory.length === 1 && 
+        conversationHistory[0]?.role === 'assistant' &&
+        conversationHistory[0]?.content?.includes('What city, state, or zip code');
+      const isInitialResponse = conversationHistory.length === 0 || hasOnlyInitialMessage;
+      
+      const request: ChatRequest = {
+        message: message.trim(),
+        conversation_history: conversationHistory,
+        llm_provider: llmProvider,
+        is_initial_response: isInitialResponse,
+        user_id: userId,
+        conversation_id: conversationId
+      };
+
+      await dataService.chatStream(
+        request,
+        // onStatus
+        (status: string) => {
+          console.log('Status update:', status);
+          setCurrentStatus(status);
+        },
+        // onMessage
+        (messageContent: string, metadata?: any) => {
+          // Create the main message without recommendations (they're separate now)
+          const assistantMessage: ChatMessageWithRecommendations = {
+            role: 'assistant',
+            content: messageContent,
+            timestamp: new Date().toISOString(),
+            recommendations: []
+          };
+          
+          // Add to conversation history immediately
+          onNewMessage(assistantMessage as ChatMessage);
+          setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
+          
+          // Determine if this message should show buttons
+          const messageLower = messageContent.toLowerCase();
+          const shouldShowCityButtons = messageLower.includes('what city') || 
+              messageLower.includes('city, state') ||
+              messageLower.includes('search for events in') ||
+              messageLower.includes('city, state would you like');
+          
+          const shouldShowEventTypeButtons = metadata?.location_processed || 
+              messageLower.includes('what kind of events') ||
+              messageLower.includes('what kind of') ||
+              messageLower.includes('events are you interested') ||
+              messageLower.includes('great! what kind');
+          
+          // Always add button flags to the message (even if false, for consistency)
+          assistantMessage.showCityButtons = shouldShowCityButtons;
+          assistantMessage.showEventTypeButtons = shouldShowEventTypeButtons;
+          
+          // Clear the streaming state to prevent re-rendering
+          
+          // Check if trial exceeded
+          if (metadata?.trial_exceeded) {
+            onTrialExceeded();
+          }
+
+          // Update conversation ID if it changed (new conversation)
+          if (metadata?.conversation_id && metadata.conversation_id !== conversationId) {
+            console.log('Conversation ID updated:', metadata.conversation_id);
+            localStorage.setItem('current_conversation_id', metadata.conversation_id);
+          }
+          
+          // Set extraction summary if available
+          if (metadata?.extraction_summary) {
+            setExtractionSummary(metadata.extraction_summary);
+          }
+          
+        },
+        // onRecommendation
+        (recommendation: any) => {
+          setMessagesWithRecommendations(prev => {
+            // Clear status and extraction summary when first recommendation arrives
+            const hasRecommendations = prev.some(msg => 
+              msg.recommendations && msg.recommendations.length > 0
+            );
+            
+            if (!hasRecommendations) {
+              setCurrentStatus('');
+              setExtractionSummary(null);
+            }
+
+            // If we have no previous messages, create the first recommendation-only message
+            if (prev.length === 0) {
+              return [
+                {
+                  role: 'assistant',
+                  content: undefined,
+                  timestamp: new Date().toISOString(),
+                  recommendations: [recommendation]
+                }
+              ];
+            }
+
+            const updatedMessages = [...prev];
+            const lastIndex = updatedMessages.length - 1;
+            const lastMessage = updatedMessages[lastIndex];
+
+            const isRecommendationOnly =
+              lastMessage.role === 'assistant' &&
+              (!lastMessage.content || lastMessage.content.trim().length === 0);
+
+            if (isRecommendationOnly) {
+              const existingRecommendations = lastMessage.recommendations ?? [];
+              updatedMessages[lastIndex] = {
+                ...lastMessage,
+                recommendations: [...existingRecommendations, recommendation]
+              };
+            } else {
+              updatedMessages.push({
+                role: 'assistant',
+                content: undefined,
+                timestamp: new Date().toISOString(),
+                recommendations: [recommendation]
+              });
+            }
+
+            return updatedMessages;
+          });
+
+          // Update recommendations tracking
+          onRecommendations([recommendation]);
+        },
+        // onError
+        (error: string) => {
+          console.error('Streaming error:', error);
+          const errorMessage: ChatMessage = {
+            role: 'assistant',
+            content: `Sorry, I encountered an error: ${error}`,
+            timestamp: new Date().toISOString()
+          };
+          onNewMessage(errorMessage);
+        },
+        // onDone
+        () => {
+          // Clear loading state and reset streaming state
+          setIsLoading(false);
+          setCurrentStatus('');
+          setExtractionSummary(null);
+        }
+      );
+    } catch (error) {
+      console.error('Error sending message:', error);
+      const errorMessage: ChatMessage = {
+        role: 'assistant',
+        content: 'Sorry, I encountered an error. Please try again.',
+        timestamp: new Date().toISOString()
+      };
+      onNewMessage(errorMessage);
+      setIsLoading(false);
+      setCurrentStatus('');
+      setExtractionSummary(null);
+    }
+  };
+
+
+  // Hidden for now - hasRecommendations and handleRefresh function
+  // const hasRecommendations = messagesWithRecommendations.some(
+  //   msg => msg.recommendations && msg.recommendations.length > 0
+  // );
+
+  // const handleRefresh = async () => {
+  //   if (!hasRecommendations || isLoading) return;
+
+  //   // Find the last user message with recommendations
+  //   const lastUserMessage = messagesWithRecommendations
+  //     .slice()
+  //     .reverse()
+  //     .find(msg => msg.role === 'user' && msg.content);
+
+  //   if (!lastUserMessage || !lastUserMessage.content) return;
+
+  //   // Clear existing recommendations
+  //   setMessagesWithRecommendations(prev => 
+  //     prev.filter(msg => !msg.recommendations || msg.recommendations.length === 0)
+  //   );
+
+  //   // Re-trigger the chat request
+  //   setIsLoading(true);
+  //   setCurrentStatus('Refreshing recommendations...');
+
+  //   try {
+  //     const request: ChatRequest = {
+  //       message: lastUserMessage.content,
+  //       conversation_history: conversationHistory,
+  //       llm_provider: llmProvider,
+  //       is_initial_response: false,
+  //       user_id: userId,
+  //       conversation_id: conversationId
+  //     };
+
+  //     await dataService.chatStream(
+  //       request,
+  //       (status: string) => setCurrentStatus(status),
+  //       (messageContent: string, metadata?: any) => {
+  //         const assistantMessage: ChatMessageWithRecommendations = {
+  //           role: 'assistant',
+  //           content: messageContent,
+  //           timestamp: new Date().toISOString(),
+  //           recommendations: []
+  //         };
+          
+  //         onNewMessage(assistantMessage as ChatMessage);
+  //         setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
+          
+  //         if (metadata?.trial_exceeded) {
+  //           onTrialExceeded();
+  //         }
+  //         if (metadata?.conversation_id && metadata.conversation_id !== conversationId) {
+  //           localStorage.setItem('current_conversation_id', metadata.conversation_id);
+  //         }
+  //       },
+  //       (recommendation: any) => {
+  //         const recommendationMessage: ChatMessageWithRecommendations = {
+  //           role: 'assistant',
+  //           content: undefined,
+  //           timestamp: new Date().toISOString(),
+  //           recommendations: [recommendation]
+  //         };
+          
+  //         setMessagesWithRecommendations(prev => [...prev, recommendationMessage]);
+  //         onRecommendations([recommendation]);
+  //       },
+  //       (error: string) => {
+  //         console.error('Refresh error:', error);
+  //         const errorMessage: ChatMessage = {
+  //           role: 'assistant',
+  //           content: `Sorry, I encountered an error refreshing: ${error}`,
+  //           timestamp: new Date().toISOString()
+  //         };
+  //         onNewMessage(errorMessage);
+  //       },
+  //       () => {
+  //         setIsLoading(false);
+  //         setCurrentStatus('');
+  //       }
+  //     );
+  //   } catch (error) {
+  //     console.error('Error refreshing:', error);
+  //     setIsLoading(false);
+  //     setCurrentStatus('');
+  //   }
+  // };
+
+  return (
+    <div className="flex flex-col h-full bg-[#FCFBF9]">
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto px-4 py-6">
+        <div className="space-y-4">
+          {messagesWithRecommendations.map((msg, index) => {
+          // Check if this message has meaningful content (not just whitespace)
+          const hasContent = msg.content && msg.content.trim() !== '';
+          // Check if this is a recommendation-only message (no meaningful content, only recommendations)
+          const isRecommendationOnly = !hasContent && msg.recommendations && msg.recommendations.length > 0;
+
+          // Skip completely empty assistant messages that aren't recommendation-only
+          if (msg.role === 'assistant' && !hasContent && (!msg.recommendations || msg.recommendations.length === 0)) {
+            return null;
+          }
+          
+          return (
+            <div key={index}>
+              {msg.role === 'user' ? (
+                /* User Message - Right Aligned */
+                <div className="flex justify-end gap-2 items-start">
+                  <div className="rounded-xl rounded-tr-sm px-4 py-3 max-w-[80%] shadow-sm" style={{ backgroundColor: '#E9E6DF' }}>
+                    <p className="text-[15px]" style={{ color: '#221A13' }}>{msg.content}</p>
+                  </div>
+                  {/* User Avatar */}
+                  <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1 border-2" style={{ backgroundColor: '#E9E6DF', borderColor: '#D4D0C8' }}>
+                    <ImageWithFallback src={userAvatarImg} alt="User" className="w-3/4 h-3/4 object-cover rounded-full" />
+                  </div>
+                </div>
+              ) : isRecommendationOnly ? (
+                /* Recommendation-only message - show cards horizontally */
+                <div className="flex gap-2 items-start">
+                  <div className="w-11 h-11 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    {/* Event Cards - Horizontal Scroll */}
+                    {msg.recommendations && msg.recommendations.length > 0 && (
+                      <CardGroup recommendations={msg.recommendations} />
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* Bot Response with optional Cards */
+                <div className="flex gap-2 items-start">
+                  {/* Bot Avatar */}
+                  <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2" style={{ backgroundColor: 'white', borderColor: 'rgba(118, 193, 178, 0.6)' }}>
+                    <ImageWithFallback src={agentAvatarImg} alt="Agent" className="w-4/5 h-4/5 object-cover" />
+                  </div>
+                  
+                  {/* Bot Message */}
+                  <div className="flex-1 min-w-0">
+                    <div className="rounded-xl rounded-tl-sm px-4 py-3 shadow-md border mb-3" style={{ backgroundColor: 'rgba(118, 193, 178, 0.1)', borderColor: 'rgba(118, 193, 178, 0.1)' }}>
+                      <p className="text-[15px]" style={{ color: '#221A13' }}>{msg.content}</p>
+                    </div>
+
+                    {/* City Selection Buttons - Inline */}
+                    {msg.showCityButtons && supportedCities.length > 0 && (
+                      <div className="mb-3">
+                        <CityButtons
+                          cities={supportedCities}
+                          onSelect={handleCitySelect}
+                          disabled={isLoading}
+                        />
+                      </div>
+                    )}
+
+                    {/* Event Type Selection Buttons - Inline */}
+                    {msg.showEventTypeButtons && (
+                      <div className="mb-3">
+                        <EventTypeButtons
+                          onSelect={handleEventTypeSelect}
+                          disabled={isLoading}
+                        />
+                      </div>
+                    )}
+
+                    {/* Event Cards - Horizontal Scroll */}
+                    {msg.recommendations && msg.recommendations.length > 0 && (
+                      <CardGroup recommendations={msg.recommendations} />
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        
+        {(isLoading || (currentStatus && !messagesWithRecommendations.some(msg => 
+          msg.recommendations && msg.recommendations.length > 0
+        ))) && (
+          <div className="flex gap-2 items-start">
+            {/* Bot Avatar */}
+            <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2" style={{ backgroundColor: 'white', borderColor: 'rgba(118, 193, 178, 0.6)' }}>
+              <ImageWithFallback src={agentAvatarImg} alt="Agent" className="w-4/5 h-4/5 object-cover" />
+            </div>
+            
+            {/* Loading Message */}
+            <div className="rounded-xl rounded-tl-sm px-4 py-3 shadow-md border" style={{ backgroundColor: 'rgba(118, 193, 178, 0.1)', borderColor: 'rgba(118, 193, 178, 0.1)' }}>
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#76C1B2' }} />
+                <p className="text-[15px]" style={{ color: '#221A13' }}>
+                  {currentStatus || extractionSummary || ''}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
+
+      {/* Input Area */}
+      <div className="bg-[#FCFBF9] px-4 py-6 flex-shrink-0">
+        <form onSubmit={handleSubmit} className="flex gap-3 items-center relative">
+          {/* Refresh Button - Hidden for now */}
+          {/* <div className="relative">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={!hasRecommendations || isLoading}
+              className="rounded-full bg-white h-14 w-14 flex items-center justify-center transition-all shadow-md border-[0.5px] border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 disabled:hover:bg-white active:scale-90 active:shadow-lg"
+            >
+              <img 
+                src={refreshIcon} 
+                alt="Refresh" 
+                className="w-8 h-8 transition-transform active:rotate-180" 
+                style={{ 
+                  filter: 'invert(67%) sepia(18%) saturate(1245%) hue-rotate(121deg) brightness(92%) contrast(86%)'
+                }} 
+              />
+            </button>
+          </div> */}
+          
+          <input
+            type="text"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder={messagesWithRecommendations.some(msg => msg.role === 'user') ? "What else are you looking for?" : "Start here!"}
+            className="flex-1 rounded-xl border-[0.5px] border-slate-200 bg-white shadow-md h-14 text-base px-6 placeholder:text-[#5E574E] focus:outline-none focus:ring-2 focus:ring-[#76C1B2]/50"
+            style={{ color: '#221A13' }}
+            disabled={isLoading}
+          />
+          
+          <button
+            type="submit"
+            disabled={!message.trim() || isLoading}
+            className="rounded-full bg-white hover:bg-slate-50 h-14 w-14 flex items-center justify-center transition-all shadow-md border-[0.5px] border-slate-200 active:scale-90 active:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoading ? (
+              <Loader2 className="w-7 h-7 animate-spin" style={{ color: '#B46A55' }} />
+            ) : (
+              <Send className="w-7 h-7" style={{ color: '#B46A55' }} />
+            )}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default ChatInterface;
