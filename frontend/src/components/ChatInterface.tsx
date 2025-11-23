@@ -772,9 +772,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           {showWheelPicker && (
             <div className="absolute bottom-full left-0 right-0 mb-2 px-4 animate-in slide-in-from-bottom-4 duration-200 z-50">
               <div className="bg-white rounded-xl shadow-2xl border border-slate-200 py-4 px-3">
-                <h3 className="text-center mb-3" style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>
+                <h3 className="text-center mb-1" style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>
                   Choose Your Loco & Vibe
                 </h3>
+                <p className="text-center mb-2 text-sm" style={{ color: '#5E574E' }}>
+                  Swipe Left or Right
+                </p>
                 
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <CompactWheelPicker
