@@ -38,43 +38,45 @@ class CacheManager:
             logger.warning(f"Error checking cache validity: {e}")
             return False
 
-    def _get_cache_key(self, city: str) -> str:
-        """Generate cache key from city name"""
-        return city.lower().replace(" ", "_").replace("/", "_")
+    def _get_cache_key(self, city: str, event_type: str = "events") -> str:
+        """Generate cache key from city name and event type"""
+        city_key = city.lower().replace(" ", "_").replace("/", "_")
+        event_key = event_type.lower().replace(" ", "_")
+        return f"{city_key}_{event_key}"
 
-    def _get_cache_file_path(self, city: str) -> str:
-        """Get file path for city cache"""
-        cache_key = self._get_cache_key(city)
+    def _get_cache_file_path(self, city: str, event_type: str = "events") -> str:
+        """Get file path for city and event type cache"""
+        cache_key = self._get_cache_key(city, event_type)
         return os.path.join(self.cache_dir, f"{cache_key}.json")
 
-    def _save_cache_to_disk(self, city: str, cache_data: Dict[str, Any]):
+    def _save_cache_to_disk(self, city: str, cache_data: Dict[str, Any], event_type: str = "events"):
         """Save cache data to disk"""
         try:
-            file_path = self._get_cache_file_path(city)
+            file_path = self._get_cache_file_path(city, event_type)
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(cache_data, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            logger.error(f"Error saving cache to disk for {city}: {e}")
+            logger.error(f"Error saving cache to disk for {city}/{event_type}: {e}")
 
-    def get_cached_events(self, city: str, event_crawler=None) -> Optional[List[Dict[str, Any]]]:
-        """Get cached events for a city - checks local cache first, then Firebase, then fetches fresh if provided"""
+    def get_cached_events(self, city: str, event_type: str = "events", event_crawler=None) -> Optional[List[Dict[str, Any]]]:
+        """Get cached events for a city and event type - checks local cache first, then Firebase, then fetches fresh if provided"""
         try:
-            cache_key = self._get_cache_key(city)
+            cache_key = self._get_cache_key(city, event_type)
 
             # Check local memory cache first (fastest)
             if cache_key in self.memory_cache:
                 cache_data = self.memory_cache[cache_key]
                 if self._is_cache_valid(cache_data.get('cached_at', '')):
                     events = cache_data.get('events', [])
-                    logger.info(f"Retrieved {len(events)} events for {city} from local memory cache")
+                    logger.info(f"Retrieved {len(events)} events for {city}/{event_type} from local memory cache")
                     return events
                 else:
                     # Remove expired entry from memory
                     del self.memory_cache[cache_key]
-                    logger.debug(f"Removed expired cache from memory: {city}")
+                    logger.debug(f"Removed expired cache from memory: {city}/{event_type}")
 
             # Check local file cache
-            file_path = self._get_cache_file_path(city)
+            file_path = self._get_cache_file_path(city, event_type)
             if os.path.exists(file_path):
                 try:
                     with open(file_path, 'r', encoding='utf-8') as f:
@@ -84,106 +86,147 @@ class CacheManager:
                         # Load into memory cache for faster future access
                         self.memory_cache[cache_key] = cache_data
                         events = cache_data.get('events', [])
-                        logger.info(f"Retrieved {len(events)} events for {city} from local file cache")
+                        logger.info(f"Retrieved {len(events)} events for {city}/{event_type} from local file cache")
                         return events
                     else:
                         # Remove expired file
                         os.remove(file_path)
-                        logger.debug(f"Removed expired cache file: {city}")
+                        logger.debug(f"Removed expired cache file: {city}/{event_type}")
                 except Exception as e:
-                    logger.warning(f"Error reading cache file for {city}: {e}")
+                    logger.warning(f"Error reading cache file for {city}/{event_type}: {e}")
 
             # Fallback to Firebase (slower)
-            safe_city = city.lower().replace(" ", "_").replace("/", "_")
-            cache_doc = self.db.collection('event_cache').document(safe_city).get()
+            safe_cache_key = cache_key
+            cache_doc = self.db.collection('event_cache').document(safe_cache_key).get()
 
             if not cache_doc.exists:
-                logger.info(f"Cache for {city} doesn't exist in Firebase")
+                logger.info(f"Cache for {city}/{event_type} doesn't exist in Firebase")
                 # If no cache found and event_crawler provided, fetch fresh events
                 if event_crawler:
-                    return self._fetch_and_cache_fresh_events(city, event_crawler)
+                    return self._fetch_and_cache_fresh_events(city, event_type, event_crawler)
                 return None
 
             cache_data = cache_doc.to_dict()
 
             if not self._is_cache_valid(cache_data.get('cached_at', '')):
-                logger.info(f"Cache for {city} is expired in Firebase")
+                logger.info(f"Cache for {city}/{event_type} is expired in Firebase")
                 # If cache expired and event_crawler provided, fetch fresh events
                 if event_crawler:
-                    return self._fetch_and_cache_fresh_events(city, event_crawler)
+                    return self._fetch_and_cache_fresh_events(city, event_type, event_crawler)
                 return None
 
             # Cache in local memory and disk for future use
             events = cache_data.get('events', [])
             self.memory_cache[cache_key] = cache_data
-            self._save_cache_to_disk(city, cache_data)
+            self._save_cache_to_disk(city, cache_data, event_type)
 
-            logger.info(f"Retrieved {len(events)} events for {city} from Firebase (cached locally)")
+            logger.info(f"Retrieved {len(events)} events for {city}/{event_type} from Firebase (cached locally)")
             return events
 
         except Exception as e:
-            logger.error(f"Error reading cache for {city}: {e}")
+            logger.error(f"Error reading cache for {city}/{event_type}: {e}")
             return None
 
-    def _fetch_and_cache_fresh_events(self, city: str, event_crawler) -> Optional[List[Dict[str, Any]]]:
-        """Fetch fresh events for a specific city and cache them"""
+    def _fetch_and_cache_fresh_events(self, city: str, event_type: str, event_crawler) -> Optional[List[Dict[str, Any]]]:
+        """Fetch fresh events for a specific city and event type, then cache them"""
         try:
-            logger.info(f"Fetching fresh events for {city} due to expired/missing cache")
-            fresh_events = event_crawler.fetch_events_by_city(city, max_pages=3)
+            logger.info(f"Fetching fresh events for {city}/{event_type} due to expired/missing cache")
+            fresh_events = event_crawler.fetch_events_by_city(city, category=event_type, max_pages=3)
 
             if fresh_events:
-                logger.info(f"Fetched {len(fresh_events)} fresh events for {city}")
+                logger.info(f"Fetched {len(fresh_events)} fresh events for {city}/{event_type}")
                 # Cache the fresh events
-                self.cache_events(city, fresh_events)
+                self.cache_events(city, fresh_events, event_type)
                 return fresh_events
             else:
-                logger.warning(f"Failed to fetch fresh events for {city}")
+                logger.warning(f"Failed to fetch fresh events for {city}/{event_type}")
                 return None
 
         except Exception as e:
-            logger.error(f"Error fetching fresh events for {city}: {e}")
+            logger.error(f"Error fetching fresh events for {city}/{event_type}: {e}")
             return None
+    
+    def cache_all_event_types_for_city(self, city: str, event_crawler) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Pre-cache all supported event types for a city.
+        This allows frontend to show event type buttons and retrieve cached events instantly.
+        
+        Returns:
+            Dictionary mapping event_type -> list of events
+        """
+        try:
+            supported_event_types = event_crawler.get_supported_events()
+            logger.info(f"Pre-caching all event types for {city}: {supported_event_types}")
+            
+            cached_results = {}
+            for event_type in supported_event_types:
+                try:
+                    # Check if already cached and valid
+                    cached = self.get_cached_events(city, event_type=event_type, event_crawler=None)
+                    if cached:
+                        logger.info(f"Event type {event_type} already cached for {city}")
+                        cached_results[event_type] = cached
+                    else:
+                        # Fetch and cache
+                        logger.info(f"Fetching and caching {event_type} events for {city}")
+                        fresh_events = event_crawler.fetch_events_by_city(city, category=event_type, max_pages=3)
+                        if fresh_events:
+                            self.cache_events(city, fresh_events, event_type)
+                            cached_results[event_type] = fresh_events
+                        else:
+                            cached_results[event_type] = []
+                except Exception as e:
+                    logger.error(f"Error caching {event_type} for {city}: {e}")
+                    cached_results[event_type] = []
+            
+            logger.info(f"Pre-cached {len(cached_results)} event types for {city}")
+            return cached_results
+            
+        except Exception as e:
+            logger.error(f"Error pre-caching all event types for {city}: {e}")
+            return {}
 
-    def cache_events(self, city: str, events: List[Dict[str, Any]]) -> bool:
-        """Cache events for a city - saves locally first, then to Firebase in background"""
+    def cache_events(self, city: str, events: List[Dict[str, Any]], event_type: str = "events") -> bool:
+        """Cache events for a city and event type - saves locally first, then to Firebase in background"""
         try:
             cache_data = {
                 'city': city,
+                'event_type': event_type,
                 'events': events,
                 'cached_at': datetime.now().isoformat(),
                 'count': len(events)
             }
 
             # Cache in local memory (fastest access)
-            cache_key = self._get_cache_key(city)
+            cache_key = self._get_cache_key(city, event_type)
             self.memory_cache[cache_key] = cache_data
 
             # Cache to local disk (persistence)
-            self._save_cache_to_disk(city, cache_data)
+            self._save_cache_to_disk(city, cache_data, event_type)
 
             # Cache in Firebase (distributed backup) - in background to not block
-            asyncio.create_task(self._cache_events_to_firebase_async(city, cache_data))
+            asyncio.create_task(self._cache_events_to_firebase_async(city, event_type, cache_data))
 
-            logger.info(f"Cached {len(events)} events for {city} locally and in Firebase (async)")
+            logger.info(f"Cached {len(events)} events for {city}/{event_type} locally and in Firebase (async)")
             return True
 
         except Exception as e:
-            logger.error(f"Error caching events for {city}: {e}")
+            logger.error(f"Error caching events for {city}/{event_type}: {e}")
             return False
 
-    async def _cache_events_to_firebase_async(self, city: str, cache_data: Dict[str, Any]):
+    async def _cache_events_to_firebase_async(self, city: str, event_type: str, cache_data: Dict[str, Any]):
         """Async method to save cache data to Firebase in the background"""
         try:
-            safe_city = city.lower().replace(" ", "_").replace("/", "_")
-            self.db.collection('event_cache').document(safe_city).set(cache_data)
-            logger.debug(f"Successfully cached {cache_data['count']} events for {city} to Firebase")
+            cache_key = self._get_cache_key(city, event_type)
+            self.db.collection('event_cache').document(cache_key).set(cache_data)
+            logger.debug(f"Successfully cached {cache_data['count']} events for {city}/{event_type} to Firebase")
         except Exception as e:
-            logger.error(f"Error caching events for {city} to Firebase: {e}")
+            logger.error(f"Error caching events for {city}/{event_type} to Firebase: {e}")
 
-    def get_cache_age(self, city: str) -> Optional[float]:
-        """Get cache age in hours for a city - checks local cache first"""
+    def get_cache_age(self, city: str, event_type: str = "events") -> Optional[float]:
+        """Get cache age in hours for a city and event type - checks local cache first"""
         try:
-            cache_key = self._get_cache_key(city)
+            cache_key = self._get_cache_key(city, event_type)
 
             # Check local memory cache first
             if cache_key in self.memory_cache:
@@ -195,7 +238,7 @@ class CacheManager:
                     return age.total_seconds() / 3600  # Convert to hours
 
             # Check local file cache
-            file_path = self._get_cache_file_path(city)
+            file_path = self._get_cache_file_path(city, event_type)
             if os.path.exists(file_path):
                 try:
                     with open(file_path, 'r', encoding='utf-8') as f:
@@ -209,8 +252,7 @@ class CacheManager:
                     pass
 
             # Fallback to Firebase
-            safe_city = city.lower().replace(" ", "_").replace("/", "_")
-            cache_doc = self.db.collection('event_cache').document(safe_city).get()
+            cache_doc = self.db.collection('event_cache').document(cache_key).get()
 
             if not cache_doc.exists:
                 return None

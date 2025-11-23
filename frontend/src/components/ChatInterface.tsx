@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Loader2 } from 'lucide-react';
-import { ChatMessage, ChatRequest } from '../api/client';
+import { ChatMessage, ChatRequest, apiClient } from '../api/client';
 import { dataService } from '../services/dataService';
 import CardGroup from './CardGroup';
 import { ImageWithFallback } from './ImageWithFallback';
+import EventTypeButtons from './EventTypeButtons';
+import CityButtons from './CityButtons';
 import userAvatarImg from '../assets/images/figma/user-avatar.png';
 import agentAvatarImg from '../assets/images/figma/agent-avatar.png';
 // import refreshIcon from '../assets/images/figma/refresh-icon.png'; // Hidden for now
@@ -13,6 +15,8 @@ interface ChatMessageWithRecommendations {
   content?: string; // Optional to allow undefined for recommendation-only messages
   timestamp?: string;
   recommendations?: any[];
+  showCityButtons?: boolean;
+  showEventTypeButtons?: boolean;
 }
 
 interface ChatInterfaceProps {
@@ -39,6 +43,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [extractionSummary, setExtractionSummary] = useState<string | null>(null);
   const [messagesWithRecommendations, setMessagesWithRecommendations] = useState<ChatMessageWithRecommendations[]>([]);
   const [currentStatus, setCurrentStatus] = useState<string>('');
+  const [supportedCities, setSupportedCities] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -49,7 +54,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-
+  // Load supported cities on mount
+  useEffect(() => {
+    const loadCities = async () => {
+      try {
+        console.log('Loading supported cities...');
+        const cities = await apiClient.getSupportedCities();
+        console.log('Loaded cities:', cities);
+        setSupportedCities(cities);
+      } catch (error) {
+        console.error('Error loading supported cities:', error);
+        // Set default cities as fallback
+        setSupportedCities(['san_francisco', 'new_york', 'los_angeles', 'miami', 'chicago', 'seattle', 'boston']);
+      }
+    };
+    loadCities();
+  }, []);
 
   // Scroll to bottom when new content is added (but not for recommendation-only messages)
   useEffect(() => {
@@ -79,10 +99,25 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         return !hasContent && hasRecommendations;
       });
 
-      const conversationMessages: ChatMessageWithRecommendations[] = conversationHistory.map(msg => ({
-        ...msg,
-        recommendations: (msg as any).recommendations ?? []
-      }));
+      const conversationMessages: ChatMessageWithRecommendations[] = conversationHistory.map(msg => {
+        const content = msg.content?.toLowerCase() || '';
+        const shouldShowCityButtons = content.includes('what city') || 
+            content.includes('city, state') ||
+            content.includes('search for events in') ||
+            content.includes('city, state would you like');
+        
+        const shouldShowEventTypeButtons = content.includes('what kind of events') ||
+            content.includes('what kind of') ||
+            content.includes('events are you interested') ||
+            content.includes('great! what kind');
+        
+        return {
+          ...msg,
+          recommendations: (msg as any).recommendations ?? [],
+          showCityButtons: shouldShowCityButtons,
+          showEventTypeButtons: shouldShowEventTypeButtons
+        };
+      });
 
       const combinedMessages = [...conversationMessages, ...recommendationOnlyMessages];
 
@@ -101,6 +136,235 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       });
     }
   }, [conversationHistory]);
+
+  const handleCitySelect = async (city: string) => {
+    if (isLoading) return;
+    
+    // Create user message with city
+    const userMessage: ChatMessageWithRecommendations = {
+      role: 'user',
+      content: city,
+      timestamp: new Date().toISOString(),
+      recommendations: []
+    };
+
+    onNewMessage(userMessage as ChatMessage);
+    setMessagesWithRecommendations(prev => [...prev, userMessage]);
+    setIsLoading(true);
+    setExtractionSummary(null);
+    setCurrentStatus('');
+
+    try {
+      const request: ChatRequest = {
+        message: city,
+        conversation_history: conversationHistory,
+        llm_provider: llmProvider,
+        is_initial_response: conversationHistory.length <= 1,
+        user_id: userId,
+        conversation_id: conversationId
+      };
+
+      await dataService.chatStream(
+        request,
+        (status: string) => {
+          setCurrentStatus(status);
+        },
+        (messageContent: string, metadata?: any) => {
+          const assistantMessage: ChatMessageWithRecommendations = {
+            role: 'assistant',
+            content: messageContent,
+            timestamp: new Date().toISOString(),
+            recommendations: []
+          };
+          
+          onNewMessage(assistantMessage as ChatMessage);
+          setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
+          
+          // Show event type buttons if location was processed
+          if (metadata?.location_processed) {
+            assistantMessage.showEventTypeButtons = true;
+          }
+          
+          if (metadata?.trial_exceeded) {
+            onTrialExceeded();
+          }
+          if (metadata?.conversation_id && metadata.conversation_id !== conversationId) {
+            localStorage.setItem('current_conversation_id', metadata.conversation_id);
+          }
+          if (metadata?.extraction_summary) {
+            setExtractionSummary(metadata.extraction_summary);
+          }
+        },
+        (recommendation: any) => {
+          setMessagesWithRecommendations(prev => {
+            if (prev.length === 0) {
+              return [{
+                role: 'assistant',
+                content: undefined,
+                timestamp: new Date().toISOString(),
+                recommendations: [recommendation]
+              }];
+            }
+
+            const updatedMessages = [...prev];
+            const lastIndex = updatedMessages.length - 1;
+            const lastMessage = updatedMessages[lastIndex];
+
+            const isRecommendationOnly =
+              lastMessage.role === 'assistant' &&
+              (!lastMessage.content || lastMessage.content.trim().length === 0);
+
+            if (isRecommendationOnly) {
+              updatedMessages[lastIndex] = {
+                ...lastMessage,
+                recommendations: [...(lastMessage.recommendations ?? []), recommendation]
+              };
+            } else {
+              updatedMessages.push({
+                role: 'assistant',
+                content: undefined,
+                timestamp: new Date().toISOString(),
+                recommendations: [recommendation]
+              });
+            }
+
+            return updatedMessages;
+          });
+          onRecommendations([recommendation]);
+        },
+        (error: string) => {
+          console.error('Streaming error:', error);
+          const errorMessage: ChatMessage = {
+            role: 'assistant',
+            content: `Sorry, I encountered an error: ${error}`,
+            timestamp: new Date().toISOString()
+          };
+          onNewMessage(errorMessage);
+        },
+        () => {
+          setIsLoading(false);
+          setCurrentStatus('');
+          setExtractionSummary(null);
+        }
+      );
+    } catch (error) {
+      console.error('Error sending city:', error);
+      setIsLoading(false);
+      setCurrentStatus('');
+    }
+  };
+
+  const handleEventTypeSelect = async (eventType: string) => {
+    if (isLoading) return;
+    
+    // Create user message with event type
+    const userMessage: ChatMessageWithRecommendations = {
+      role: 'user',
+      content: eventType,
+      timestamp: new Date().toISOString(),
+      recommendations: []
+    };
+
+    onNewMessage(userMessage as ChatMessage);
+    setMessagesWithRecommendations(prev => [...prev, userMessage]);
+    setIsLoading(true);
+    setExtractionSummary(null);
+    setCurrentStatus('');
+
+    try {
+      const request: ChatRequest = {
+        message: eventType,
+        conversation_history: conversationHistory,
+        llm_provider: llmProvider,
+        is_initial_response: false,
+        user_id: userId,
+        conversation_id: conversationId
+      };
+
+      await dataService.chatStream(
+        request,
+        (status: string) => {
+          setCurrentStatus(status);
+        },
+        (messageContent: string, metadata?: any) => {
+          const assistantMessage: ChatMessageWithRecommendations = {
+            role: 'assistant',
+            content: messageContent,
+            timestamp: new Date().toISOString(),
+            recommendations: []
+          };
+          
+          onNewMessage(assistantMessage as ChatMessage);
+          setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
+          
+          if (metadata?.trial_exceeded) {
+            onTrialExceeded();
+          }
+          if (metadata?.conversation_id && metadata.conversation_id !== conversationId) {
+            localStorage.setItem('current_conversation_id', metadata.conversation_id);
+          }
+          if (metadata?.extraction_summary) {
+            setExtractionSummary(metadata.extraction_summary);
+          }
+        },
+        (recommendation: any) => {
+          setMessagesWithRecommendations(prev => {
+            if (prev.length === 0) {
+              return [{
+                role: 'assistant',
+                content: undefined,
+                timestamp: new Date().toISOString(),
+                recommendations: [recommendation]
+              }];
+            }
+
+            const updatedMessages = [...prev];
+            const lastIndex = updatedMessages.length - 1;
+            const lastMessage = updatedMessages[lastIndex];
+
+            const isRecommendationOnly =
+              lastMessage.role === 'assistant' &&
+              (!lastMessage.content || lastMessage.content.trim().length === 0);
+
+            if (isRecommendationOnly) {
+              updatedMessages[lastIndex] = {
+                ...lastMessage,
+                recommendations: [...(lastMessage.recommendations ?? []), recommendation]
+              };
+            } else {
+              updatedMessages.push({
+                role: 'assistant',
+                content: undefined,
+                timestamp: new Date().toISOString(),
+                recommendations: [recommendation]
+              });
+            }
+
+            return updatedMessages;
+          });
+          onRecommendations([recommendation]);
+        },
+        (error: string) => {
+          console.error('Streaming error:', error);
+          const errorMessage: ChatMessage = {
+            role: 'assistant',
+            content: `Sorry, I encountered an error: ${error}`,
+            timestamp: new Date().toISOString()
+          };
+          onNewMessage(errorMessage);
+        },
+        () => {
+          setIsLoading(false);
+          setCurrentStatus('');
+          setExtractionSummary(null);
+        }
+      );
+    } catch (error) {
+      console.error('Error sending event type:', error);
+      setIsLoading(false);
+      setCurrentStatus('');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -146,6 +410,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         },
         // onMessage
         (messageContent: string, metadata?: any) => {
+          // Clear status immediately when main message arrives
+          setCurrentStatus('');
+          
           // Create the main message without recommendations (they're separate now)
           const assistantMessage: ChatMessageWithRecommendations = {
             role: 'assistant',
@@ -157,6 +424,23 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           // Add to conversation history immediately
           onNewMessage(assistantMessage as ChatMessage);
           setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
+          
+          // Determine if this message should show buttons
+          const messageLower = messageContent.toLowerCase();
+          const shouldShowCityButtons = messageLower.includes('what city') || 
+              messageLower.includes('city, state') ||
+              messageLower.includes('search for events in') ||
+              messageLower.includes('city, state would you like');
+          
+          const shouldShowEventTypeButtons = metadata?.location_processed || 
+              messageLower.includes('what kind of events') ||
+              messageLower.includes('what kind of') ||
+              messageLower.includes('events are you interested') ||
+              messageLower.includes('great! what kind');
+          
+          // Always add button flags to the message (even if false, for consistency)
+          assistantMessage.showCityButtons = shouldShowCityButtons;
+          assistantMessage.showEventTypeButtons = shouldShowEventTypeButtons;
           
           // Clear the streaming state to prevent re-rendering
           
@@ -185,6 +469,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               msg.recommendations && msg.recommendations.length > 0
             );
             
+            // Always clear status when recommendations start arriving
             if (!hasRecommendations) {
               setCurrentStatus('');
               setExtractionSummary(null);
@@ -206,17 +491,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             const lastIndex = updatedMessages.length - 1;
             const lastMessage = updatedMessages[lastIndex];
 
-            const isRecommendationOnly =
-              lastMessage.role === 'assistant' &&
-              (!lastMessage.content || lastMessage.content.trim().length === 0);
-
-            if (isRecommendationOnly) {
+            // If last message is an assistant message (with or without content), add recommendations to it
+            // This ensures the message appears before recommendations
+            if (lastMessage && lastMessage.role === 'assistant') {
               const existingRecommendations = lastMessage.recommendations ?? [];
               updatedMessages[lastIndex] = {
                 ...lastMessage,
                 recommendations: [...existingRecommendations, recommendation]
               };
             } else {
+              // Only create new message if there's no assistant message to attach to
               updatedMessages.push({
                 role: 'assistant',
                 content: undefined,
@@ -406,6 +690,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                       <p className="text-[15px]" style={{ color: '#221A13' }}>{msg.content}</p>
                     </div>
 
+                    {/* City Selection Buttons - Inline */}
+                    {msg.showCityButtons && supportedCities.length > 0 && (
+                      <div className="mb-3">
+                        <CityButtons
+                          cities={supportedCities}
+                          onSelect={handleCitySelect}
+                          disabled={isLoading}
+                        />
+                      </div>
+                    )}
+
+                    {/* Event Type Selection Buttons - Inline */}
+                    {msg.showEventTypeButtons && (
+                      <div className="mb-3">
+                        <EventTypeButtons
+                          onSelect={handleEventTypeSelect}
+                          disabled={isLoading}
+                        />
+                      </div>
+                    )}
+
                     {/* Event Cards - Horizontal Scroll */}
                     {msg.recommendations && msg.recommendations.length > 0 && (
                       <CardGroup recommendations={msg.recommendations} />
@@ -417,9 +722,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           );
         })}
         
-        {(isLoading || (currentStatus && !messagesWithRecommendations.some(msg => 
-          msg.recommendations && msg.recommendations.length > 0
-        ))) && (
+        {(() => {
+          const lastMessage = messagesWithRecommendations[messagesWithRecommendations.length - 1];
+          const lastMessageIsUser = lastMessage?.role === 'user';
+          // Check if there's an assistant message AFTER the last user message
+          const lastUserMessageIndex = messagesWithRecommendations.map((m, i) => m.role === 'user' ? i : -1).filter(i => i !== -1).pop() ?? -1;
+          const hasNewAssistantMessage = messagesWithRecommendations.slice(lastUserMessageIndex + 1).some(msg => 
+            msg.role === 'assistant' && msg.content
+          );
+          const shouldShow = isLoading && lastMessageIsUser && !hasNewAssistantMessage;
+          console.log('Loading bubble check:', { 
+            isLoading, 
+            currentStatus, 
+            lastMessageIsUser, 
+            hasNewAssistantMessage, 
+            shouldShow, 
+            messagesCount: messagesWithRecommendations.length,
+            lastMessageRole: lastMessage?.role,
+            lastUserMessageIndex
+          });
+          return shouldShow;
+        })() && (
           <div className="flex gap-2 items-start">
             {/* Bot Avatar */}
             <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2" style={{ backgroundColor: 'white', borderColor: 'rgba(118, 193, 178, 0.6)' }}>
@@ -431,7 +754,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#76C1B2' }} />
                 <p className="text-[15px]" style={{ color: '#221A13' }}>
-                  {currentStatus || extractionSummary || ''}
+                  {currentStatus || extractionSummary || (isLoading ? 'Searching...' : '')}
                 </p>
               </div>
             </div>
