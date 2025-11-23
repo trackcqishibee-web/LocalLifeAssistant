@@ -332,32 +332,81 @@ async def stream_chat_response(request: ChatRequest):
         if request.is_initial_response:
             prefs_dict = extracted_preferences.dict() if extracted_preferences else None
             logger.info(f"Saving initial user message with extracted_preferences: {prefs_dict}")
-            if extracted_preferences:
-                logger.info(f"Extracted preferences details - location: {extracted_preferences.location}, event_type: {extracted_preferences.event_type}")
-            conversation_storage.save_message(user_id, conversation_id, {
+            # Save in background (non-blocking)
+            asyncio.create_task(conversation_storage.save_message_async(user_id, conversation_id, {
                 "role": "user",
                 "content": request.message,
                 "timestamp": datetime.now().isoformat(),
                 "extracted_preferences": prefs_dict
-            })
-            logger.info(f"Saved user message for conversation {conversation_id}, location in prefs: {prefs_dict.get('location') if prefs_dict else 'None'}")
+            }))
+            logger.info(f"Queued user message save for conversation {conversation_id}, location in prefs: {prefs_dict.get('location') if prefs_dict else 'None'}")
         
         
         # Step 3: Save user message for non-initial responses
         if not request.is_initial_response:
-            # Save user message with extracted preferences
-            conversation_storage.save_message(user_id, conversation_id, {
+            # Retrieve location from stored conversation
+            stored_location = None
+            try:
+                logger.info(f"Retrieving conversation {conversation_id} for user {user_id} (anonymous: {user_id.startswith('user_')})")
+                conversation = conversation_storage.get_conversation(user_id, conversation_id)
+                if conversation:
+                    logger.info(f"Conversation found, message count: {len(conversation.get('messages', []))}")
+                    if conversation.get('messages'):
+                        for idx, msg in enumerate(conversation.get('messages', [])):
+                            if isinstance(msg, dict):
+                                msg_role = msg.get('role')
+                                msg_content = msg.get('content', '')[:50]
+                                stored_prefs = msg.get('extracted_preferences')
+                                logger.info(f"Message {idx}: role={msg_role}, content='{msg_content}...', has_prefs={stored_prefs is not None}")
+                                if stored_prefs:
+                                    if isinstance(stored_prefs, dict):
+                                        location_value = stored_prefs.get('location')
+                                        logger.info(f"  extracted_preferences dict: location={location_value}")
+                                        if location_value and location_value != "none":
+                                            stored_location = location_value
+                                            logger.info(f"✓ Found stored location in message {idx}: {stored_location}")
+                                            break
+                                    else:
+                                        logger.warning(f"  extracted_preferences is not a dict, type: {type(stored_prefs)}")
+                else:
+                    logger.warning(f"Conversation {conversation_id} not found or empty")
+            except Exception as e:
+                logger.error(f"Could not retrieve conversation to get stored location: {e}", exc_info=True)
+            
+            # Check if message is a supported event type (from button selection)
+            supported_event_types = event_crawler.get_supported_events()
+            message_lower = request.message.lower().strip()
+            if message_lower in supported_event_types:
+                # User selected event type from button
+                if extracted_preferences:
+                    extracted_preferences.event_type = message_lower
+                else:
+                    extracted_preferences = UserPreferences(event_type=message_lower)
+                logger.info(f"Using event type from button selection: {message_lower}")
+            
+            # Use stored location if available
+            if stored_location and not location_provided:
+                city = stored_location.lower()
+                location_provided = True
+                if extracted_preferences:
+                    extracted_preferences.location = stored_location
+                else:
+                    extracted_preferences = UserPreferences(location=stored_location)
+                logger.info(f"Using stored location: {stored_location}")
+            
+            # Save user message with combined preferences (location + event type)
+            # Save in background (non-blocking)
+            asyncio.create_task(conversation_storage.save_message_async(user_id, conversation_id, {
                 "role": "user",
                 "content": request.message,
                 "timestamp": datetime.now().isoformat(),
                 "extracted_preferences": extracted_preferences.dict() if extracted_preferences else None
-            })
+            }))
         
         logger.info(f"Final city decision: {city}, Event type: {extracted_preferences.event_type if extracted_preferences else 'none'}")
         
         # Step 3: Pre-cache all event types for this city (if not already cached)
         # This allows frontend to show event type buttons and retrieve instantly
-        yield f"data: {json.dumps({'type': 'status', 'content': f'Loading events for {format_city_name(city)}...'})}\n\n"
         cache_manager.cache_all_event_types_for_city(city, event_crawler)
         
         # Determine event type/category for current request
@@ -369,9 +418,6 @@ async def stream_chat_response(request: ChatRequest):
             logger.warning(f"No event type extracted, using default 'events'. Extracted preferences: {extracted_preferences.dict() if extracted_preferences else None}")
         
         # Step 6: Get cached events for the selected event type (should be instant now)
-        yield f"data: {json.dumps({'type': 'status', 'content': f'Searching for {event_type} events in the {format_city_name(city)} area...'})}\n\n"
-        await asyncio.sleep(0.3)
-
         # Get cached events (should be instant since we pre-cached)
         cached_events = cache_manager.get_cached_events(city, event_type=event_type, event_crawler=None)
         cache_age_hours = cache_manager.get_cache_age(city, event_type=event_type)
@@ -382,12 +428,10 @@ async def stream_chat_response(request: ChatRequest):
                 # Using cached events
                 logger.info(f"Using cached events for {city} (age: {cache_age_hours:.1f}h)")
                 cache_used = True
-                yield f"data: {json.dumps({'type': 'status', 'content': f'Found cached events for {format_city_name(city)} (from {cache_age_hours:.1f}h ago)'})}\n\n"
             else:
                 # Freshly fetched events
                 logger.info(f"Fetched {len(events)} fresh events for {city}")
                 cache_used = False
-                yield f"data: {json.dumps({'type': 'status', 'content': f'Found {len(events)} fresh events for {format_city_name(city)}'})}\n\n"
         else:
             logger.warning(f"Failed to get any events for {city}")
             events = []
@@ -463,9 +507,6 @@ async def stream_chat_response(request: ChatRequest):
         top_events = await ai_task
         logger.info(f"LLM search returned {len(top_events)} events")
         
-        # Ensure status message is visible for at least 1 second
-        await asyncio.sleep(0.5)
-        
         # Debug: Check if events have LLM scores
         if top_events:
             first_event = top_events[0]
@@ -474,19 +515,19 @@ async def stream_chat_response(request: ChatRequest):
         
         # Step 5: Create extraction summary if preferences were extracted
         extraction_summary = None
-        if extracted_preferences:
-            summary_parts = []
-            if extracted_preferences.location and extracted_preferences.location != "none":
-                summary_parts.append(f"📍 {extracted_preferences.location}")
-            if extracted_preferences.date and extracted_preferences.date != "none":
-                summary_parts.append(f"📅 {extracted_preferences.date}")
-            if extracted_preferences.time and extracted_preferences.time != "none":
-                summary_parts.append(f"🕐 {extracted_preferences.time}")
-            if extracted_preferences.event_type and extracted_preferences.event_type != "none":
-                summary_parts.append(f"🎭 {extracted_preferences.event_type}")
-            
-            if summary_parts:
-                extraction_summary = " • ".join(summary_parts)
+        # if extracted_preferences:
+        #     summary_parts = []
+        #     if extracted_preferences.location and extracted_preferences.location != "none":
+        #         summary_parts.append(f"📍 {extracted_preferences.location}")
+        #     if extracted_preferences.date and extracted_preferences.date != "none":
+        #         summary_parts.append(f"📅 {extracted_preferences.date}")
+        #     if extracted_preferences.time and extracted_preferences.time != "none":
+        #         summary_parts.append(f"🕐 {extracted_preferences.time}")
+        #     if extracted_preferences.event_type and extracted_preferences.event_type != "none":
+        #         summary_parts.append(f"🎭 {extracted_preferences.event_type}")
+        #     
+        #     if summary_parts:
+        #         extraction_summary = " • ".join(summary_parts)
         
         # Step 6: Generate and send main response message first
         location_note = ""
@@ -511,6 +552,10 @@ async def stream_chat_response(request: ChatRequest):
         # Send the main message first
         yield f"data: {json.dumps({'type': 'message', 'content': response_message, 'extraction_summary': extraction_summary, 'usage_stats': usage_stats, 'trial_exceeded': False, 'conversation_id': conversation_id, 'location_processed': location_just_processed})}\n\n"
         
+        # # Longer delay to ensure message is fully rendered before recommendations start
+        # # This prevents the message from appearing after recommendations
+        # await asyncio.sleep(0.8)
+        
         # Step 7: Format recommendations and stream them one by one
         formatted_recommendations = []
         logger.info(f"📤 Starting to stream {len(top_events)} recommendations")
@@ -532,10 +577,8 @@ async def stream_chat_response(request: ChatRequest):
             yield f"data: {json.dumps({'type': 'recommendation', 'data': formatted_rec})}\n\n"
             await asyncio.sleep(0.2)  # Small delay between recommendations
         
-        logger.info(f"✅ Finished streaming all {len(formatted_recommendations)} recommendations")
-        
-        # Save assistant response
-        conversation_storage.save_message(user_id, conversation_id, {
+        # Save assistant response (in background, non-blocking)
+        asyncio.create_task(conversation_storage.save_message_async(user_id, conversation_id, {
             "role": "assistant",
             "content": response_message,
             "timestamp": datetime.now().isoformat(),
@@ -543,12 +586,12 @@ async def stream_chat_response(request: ChatRequest):
             "extracted_preferences": extracted_preferences.dict() if extracted_preferences else None,
             "cache_used": cache_used,
             "cache_age_hours": cache_age_hours
-        })
+        }))
 
-        # Update conversation metadata
-        conversation_storage.update_metadata(user_id, conversation_id, {
+        # Update conversation metadata (in background, non-blocking)
+        asyncio.create_task(conversation_storage.update_metadata_async(user_id, conversation_id, {
             "last_message_at": datetime.now().isoformat()
-        })
+        }))
         
         # Ensure all recommendations are sent before signaling completion
         logger.info(f"✅ All {len(formatted_recommendations)} recommendations sent, signaling completion")

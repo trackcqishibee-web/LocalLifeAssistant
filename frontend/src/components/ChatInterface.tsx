@@ -483,6 +483,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           });
           
           onNewMessage({
+          // Clear status immediately when main message arrives
+          setCurrentStatus('');
+          
+          // Create the main message without recommendations (they're separate now)
+          const assistantMessage: ChatMessageWithRecommendations = {
             role: 'assistant',
             content: messageContent,
             timestamp: new Date().toISOString()
@@ -540,6 +545,38 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               // Message is too old, create a new one
               console.log(`📝 [handleSubmit] Message at index ${targetIndex} is too old, creating new message for recommendation: "${recTitle}"`);
               const newIndex = updatedMessages.length;
+            // Always clear status when recommendations start arriving
+            if (!hasRecommendations) {
+              setCurrentStatus('');
+              setExtractionSummary(null);
+            }
+
+            // If we have no previous messages, create the first recommendation-only message
+            if (prev.length === 0) {
+              return [
+                {
+                  role: 'assistant',
+                  content: undefined,
+                  timestamp: new Date().toISOString(),
+                  recommendations: [recommendation]
+                }
+              ];
+            }
+
+            const updatedMessages = [...prev];
+            const lastIndex = updatedMessages.length - 1;
+            const lastMessage = updatedMessages[lastIndex];
+
+            // If last message is an assistant message (with or without content), add recommendations to it
+            // This ensures the message appears before recommendations
+            if (lastMessage && lastMessage.role === 'assistant') {
+              const existingRecommendations = lastMessage.recommendations ?? [];
+              updatedMessages[lastIndex] = {
+                ...lastMessage,
+                recommendations: [...existingRecommendations, recommendation]
+              };
+            } else {
+              // Only create new message if there's no assistant message to attach to
               updatedMessages.push({
                 role: 'assistant',
                 content: '',
@@ -713,6 +750,44 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   <span className="text-sm">{example.text}</span>
                 </button>
               ))}
+          );
+        })}
+        
+        {(() => {
+          const lastMessage = messagesWithRecommendations[messagesWithRecommendations.length - 1];
+          const lastMessageIsUser = lastMessage?.role === 'user';
+          // Check if there's an assistant message AFTER the last user message
+          const lastUserMessageIndex = messagesWithRecommendations.map((m, i) => m.role === 'user' ? i : -1).filter(i => i !== -1).pop() ?? -1;
+          const hasNewAssistantMessage = messagesWithRecommendations.slice(lastUserMessageIndex + 1).some(msg => 
+            msg.role === 'assistant' && msg.content
+          );
+          const shouldShow = isLoading && lastMessageIsUser && !hasNewAssistantMessage;
+          console.log('Loading bubble check:', { 
+            isLoading, 
+            currentStatus, 
+            lastMessageIsUser, 
+            hasNewAssistantMessage, 
+            shouldShow, 
+            messagesCount: messagesWithRecommendations.length,
+            lastMessageRole: lastMessage?.role,
+            lastUserMessageIndex
+          });
+          return shouldShow;
+        })() && (
+          <div className="flex gap-2 items-start">
+            {/* Bot Avatar */}
+            <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2" style={{ backgroundColor: 'white', borderColor: 'rgba(118, 193, 178, 0.6)' }}>
+              <ImageWithFallback src={agentAvatarImg} alt="Agent" className="w-4/5 h-4/5 object-cover" />
+            </div>
+            
+            {/* Loading Message */}
+            <div className="rounded-xl rounded-tl-sm px-4 py-3 shadow-md border" style={{ backgroundColor: 'rgba(118, 193, 178, 0.1)', borderColor: 'rgba(118, 193, 178, 0.1)' }}>
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#76C1B2' }} />
+                <p className="text-[15px]" style={{ color: '#221A13' }}>
+                  {currentStatus || extractionSummary || (isLoading ? 'Searching...' : '')}
+                </p>
+              </div>
             </div>
           </div>
         )}
