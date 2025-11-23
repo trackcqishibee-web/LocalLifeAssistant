@@ -32,6 +32,11 @@ class SearchService:
         """
         logger.info(f"intelligent_event_search called with query: '{query}' and {len(events)} events")
         
+        if user_preferences:
+            logger.info(f"User preferences received in search_service: {user_preferences}")
+        else:
+            logger.warning("No user preferences received in search_service - user_preferences is None")
+        
         if not events:
             logger.info("No events provided, returning empty list")
             return []
@@ -54,37 +59,68 @@ class SearchService:
         # Create enhanced prompt for LLM with detailed scoring and user preferences
         preferences_text = ""
         if user_preferences:
+            location = user_preferences.get('location', 'Not specified')
+            date = user_preferences.get('date', 'Not specified')
+            time = user_preferences.get('time', 'Not specified')
+            event_type = user_preferences.get('event_type', 'Not specified')
+            
             preferences_text = f"""
 User Preferences:
-- Location: {user_preferences.get('location', 'Not specified')}
-- Date: {user_preferences.get('date', 'Not specified')}
-- Time: {user_preferences.get('time', 'Not specified')}
-- Event Type: {user_preferences.get('event_type', 'Not specified')}
+- Location: {location}
+- Date: {date}
+- Time: {time}
+- Event Type: {event_type}
 
-Consider these preferences when ranking events. Give higher scores to events that match the user's preferences.
+IMPORTANT: Consider these preferences when ranking events. Give higher scores to events that match the user's preferences, especially:
+1. Events matching the specified event type ({event_type}) should receive higher category_match scores
+2. Events in the specified location ({location}) should be prioritized
+3. Events matching the date/time preferences ({date}, {time}) should receive higher scores
+4. Overall relevance_score should reflect how well the event matches ALL user preferences, not just the query text
 """
+            logger.info(f"User preferences included in prompt: Location={location}, Date={date}, Time={time}, Event Type={event_type}")
+        else:
+            logger.warning("No user preferences to include in prompt")
         
         prompt = f"""
 You are an expert event recommendation system. Given a user query and a list of events, analyze and score each event.
 
-User Query: "{query}"
+**PRIMARY FOCUS: User's Actual Query**
+The user's actual query is: "{query}"
+
+This is the MOST IMPORTANT input - it represents what the user is actually asking for. Pay close attention to:
+- The specific words and phrases in the query
+- The user's intent and what they're looking for
+- Any specific requests or preferences mentioned in the query text
+
 {preferences_text}
 Available Events:
 {json.dumps(event_summaries, indent=2, ensure_ascii=False)}
 
+**Scoring Guidelines:**
+1. **relevance_score (1-10)**: This is the MOST IMPORTANT score. It should reflect how well the event matches the user's ACTUAL QUERY ("{query}"). Consider:
+   - Does the event match what the user is asking for in their query?
+   - Does it fulfill the user's intent expressed in the query?
+   - How relevant is the event to the specific request in the query?
+
+2. **title_match (1-5)**: How well does the event title match keywords or concepts from the user's query?
+
+3. **description_match (1-5)**: How well does the event description match the user's query?
+
+4. **category_match (1-5)**: How well does the event category match the user's preferences (especially event_type from preferences)
+
+5. **venue_appropriateness (1-5)**: Is the venue suitable for the type of event the user is looking for?
+
+6. **price_consideration (1-5)**: Is the price appropriate for what the user is seeking?
+
+7. **user_intent_match (1-5)**: Does the event match the user's intent as expressed in their query?
+
+8. **overall_quality (1-5)**: Event quality/popularity
+
+**IMPORTANT**: The user's actual query ("{query}") should be the PRIMARY factor in determining relevance_score. User preferences (location, event_type, etc.) are secondary filters that help narrow down the results, but the query text itself is what the user is actively asking for.
+
 Please analyze each event and return a JSON object with:
 1. "selected_events": Array of event IDs (0-19) ranked by relevance (max 5 events)
 2. "scores": Object with event_id as key and detailed scoring as value
-
-For each selected event, provide a score breakdown:
-- relevance_score: 1-10 (how well it matches the query)
-- title_match: 1-5 (title relevance)
-- description_match: 1-5 (description relevance) 
-- category_match: 1-5 (category relevance)
-- venue_appropriateness: 1-5 (venue suitability)
-- price_consideration: 1-5 (price appropriateness)
-- user_intent_match: 1-5 (matches user intent)
-- overall_quality: 1-5 (event quality/popularity)
 
 Return format:
 {{

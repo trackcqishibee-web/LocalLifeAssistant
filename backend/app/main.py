@@ -256,7 +256,7 @@ async def stream_chat_response(request: ChatRequest):
                 "llm_provider": request.llm_provider
             })
 
-        # Step 1: Determine if message is a city or event type (from button selection)
+        # Step 1: Extract city and event type from message format "city:event_type: message" or "city: message"
         city = None
         location_provided = False
         extracted_preferences = None
@@ -265,22 +265,67 @@ async def stream_chat_response(request: ChatRequest):
         supported_cities = event_crawler.get_supported_cities()
         supported_event_types = event_crawler.get_supported_events()
         
-        # Normalize city name from Title Case (e.g., "San Francisco") to snake_case (e.g., "san_francisco")
-        normalized_city = normalize_city_name(request.message.strip())
+        logger.info(f"Received message: '{request.message}'")
+        logger.info(f"Supported cities (first 5): {supported_cities[:5] if len(supported_cities) > 5 else supported_cities}")
+        logger.info(f"Supported event types: {supported_event_types}")
         
-        if normalized_city in supported_cities:
-            # User selected city from button (Title Case from frontend, convert to snake_case)
-            city = normalized_city
+        # Extract city and event type from message format "city:event_type: message" or "city: message"
+        # Frontend always sends this format, so message_parts is guaranteed to have at least 2 parts
+        message_parts = request.message.split(':', 2)
+        logger.info(f"Message parts after split: {message_parts}, length: {len(message_parts)}")
+        
+        # First part is always the city (in snake_case from frontend)
+        potential_city = message_parts[0].strip().lower()
+        logger.info(f"Potential city from message: '{potential_city}'")
+        
+        # Check if the city is in supported cities (already in snake_case from frontend)
+        if potential_city in supported_cities:
+            city = potential_city
             location_provided = True
-            extracted_preferences = UserPreferences(location=city)
-            logger.info(f"Using city from button selection: {city} (converted from '{request.message}')")
-        elif message_lower in supported_event_types:
-            # User selected event type from button
-            extracted_preferences = UserPreferences(event_type=message_lower)
-            logger.info(f"Using event type from button selection: {message_lower}")
+            logger.info(f"City '{city}' found in supported_cities")
         else:
-            # Not a recognized city or event type
-            logger.info(f"Message is neither city nor event type: {request.message}")
+            # Try normalizing the city name (in case frontend sends Title Case)
+            normalized_city = normalize_city_name(message_parts[0].strip())
+            if normalized_city in supported_cities:
+                city = normalized_city
+                location_provided = True
+                logger.info(f"City '{normalized_city}' found after normalization")
+            else:
+                logger.warning(f"City '{potential_city}' not found in supported_cities, defaulting to New York")
+                city = "new york"
+                location_provided = False
+        
+        # Check for event type (format: "city:event_type: message" or "city: message")
+        if len(message_parts) >= 3:
+            # Format: "city:event_type: message"
+            potential_event_type = message_parts[1].strip().lower()
+            logger.info(f"Checking potential event type '{potential_event_type}' in supported_event_types")
+            if potential_event_type in supported_event_types:
+                extracted_preferences = UserPreferences(location=city, event_type=potential_event_type)
+                logger.info(f"✓ Extracted city '{city}' and event type '{potential_event_type}' from message prefix")
+            else:
+                logger.warning(f"Event type '{potential_event_type}' not found in supported_event_types")
+                # Event type not in prefix, check in actual message
+                actual_message = message_parts[2].strip().lower()
+                for event_type in supported_event_types:
+                    if event_type in actual_message:
+                        extracted_preferences = UserPreferences(location=city, event_type=event_type)
+                        logger.info(f"Extracted city '{city}' and event type '{event_type}' from message content")
+                        break
+                if not extracted_preferences:
+                    extracted_preferences = UserPreferences(location=city)
+                    logger.info(f"Extracted city '{city}' from message, no event type found")
+        else:
+            # Format: "city: message" - check message for event type
+            actual_message = message_parts[1].strip().lower()
+            for event_type in supported_event_types:
+                if event_type in actual_message:
+                    extracted_preferences = UserPreferences(location=city, event_type=event_type)
+                    logger.info(f"Extracted city '{city}' and event type '{event_type}' from message content")
+                    break
+            if not extracted_preferences:
+                extracted_preferences = UserPreferences(location=city)
+                logger.info(f"Extracted city '{city}' from message, no event type found")
 
         # Save user message with extracted preferences (after we've determined location)
         # Only save for initial responses here - non-initial responses will be saved later
@@ -297,7 +342,7 @@ async def stream_chat_response(request: ChatRequest):
             logger.info(f"Queued user message save for conversation {conversation_id}, location in prefs: {prefs_dict.get('location') if prefs_dict else 'None'}")
         
         
-        # Step 3: For non-initial responses, retrieve location from conversation
+        # Step 3: Save user message for non-initial responses
         if not request.is_initial_response:
             # Retrieve location from stored conversation
             stored_location = None
@@ -358,34 +403,7 @@ async def stream_chat_response(request: ChatRequest):
                 "extracted_preferences": extracted_preferences.dict() if extracted_preferences else None
             }))
         
-        # Step 4: Default fallback for non-initial responses or when location still missing
-        if not city:
-            city = "new york"
-            logger.info("No city found, defaulting to New York")
-            # If this is not an initial response and we're defaulting, inform the user
-            if not request.is_initial_response:
-                logger.info("Informing user that we're defaulting to New York")
-        
         logger.info(f"Final city decision: {city}, Event type: {extracted_preferences.event_type if extracted_preferences else 'none'}")
-        
-        # Step 2: Check if city is provided but no event type (ask for event type)
-        event_type_provided = extracted_preferences and extracted_preferences.event_type and extracted_preferences.event_type != "none"
-        
-        if location_provided and not event_type_provided:
-            logger.info("Location provided but no event type, asking for event type")
-            follow_up_message = "Great! What kind of events are you interested in?"
-            yield f"data: {json.dumps({'type': 'message', 'content': follow_up_message, 'location_processed': True, 'usage_stats': usage_stats, 'trial_exceeded': False, 'conversation_id': conversation_id})}\n\n"
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-            
-            # Save assistant message with stored location (in background, non-blocking)
-            asyncio.create_task(conversation_storage.save_message_async(user_id, conversation_id, {
-                "role": "assistant",
-                "content": follow_up_message,
-                "timestamp": datetime.now().isoformat(),
-                "recommendations": [],
-                "extracted_preferences": extracted_preferences.dict() if extracted_preferences else None
-            }))
-            return
         
         # Step 3: Pre-cache all event types for this city (if not already cached)
         # This allows frontend to show event type buttons and retrieve instantly
@@ -395,6 +413,9 @@ async def stream_chat_response(request: ChatRequest):
         event_type = "events"  # default
         if extracted_preferences and extracted_preferences.event_type and extracted_preferences.event_type != "none":
             event_type = extracted_preferences.event_type.lower()
+            logger.info(f"Using extracted event type: {event_type}")
+        else:
+            logger.warning(f"No event type extracted, using default 'events'. Extracted preferences: {extracted_preferences.dict() if extracted_preferences else None}")
         
         # Step 6: Get cached events for the selected event type (should be instant now)
         # Get cached events (should be instant since we pre-cached)
@@ -418,7 +439,31 @@ async def stream_chat_response(request: ChatRequest):
             cache_age_hours = None
         
         # Step 4: LLM-powered intelligent event search with preferences
-        logger.info(f"Starting LLM search for query: '{request.message}' with {len(events)} events")
+        # Alternate between two similar messages to keep users engaged
+        analysis_messages = [
+            "Analyzing events with AI to find the best matches...",
+            "Using AI to rank and filter the most relevant events..."
+        ]
+        
+        # Extract the actual user query (remove city:event_type: prefix if present)
+        actual_user_query = request.message
+        if ':' in request.message:
+            # Check if message has format "city:event_type: message" or "city: message"
+            message_parts = request.message.split(':', 2)
+            if len(message_parts) >= 2:
+                # Check if first part is a city
+                potential_city = message_parts[0].strip().lower()
+                if potential_city in supported_cities:
+                    # This is a prefixed message, extract the actual user input
+                    if len(message_parts) == 3:
+                        # Format: "city:event_type: message"
+                        actual_user_query = message_parts[2].strip()
+                    elif len(message_parts) == 2:
+                        # Format: "city: message"
+                        actual_user_query = message_parts[1].strip()
+                    logger.info(f"Extracted actual user query: '{actual_user_query}' from prefixed message: '{request.message}'")
+        
+        logger.info(f"Starting LLM search for actual user query: '{actual_user_query}' (original message: '{request.message}') with {len(events)} events")
         
         # Convert UserPreferences object to dict for search service
         user_preferences_dict = None
@@ -429,13 +474,37 @@ async def stream_chat_response(request: ChatRequest):
                 'time': extracted_preferences.time,
                 'event_type': extracted_preferences.event_type
             }
+            logger.info(f"User preferences being used: {user_preferences_dict}")
+        else:
+            logger.warning("No user preferences extracted - extracted_preferences is None or empty")
         
-        # Run AI processing directly (no status messages to avoid timing issues)
-        top_events = await search_service.intelligent_event_search(
-            request.message, 
-            events, 
-            user_preferences=user_preferences_dict
-        )
+        # Create a task for the AI processing
+        async def ai_processing():
+            return await search_service.intelligent_event_search(
+                actual_user_query,  # Use the actual user query, not the prefixed message
+                events, 
+                user_preferences=user_preferences_dict
+            )
+        
+        # Start the AI processing task
+        ai_task = asyncio.create_task(ai_processing())
+        
+        # Send first status message immediately to ensure it's shown
+        yield f"data: {json.dumps({'type': 'status', 'content': analysis_messages[0]})}\n\n"
+        logger.info(f"AI processing message: {analysis_messages[0]}")
+        await asyncio.sleep(0.5)  # Small delay to ensure message is sent
+        
+        # Show alternating messages while AI is processing
+        i = 1
+        while not ai_task.done():
+            message = analysis_messages[i % 2]  # Alternate between the two messages
+            yield f"data: {json.dumps({'type': 'status', 'content': message})}\n\n"
+            logger.info(f"AI processing message: {message}")
+            await asyncio.sleep(1.5)  # 1.5 second delay between messages
+            i += 1
+        
+        # Wait for AI processing to complete
+        top_events = await ai_task
         logger.info(f"LLM search returned {len(top_events)} events")
         
         # Debug: Check if events have LLM scores
@@ -489,6 +558,7 @@ async def stream_chat_response(request: ChatRequest):
         
         # Step 7: Format recommendations and stream them one by one
         formatted_recommendations = []
+        logger.info(f"📤 Starting to stream {len(top_events)} recommendations")
         for i, event in enumerate(top_events):
             formatted_rec = {
                 "type": "event",
@@ -502,6 +572,8 @@ async def stream_chat_response(request: ChatRequest):
             formatted_recommendations.append(formatted_rec)
             
             # Stream each recommendation
+            event_title = event.get('title', 'Unknown Event')
+            logger.info(f"📤 Streaming recommendation {i+1}/{len(top_events)}: {event_title}")
             yield f"data: {json.dumps({'type': 'recommendation', 'data': formatted_rec})}\n\n"
             await asyncio.sleep(0.2)  # Small delay between recommendations
         
@@ -520,6 +592,9 @@ async def stream_chat_response(request: ChatRequest):
         asyncio.create_task(conversation_storage.update_metadata_async(user_id, conversation_id, {
             "last_message_at": datetime.now().isoformat()
         }))
+        
+        # Ensure all recommendations are sent before signaling completion
+        logger.info(f"✅ All {len(formatted_recommendations)} recommendations sent, signaling completion")
         
         # Signal completion
         yield f"data: {json.dumps({'type': 'done'})}\n\n"

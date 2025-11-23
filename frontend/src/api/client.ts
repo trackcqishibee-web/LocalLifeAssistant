@@ -130,6 +130,44 @@ class APIClient {
         const { done, value } = await reader.read();
         
         if (done) {
+          // Process any remaining data in buffer before exiting
+          if (buffer.trim()) {
+            const lines = buffer.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6));
+                  
+                  switch (data.type) {
+                    case 'status':
+                      onStatus(data.content);
+                      break;
+                    case 'message':
+                      onMessage(data.content, {
+                        extraction_summary: data.extraction_summary,
+                        usage_stats: data.usage_stats,
+                        trial_exceeded: data.trial_exceeded,
+                        conversation_id: data.conversation_id,
+                        location_processed: data.location_processed
+                      });
+                      break;
+                    case 'recommendation':
+                      console.log('📥 [client] Processing final recommendation from buffer:', data.data?.data?.title || 'Unknown');
+                      onRecommendation(data.data);
+                      break;
+                    case 'error':
+                      onError(data.content);
+                      break;
+                    case 'done':
+                      onDone();
+                      return;
+                  }
+                } catch (parseError) {
+                  console.error('Error parsing SSE data from final buffer:', parseError, 'Line:', line);
+                }
+              }
+            }
+          }
           break;
         }
 
@@ -156,6 +194,8 @@ class APIClient {
                   });
                   break;
                 case 'recommendation':
+                  const recTitle = data.data?.data?.title || data.data?.title || 'Unknown';
+                  console.log('📥 [client] Processing recommendation:', recTitle);
                   onRecommendation(data.data);
                   break;
                 case 'error':
