@@ -4,36 +4,15 @@ import ChatInterface from './components/ChatInterface';
 import RegistrationModal from './components/RegistrationModal';
 import LoginModal from './components/LoginModal';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from './components/ui/sheet';
-import { ChatMessage, apiClient, RecommendationItem } from './api/client';
+import { ChatMessage, apiClient } from './api/client';
 import { getOrCreateUserId, setUserId } from './utils/userIdManager';
 import { updateUsageStats, shouldShowRegistrationPrompt, markRegistrationPrompted, getTrialWarningMessage } from './utils/usageTracker';
 import { auth } from './firebase/config';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { sampleEvents } from './services/sampleEvents';
 
-// Helper function to create initial conversation messages with welcome and sample events
-const createInitialMessages = (): (ChatMessage & { recommendations?: RecommendationItem[] })[] => {
-  const sampleRecommendations: RecommendationItem[] = sampleEvents.map((event, index) => ({
-    type: 'event' as const,
-    data: event,
-    relevance_score: 0.95 - (index * 0.05),
-    explanation: `Sample event from ${event.venue_city}: ${event.title}`
-  }));
-  
-  const welcomeMessage: ChatMessage & { recommendations?: RecommendationItem[] } = {
-    role: 'assistant',
-    content: 'Welcome to LocoMoco! We take you to the coolest local events!',
-    timestamp: new Date().toISOString(),
-    recommendations: sampleRecommendations
-  };
-  
-  const cityPromptMessage: ChatMessage = {
-    role: 'assistant',
-    content: 'What city, state would you like to search for events in?',
-    timestamp: new Date().toISOString()
-  };
-  
-  return [welcomeMessage, cityPromptMessage];
+// Helper function to create initial conversation messages (empty - no welcome message)
+const createInitialMessages = (): ChatMessage[] => {
+  return [];
 };
 
 const App: React.FC = () => {
@@ -442,78 +421,92 @@ const App: React.FC = () => {
 
       {/* Side Menu */}
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-        <SheetContent side="left" className="w-[85%] bg-[#FCFBF9] p-0" style={{ fontFamily: 'Aladin, cursive' }} aria-describedby={undefined}>
+        <SheetContent side="left" className="w-[85%] bg-[#FCFBF9] p-0" aria-describedby={undefined}>
           <SheetHeader className="sr-only">
             <SheetTitle>Menu</SheetTitle>
           </SheetHeader>
           <div className="flex flex-col h-full">
             {/* Menu Header */}
-            <div className="px-4 py-6 border-b border-slate-200/50">
-              <h2 className="text-lg font-semibold" style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>
-                Menu
-              </h2>
+            <div className="p-6 border-b pt-16">
+              {currentUser ? (
+                <div>
+                  <div className="w-16 h-16 rounded-full bg-slate-200 mb-3 overflow-hidden">
+                    {currentUser.photoURL ? (
+                      <img src={currentUser.photoURL} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: '#E9E6DF' }}>
+                        <span style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>
+                          {currentUser.displayName?.[0] || currentUser.email?.[0] || 'U'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <p style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>Welcome back!</p>
+                </div>
+              ) : (
+                <h2 style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>Menu</h2>
+              )}
             </div>
 
             {/* Menu Items */}
-            <div className="flex-1 px-4 py-6 space-y-4">
-              <button
-                onClick={() => {
-                  setMenuOpen(false);
-                  window.location.href = '/';
-                }}
-                className="w-full flex items-center gap-3 p-4 bg-white/80 backdrop-blur-sm rounded-xl hover:bg-white transition-colors"
-              >
-                <Home className="w-5 h-5" style={{ color: '#76C1B2' }} />
-                <span style={{ color: '#221A13' }}>Home</span>
-              </button>
+            <div className="flex-1 overflow-auto">
+              <nav className="py-4">
+                <button 
+                  onClick={() => {
+                    setMenuOpen(false);
+                    window.location.href = '/';
+                  }}
+                  className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors text-left"
+                >
+                  <Home className="w-5 h-5" style={{ color: '#9A8B68' }} />
+                  <span style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>Home</span>
+                </button>
 
-              {authLoading ? (
-                <div className="text-sm" style={{ color: '#5E574E' }}>Loading...</div>
-              ) : currentUser ? (
-                <div className="space-y-2">
-                  <div className="px-4 py-2 text-sm" style={{ color: '#5E574E' }}>
-                    Welcome, {currentUser.displayName || currentUser.email?.split('@')[0] || 'User'}
-                  </div>
-                  <button
-                    onClick={async () => {
-                      setMenuOpen(false);
-                      await handleLogout();
-                    }}
-                    className="w-full flex items-center gap-3 p-4 bg-white/80 backdrop-blur-sm rounded-xl hover:bg-white transition-colors"
-                  >
-                    <LogIn className="w-5 h-5" style={{ color: '#B46A55' }} />
-                    <span style={{ color: '#221A13' }}>Sign Out</span>
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      setShowLoginModal(true);
-                    }}
-                    className="w-full flex items-center gap-3 p-4 bg-white/80 backdrop-blur-sm rounded-xl hover:bg-white transition-colors"
-                  >
-                    <LogIn className="w-5 h-5" style={{ color: '#76C1B2' }} />
-                    <span style={{ color: '#221A13' }}>Sign In</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      setShowRegistrationModal(true);
-                    }}
-                    className="w-full flex items-center gap-3 p-4 bg-white/80 backdrop-blur-sm rounded-xl hover:bg-white transition-colors"
-                  >
-                    <UserPlus className="w-5 h-5" style={{ color: '#B46A55' }} />
-                    <span style={{ color: '#221A13' }}>Register</span>
-                  </button>
-                  {usageStats && !usageStats.is_registered && (
-                    <div className="px-4 py-2 text-xs" style={{ color: '#5E574E' }}>
-                      Trial: {usageStats.trial_remaining} interactions left
-                    </div>
-                  )}
-                </>
-              )}
+                {authLoading ? (
+                  <div className="px-6 py-4 text-sm" style={{ color: '#5E574E' }}>Loading...</div>
+                ) : currentUser ? (
+                  <>
+                    <button 
+                      onClick={async () => {
+                        setMenuOpen(false);
+                        await handleLogout();
+                      }}
+                      className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors text-left mt-4 border-t"
+                    >
+                      <LogIn className="w-5 h-5" style={{ color: '#9A8B68' }} />
+                      <span style={{ color: '#221A13' }}>Log out</span>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button 
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setShowLoginModal(true);
+                      }}
+                      className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors text-left"
+                    >
+                      <LogIn className="w-5 h-5" style={{ color: '#9A8B68' }} />
+                      <span style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>Log in</span>
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setMenuOpen(false);
+                        setShowRegistrationModal(true);
+                      }}
+                      className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors text-left"
+                    >
+                      <UserPlus className="w-5 h-5" style={{ color: '#9A8B68' }} />
+                      <span style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>Sign up</span>
+                    </button>
+                    {usageStats && !usageStats.is_registered && (
+                      <div className="px-6 py-3 text-xs" style={{ color: '#5E574E' }}>
+                        Trial: {usageStats.trial_remaining} interactions left
+                      </div>
+                    )}
+                  </>
+                )}
+              </nav>
             </div>
           </div>
         </SheetContent>

@@ -256,7 +256,7 @@ async def stream_chat_response(request: ChatRequest):
                 "llm_provider": request.llm_provider
             })
 
-        # Step 1: Determine if message is a city or event type (from button selection)
+        # Step 1: Extract city and event type from message format "city:event_type: message" or "city: message"
         city = None
         location_provided = False
         extracted_preferences = None
@@ -265,28 +265,111 @@ async def stream_chat_response(request: ChatRequest):
         supported_cities = event_crawler.get_supported_cities()
         supported_event_types = event_crawler.get_supported_events()
         
-        # Normalize city name from Title Case (e.g., "San Francisco") to snake_case (e.g., "san_francisco")
-        normalized_city = normalize_city_name(request.message.strip())
+        logger.info(f"Received message: '{request.message}'")
+        logger.info(f"Supported cities (first 5): {supported_cities[:5] if len(supported_cities) > 5 else supported_cities}")
+        logger.info(f"Supported event types: {supported_event_types}")
         
-        if normalized_city in supported_cities:
-            # User selected city from button (Title Case from frontend, convert to snake_case)
-            city = normalized_city
-            location_provided = True
-            extracted_preferences = UserPreferences(location=city)
-            logger.info(f"Using city from button selection: {city} (converted from '{request.message}')")
-        elif message_lower in supported_event_types:
-            # User selected event type from button
-            extracted_preferences = UserPreferences(event_type=message_lower)
-            logger.info(f"Using event type from button selection: {message_lower}")
-        else:
-            # Not a recognized city or event type
-            logger.info(f"Message is neither city nor event type: {request.message}")
+        # Check if message starts with city name in format "city_name:event_type: message" or "city_name: message"
+        message_parts = request.message.split(':', 2)
+        logger.info(f"Message parts after split (max 2): {message_parts}, length: {len(message_parts)}")
+        
+        if len(message_parts) >= 2:
+            potential_city = message_parts[0].strip().lower()
+            logger.info(f"Potential city from message: '{potential_city}'")
+            
+            # Check if the part before first colon is a supported city (already in snake_case from frontend)
+            if potential_city in supported_cities:
+                logger.info(f"City '{potential_city}' found in supported_cities")
+                city = potential_city
+                location_provided = True
+                logger.info(f"Extracted city from message prefix: {city}")
+                
+                # Check if there's an event type in the second part (format: "city:event_type: message")
+                if len(message_parts) >= 3:
+                    potential_event_type = message_parts[1].strip().lower()
+                    logger.info(f"Checking potential event type '{potential_event_type}' in supported_event_types: {supported_event_types}")
+                    if potential_event_type in supported_event_types:
+                        extracted_preferences = UserPreferences(location=city, event_type=potential_event_type)
+                        logger.info(f"✓ Extracted city '{city}' and event type '{potential_event_type}' from message prefix")
+                    else:
+                        logger.warning(f"Event type '{potential_event_type}' not found in supported_event_types")
+                        # Event type not in prefix, check in actual message
+                        actual_message = message_parts[2].strip().lower()
+                        for event_type in supported_event_types:
+                            if event_type in actual_message:
+                                extracted_preferences = UserPreferences(location=city, event_type=event_type)
+                                logger.info(f"Extracted city '{city}' and event type '{event_type}' from message content")
+                                break
+                        if not extracted_preferences:
+                            extracted_preferences = UserPreferences(location=city)
+                            logger.info(f"Extracted city '{city}' from message, no event type found")
+                else:
+                    # Format: "city: message" - check message for event type
+                    actual_message = message_parts[1].strip().lower()
+                    for event_type in supported_event_types:
+                        if event_type in actual_message:
+                            extracted_preferences = UserPreferences(location=city, event_type=event_type)
+                            logger.info(f"Extracted city '{city}' and event type '{event_type}' from message content")
+                            break
+                    if not extracted_preferences:
+                        extracted_preferences = UserPreferences(location=city)
+                        logger.info(f"Extracted city '{city}' from message, no event type found")
+            else:
+                # Try normalizing the city name (in case frontend sends Title Case)
+                normalized_city = normalize_city_name(message_parts[0].strip())
+                if normalized_city in supported_cities:
+                    city = normalized_city
+                    location_provided = True
+                    logger.info(f"Extracted city from normalized prefix: {city}")
+                    
+                    # Check for event type
+                    if len(message_parts) >= 3:
+                        potential_event_type = message_parts[1].strip().lower()
+                        if potential_event_type in supported_event_types:
+                            extracted_preferences = UserPreferences(location=city, event_type=potential_event_type)
+                            logger.info(f"Extracted city '{city}' and event type '{potential_event_type}' from message prefix")
+                        else:
+                            actual_message = message_parts[2].strip().lower()
+                            for event_type in supported_event_types:
+                                if event_type in actual_message:
+                                    extracted_preferences = UserPreferences(location=city, event_type=event_type)
+                                    logger.info(f"Extracted city '{city}' and event type '{event_type}' from message content")
+                                    break
+                            if not extracted_preferences:
+                                extracted_preferences = UserPreferences(location=city)
+                                logger.info(f"Extracted city '{city}' from message, no event type found")
+                    else:
+                        actual_message = message_parts[1].strip().lower()
+                        for event_type in supported_event_types:
+                            if event_type in actual_message:
+                                extracted_preferences = UserPreferences(location=city, event_type=event_type)
+                                logger.info(f"Extracted city '{city}' and event type '{event_type}' from message content")
+                                break
+                        if not extracted_preferences:
+                            extracted_preferences = UserPreferences(location=city)
+                            logger.info(f"Extracted city '{city}' from message, no event type found")
+        
+        # Fallback: Check if entire message is a city or event type (for backward compatibility)
+        if not city:
+            normalized_city = normalize_city_name(request.message.strip())
+            if normalized_city in supported_cities:
+                city = normalized_city
+                location_provided = True
+                extracted_preferences = UserPreferences(location=city)
+                logger.info(f"Using city from button selection: {city} (converted from '{request.message}')")
+            elif message_lower in supported_event_types:
+                extracted_preferences = UserPreferences(event_type=message_lower)
+                logger.info(f"Using event type from button selection: {message_lower}")
+            else:
+                logger.info(f"Message is neither city nor event type: {request.message}")
 
         # Save user message with extracted preferences (after we've determined location)
         # Only save for initial responses here - non-initial responses will be saved later
         if request.is_initial_response:
             prefs_dict = extracted_preferences.dict() if extracted_preferences else None
             logger.info(f"Saving initial user message with extracted_preferences: {prefs_dict}")
+            if extracted_preferences:
+                logger.info(f"Extracted preferences details - location: {extracted_preferences.location}, event_type: {extracted_preferences.event_type}")
             conversation_storage.save_message(user_id, conversation_id, {
                 "role": "user",
                 "content": request.message,
@@ -394,6 +477,9 @@ async def stream_chat_response(request: ChatRequest):
         event_type = "events"  # default
         if extracted_preferences and extracted_preferences.event_type and extracted_preferences.event_type != "none":
             event_type = extracted_preferences.event_type.lower()
+            logger.info(f"Using extracted event type: {event_type}")
+        else:
+            logger.warning(f"No event type extracted, using default 'events'. Extracted preferences: {extracted_preferences.dict() if extracted_preferences else None}")
         
         # Step 6: Get cached events for the selected event type (should be instant now)
         yield f"data: {json.dumps({'type': 'status', 'content': f'Searching for {event_type} events in the {format_city_name(city)} area...'})}\n\n"
