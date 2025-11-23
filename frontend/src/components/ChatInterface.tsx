@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, MapPin, Moon, Briefcase, Heart, Laptop } from 'lucide-react';
+import { Send, MapPin, Moon, Briefcase, Heart, Laptop, Loader2 } from 'lucide-react';
 import { ChatMessage, ChatRequest, apiClient } from '../api/client';
 import { dataService } from '../services/dataService';
 import RecommendationCard from './RecommendationCard';
@@ -122,7 +122,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [messagesWithRecommendations, setMessagesWithRecommendations] = useState<ChatMessageWithRecommendations[]>([]);
-  const [_currentStatus, setCurrentStatus] = useState<string>('');
+  const [currentStatus, setCurrentStatus] = useState<string>('');
   const [supportedCities, setSupportedCities] = useState<string[]>([]);
   const [citiesDisplay, setCitiesDisplay] = useState<string[]>([]);
   const [supportedEventTypes, setSupportedEventTypes] = useState<string[]>([]);
@@ -286,10 +286,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               return updatedMessages;
             } else {
               // Create new assistant message only if no assistant message exists
-              const assistantMessage: ChatMessageWithRecommendations = {
-                role: 'assistant',
-                content: messageContent,
-                timestamp: new Date().toISOString(),
+          const assistantMessage: ChatMessageWithRecommendations = {
+            role: 'assistant',
+            content: messageContent,
+            timestamp: new Date().toISOString(),
                 recommendations: [],
                 showEvents: false
               };
@@ -468,7 +468,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               return updatedMessages;
             } else {
               // Create new assistant message only if no assistant message exists
-              const assistantMessage: ChatMessageWithRecommendations = {
+          const assistantMessage: ChatMessageWithRecommendations = {
                 role: 'assistant',
                 content: messageContent,
                 timestamp: new Date().toISOString(),
@@ -482,16 +482,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
             }
           });
           
-          onNewMessage({
           // Clear status immediately when main message arrives
           setCurrentStatus('');
           
           // Create the main message without recommendations (they're separate now)
-          const assistantMessage: ChatMessageWithRecommendations = {
+          const assistantMessage: ChatMessage = {
             role: 'assistant',
             content: messageContent,
             timestamp: new Date().toISOString()
-          } as ChatMessage);
+          };
+          
+          onNewMessage(assistantMessage);
           
           if (metadata?.trial_exceeded) {
             onTrialExceeded();
@@ -545,38 +546,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               // Message is too old, create a new one
               console.log(`📝 [handleSubmit] Message at index ${targetIndex} is too old, creating new message for recommendation: "${recTitle}"`);
               const newIndex = updatedMessages.length;
-            // Always clear status when recommendations start arriving
-            if (!hasRecommendations) {
-              setCurrentStatus('');
-              setExtractionSummary(null);
-            }
-
-            // If we have no previous messages, create the first recommendation-only message
-            if (prev.length === 0) {
-              return [
-                {
-                  role: 'assistant',
-                  content: undefined,
-                  timestamp: new Date().toISOString(),
-                  recommendations: [recommendation]
-                }
-              ];
-            }
-
-            const updatedMessages = [...prev];
-            const lastIndex = updatedMessages.length - 1;
-            const lastMessage = updatedMessages[lastIndex];
-
-            // If last message is an assistant message (with or without content), add recommendations to it
-            // This ensures the message appears before recommendations
-            if (lastMessage && lastMessage.role === 'assistant') {
-              const existingRecommendations = lastMessage.recommendations ?? [];
-              updatedMessages[lastIndex] = {
-                ...lastMessage,
-                recommendations: [...existingRecommendations, recommendation]
-              };
-            } else {
-              // Only create new message if there's no assistant message to attach to
               updatedMessages.push({
                 role: 'assistant',
                 content: '',
@@ -586,7 +555,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               });
               currentAssistantMessageIndexRef.current = newIndex;
             }
-
 
             return updatedMessages;
           });
@@ -673,7 +641,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     )}
                   </div>
                 </div>
-                    ) : (
+              ) : (
                       <div className="flex gap-2 items-start">
                         <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2" style={{ backgroundColor: 'white', borderColor: 'rgba(118, 193, 178, 0.6)' }}>
                           <ImageWithFallback src={agentAvatarImg} alt="Agent" className="w-4/5 h-4/5 object-cover" />
@@ -750,8 +718,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   <span className="text-sm">{example.text}</span>
                 </button>
               ))}
-          );
-        })}
+            </div>
+          </div>
+        )}
         
         {(() => {
           const lastMessage = messagesWithRecommendations[messagesWithRecommendations.length - 1];
@@ -785,7 +754,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               <div className="flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#76C1B2' }} />
                 <p className="text-[15px]" style={{ color: '#221A13' }}>
-                  {currentStatus || extractionSummary || (isLoading ? 'Searching...' : '')}
+                  {currentStatus || (isLoading ? 'Searching...' : '')}
                 </p>
               </div>
             </div>
@@ -837,7 +806,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                     onChange={setSelectedEventTypeIndex}
                     label="Vibe"
                   />
-                </div>
+      </div>
 
                 <button
                   onClick={() => {
@@ -855,11 +824,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
           {/* Input Form */}
         <form onSubmit={handleSubmit} className="flex gap-3 items-center relative">
-            <input
+          <input
               ref={inputRef}
-              type="text"
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
+            type="text"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
@@ -868,8 +837,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
               }}
               placeholder={messagesWithRecommendations.length > 1 ? "What else are you looking for?" : "What vibe are you looking for?"}
               className="flex-1 rounded-xl border-[0.5px] border-slate-200 bg-white shadow-md h-14 text-base px-6 placeholder:text-[#5E574E]"
-              style={{ color: '#221A13' }}
-            />
+            style={{ color: '#221A13' }}
+          />
           <button
             type="submit"
               className="rounded-full bg-white hover:bg-slate-50 h-14 w-14 flex items-center justify-center transition-all shadow-md border-[0.5px] border-slate-200 active:scale-90 active:shadow-lg"
