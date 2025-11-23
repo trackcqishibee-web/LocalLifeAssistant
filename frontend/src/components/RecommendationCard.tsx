@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { MapPin, Clock, Star, Heart } from 'lucide-react';
+import React from 'react';
+import { MapPin, Clock, Star } from 'lucide-react';
 import { EventData } from '../api/client';
 import { ImageWithFallback } from './ImageWithFallback';
 
@@ -14,7 +14,6 @@ interface RecommendationCardProps {
 
 const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation }) => {
   const { type, data } = recommendation;
-  const [liked, setLiked] = useState(false);
 
   if (type !== 'event') {
     return null;
@@ -58,17 +57,12 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
       window.open(eventData.event_url, '_blank', 'noopener,noreferrer');
     }
   };
-
-  const toggleLike = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setLiked(!liked);
-  };
   
   return (
     <div
       data-card
       onClick={handleCardClick}
-      className={`flex-shrink-0 w-[240px] h-[360px] bg-white rounded-xl shadow-md border transition-all cursor-pointer hover:shadow-lg active:shadow-lg active:scale-[0.98] p-3 flex flex-col ${
+      className={`flex-shrink-0 w-[240px] h-[360px] bg-white rounded-xl shadow-md border-[0.5px] transition-all cursor-pointer hover:shadow-lg active:shadow-lg active:scale-[0.98] p-3 flex flex-col ${
         isExample ? 'cursor-default' : ''
       }`}
       style={{ borderColor: '#F5F5F5' }}
@@ -80,6 +74,10 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
           alt={eventData.title}
           className="w-full h-full object-cover"
         />
+        {/* Price Badge - Bottom Left */}
+        <div className="absolute bottom-2 left-2 bg-white/70 backdrop-blur-sm rounded-full px-2 py-1 flex items-center justify-center">
+          <span className="text-xs font-medium" style={{ color: '#221A13' }}>{price}</span>
+        </div>
         {/* Star Rating Badge - Top Left */}
         {eventData.rating && !isExample && (
           <div className="absolute top-2 left-2 bg-white/70 backdrop-blur-sm rounded-md px-1.5 py-0.5 flex items-center gap-0.5">
@@ -87,25 +85,10 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
             <span className="text-xs" style={{ color: '#221A13' }}>{eventData.rating}</span>
           </div>
         )}
-        {/* Heart Icon - Top Right */}
-        {!isExample && (
-          <button 
-            onClick={toggleLike}
-            className="absolute top-2 right-2 transition-opacity hover:opacity-80"
-          >
-            <Heart 
-              className={`w-6 h-6 transition-colors drop-shadow-md ${
-                liked 
-                  ? 'fill-red-500 text-red-500' 
-                  : 'fill-white/60 text-white/60'
-              }`} 
-            />
-          </button>
-        )}
       </div>
       
       {/* Card Content */}
-      <div className="flex flex-col flex-1 min-h-0 space-y-2.5">
+      <div className="flex flex-col flex-1 min-h-0 space-y-1.5">
         <h3 className="line-clamp-2 min-h-[2.5rem] flex items-start" style={{ color: '#221A13', fontFamily: 'Abitare Sans, sans-serif' }}>{eventData.title}</h3>
         
         {/* Date/Time and Location */}
@@ -123,23 +106,6 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
         <p className="text-sm line-clamp-2 min-h-[2.5rem] flex-1" style={{ color: '#5E574E', lineHeight: '1.4' }}>
           {eventData.description}
         </p>
-        
-        {/* Divider */}
-        <div className="border-t pt-2 flex-shrink-0" style={{ borderColor: '#F5F5F5' }} />
-        
-        {/* Price and Visit Button */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="text-sm" style={{ color: '#221A13' }}>{price}</span>
-          {!isExample && (
-            <button 
-              onClick={handleCardClick}
-              className="ml-auto px-5 py-2 text-white rounded-lg text-xs transition-all active:scale-95 hover:opacity-90 shadow-sm flex-shrink-0" 
-              style={{ backgroundColor: '#B46A55' }}
-            >
-              Visit
-            </button>
-          )}
-        </div>
       </div>
     </div>
   );

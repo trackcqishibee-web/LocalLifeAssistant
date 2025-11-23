@@ -620,7 +620,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         <div className="rounded-xl rounded-tr-sm px-4 py-3 max-w-[80%] border shadow-sm" style={{ backgroundColor: '#E9E6DF', borderColor: '#EDEBE6' }}>
                     <p className="text-[15px]" style={{ color: '#221A13' }}>{msg.content}</p>
                   </div>
-                        <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1 border-0" style={{ backgroundColor: '#E9E6DF' }}>
+                        <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1 border-2" style={{ backgroundColor: '#E9E6DF', borderColor: '#EDEBE6' }}>
                     <ImageWithFallback src={userAvatarImg} alt="User" className="w-3/4 h-3/4 object-cover rounded-full" />
                   </div>
                 </div>
@@ -649,7 +649,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         
                         <div className="flex-1 space-y-3 min-w-0">
                           {msg.content && (
-                            <div className="bg-white rounded-xl rounded-tl-sm px-4 py-3 shadow-md border" style={{ borderColor: '#F5F5F5' }}>
+                            <div className="rounded-xl rounded-tl-sm px-4 py-3 shadow-md border" style={{ backgroundColor: 'rgba(118, 193, 178, 0.1)', borderColor: 'rgba(118, 193, 178, 0.1)' }}>
                               <p className="text-[15px]" style={{ color: '#221A13' }}>{msg.content}</p>
                             </div>
                           )}
@@ -675,20 +675,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 );
               })}
 
-              {isLoading && (
-                <div className="flex gap-2 items-start">
-                  <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2" style={{ backgroundColor: 'white', borderColor: 'rgba(118, 193, 178, 0.6)' }}>
-                    <ImageWithFallback src={agentAvatarImg} alt="Agent" className="w-4/5 h-4/5 object-cover" />
-                  </div>
-                  <div className="bg-white rounded-lg rounded-tl-sm px-4 py-3 shadow-md border" style={{ borderColor: '#F5F5F5' }}>
-                    <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1s' }} />
-                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms', animationDuration: '1s' }} />
-                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms', animationDuration: '1s' }} />
-                    </div>
-                  </div>
-                </div>
-              )}
               {/* Scroll anchor */}
               <div ref={messagesEndRef} />
             </div>
@@ -730,32 +716,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           const hasNewAssistantMessage = messagesWithRecommendations.slice(lastUserMessageIndex + 1).some(msg => 
             msg.role === 'assistant' && msg.content
           );
-          const shouldShow = isLoading && lastMessageIsUser && !hasNewAssistantMessage;
-          console.log('Loading bubble check:', { 
-            isLoading, 
-            currentStatus, 
-            lastMessageIsUser, 
-            hasNewAssistantMessage, 
-            shouldShow, 
-            messagesCount: messagesWithRecommendations.length,
-            lastMessageRole: lastMessage?.role,
-            lastUserMessageIndex
-          });
+          // Check if any recommendations have started showing (after the last user message)
+          const hasRecommendations = messagesWithRecommendations.slice(lastUserMessageIndex + 1).some(msg => 
+            msg.role === 'assistant' && msg.recommendations && msg.recommendations.length > 0
+          );
+          // Only show status if loading, last message is user, no assistant message yet, AND no recommendations have appeared
+          const shouldShow = isLoading && lastMessageIsUser && !hasNewAssistantMessage && !hasRecommendations;
           return shouldShow;
         })() && (
-          <div className="flex gap-2 items-start">
-            {/* Bot Avatar */}
-            <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2" style={{ backgroundColor: 'white', borderColor: 'rgba(118, 193, 178, 0.6)' }}>
-              <ImageWithFallback src={agentAvatarImg} alt="Agent" className="w-4/5 h-4/5 object-cover" />
-            </div>
-            
-            {/* Loading Message */}
-            <div className="rounded-xl rounded-tl-sm px-4 py-3 shadow-md border" style={{ backgroundColor: 'rgba(118, 193, 178, 0.1)', borderColor: 'rgba(118, 193, 178, 0.1)' }}>
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#76C1B2' }} />
-                <p className="text-[15px]" style={{ color: '#221A13' }}>
-                  {currentStatus || (isLoading ? 'Searching...' : '')}
-                </p>
+          <div className="px-4 py-4">
+            <div className="flex gap-2 items-start">
+              {/* Bot Avatar */}
+              <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2" style={{ backgroundColor: 'white', borderColor: 'rgba(118, 193, 178, 0.6)' }}>
+                <ImageWithFallback src={agentAvatarImg} alt="Agent" className="w-4/5 h-4/5 object-cover" />
+              </div>
+              
+              {/* Loading Message */}
+              <div className="rounded-xl rounded-tl-sm px-4 py-3 shadow-md border" style={{ backgroundColor: 'rgba(118, 193, 178, 0.1)', borderColor: 'rgba(118, 193, 178, 0.1)' }}>
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#76C1B2' }} />
+                  <p className="text-[15px]" style={{ color: '#221A13' }}>
+                    {currentStatus || (isLoading ? 'Searching...' : '')}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -789,9 +772,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           {showWheelPicker && (
             <div className="absolute bottom-full left-0 right-0 mb-2 px-4 animate-in slide-in-from-bottom-4 duration-200 z-50">
               <div className="bg-white rounded-xl shadow-2xl border border-slate-200 py-4 px-3">
-                <h3 className="text-center mb-3" style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>
+                <h3 className="text-center mb-1" style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>
                   Choose Your Loco & Vibe
                 </h3>
+                <p className="text-center mb-2 text-sm" style={{ color: '#5E574E' }}>
+                  Swipe Left or Right
+                </p>
                 
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <CompactWheelPicker
