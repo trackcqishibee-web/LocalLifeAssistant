@@ -724,19 +724,21 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           const shouldShow = isLoading && lastMessageIsUser && !hasNewAssistantMessage && !hasRecommendations;
           return shouldShow;
         })() && (
-          <div className="flex gap-2 items-start">
-            {/* Bot Avatar */}
-            <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2" style={{ backgroundColor: 'white', borderColor: 'rgba(118, 193, 178, 0.6)' }}>
-              <ImageWithFallback src={agentAvatarImg} alt="Agent" className="w-4/5 h-4/5 object-cover" />
-            </div>
-            
-            {/* Loading Message */}
-            <div className="rounded-xl rounded-tl-sm px-4 py-3 shadow-md border" style={{ backgroundColor: 'rgba(118, 193, 178, 0.1)', borderColor: 'rgba(118, 193, 178, 0.1)' }}>
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#76C1B2' }} />
-                <p className="text-[15px]" style={{ color: '#221A13' }}>
-                  {currentStatus || (isLoading ? 'Searching...' : '')}
-                </p>
+          <div className="px-4 py-4">
+            <div className="flex gap-2 items-start">
+              {/* Bot Avatar */}
+              <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2" style={{ backgroundColor: 'white', borderColor: 'rgba(118, 193, 178, 0.6)' }}>
+                <ImageWithFallback src={agentAvatarImg} alt="Agent" className="w-4/5 h-4/5 object-cover" />
+              </div>
+              
+              {/* Loading Message */}
+              <div className="rounded-xl rounded-tl-sm px-4 py-3 shadow-md border" style={{ backgroundColor: 'rgba(118, 193, 178, 0.1)', borderColor: 'rgba(118, 193, 178, 0.1)' }}>
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#76C1B2' }} />
+                  <p className="text-[15px]" style={{ color: '#221A13' }}>
+                    {currentStatus || (isLoading ? 'Searching...' : '')}
+                  </p>
+                </div>
               </div>
             </div>
           </div>

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { MapPin, Clock, Star, Heart } from 'lucide-react';
+import React from 'react';
+import { MapPin, Clock, Star } from 'lucide-react';
 import { EventData } from '../api/client';
 import { ImageWithFallback } from './ImageWithFallback';
 
@@ -14,7 +14,6 @@ interface RecommendationCardProps {
 
 const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation }) => {
   const { type, data } = recommendation;
-  const [liked, setLiked] = useState(false);
 
   if (type !== 'event') {
     return null;
@@ -58,11 +57,6 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
       window.open(eventData.event_url, '_blank', 'noopener,noreferrer');
     }
   };
-
-  const toggleLike = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setLiked(!liked);
-  };
   
   return (
     <div
@@ -90,21 +84,6 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
             <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
             <span className="text-xs" style={{ color: '#221A13' }}>{eventData.rating}</span>
           </div>
-        )}
-        {/* Heart Icon - Top Right */}
-        {!isExample && (
-          <button 
-            onClick={toggleLike}
-            className="absolute top-2 right-2 transition-opacity hover:opacity-80"
-          >
-            <Heart 
-              className={`w-6 h-6 transition-colors drop-shadow-md ${
-                liked 
-                  ? 'fill-red-500 text-red-500' 
-                  : 'fill-white/60 text-white/60'
-              }`} 
-            />
-          </button>
         )}
       </div>
       
