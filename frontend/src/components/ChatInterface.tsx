@@ -675,20 +675,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                 );
               })}
 
-              {isLoading && (
-                <div className="flex gap-2 items-start">
-                  <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2" style={{ backgroundColor: 'white', borderColor: 'rgba(118, 193, 178, 0.6)' }}>
-                    <ImageWithFallback src={agentAvatarImg} alt="Agent" className="w-4/5 h-4/5 object-cover" />
-                  </div>
-                  <div className="bg-white rounded-lg rounded-tl-sm px-4 py-3 shadow-md border" style={{ borderColor: '#F5F5F5' }}>
-                    <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1s' }} />
-                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms', animationDuration: '1s' }} />
-                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms', animationDuration: '1s' }} />
-                    </div>
-                  </div>
-                </div>
-              )}
               {/* Scroll anchor */}
               <div ref={messagesEndRef} />
             </div>
@@ -730,17 +716,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           const hasNewAssistantMessage = messagesWithRecommendations.slice(lastUserMessageIndex + 1).some(msg => 
             msg.role === 'assistant' && msg.content
           );
-          const shouldShow = isLoading && lastMessageIsUser && !hasNewAssistantMessage;
-          console.log('Loading bubble check:', { 
-            isLoading, 
-            currentStatus, 
-            lastMessageIsUser, 
-            hasNewAssistantMessage, 
-            shouldShow, 
-            messagesCount: messagesWithRecommendations.length,
-            lastMessageRole: lastMessage?.role,
-            lastUserMessageIndex
-          });
+          // Check if any recommendations have started showing (after the last user message)
+          const hasRecommendations = messagesWithRecommendations.slice(lastUserMessageIndex + 1).some(msg => 
+            msg.role === 'assistant' && msg.recommendations && msg.recommendations.length > 0
+          );
+          // Only show status if loading, last message is user, no assistant message yet, AND no recommendations have appeared
+          const shouldShow = isLoading && lastMessageIsUser && !hasNewAssistantMessage && !hasRecommendations;
           return shouldShow;
         })() && (
           <div className="flex gap-2 items-start">
