@@ -62,10 +62,10 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
     <div
       data-card
       onClick={handleCardClick}
-      className={`flex-shrink-0 w-[240px] h-[360px] bg-white rounded-xl shadow-md border-[0.5px] transition-all cursor-pointer hover:shadow-lg active:shadow-lg active:scale-[0.98] p-3 flex flex-col ${
+      className={`flex-shrink-0 w-[240px] h-[360px] bg-white rounded-xl shadow-md border-2 transition-all cursor-pointer hover:shadow-lg active:shadow-lg active:scale-[0.98] p-3 flex flex-col ${
         isExample ? 'cursor-default' : ''
       }`}
-      style={{ borderColor: '#F5F5F5' }}
+      style={{ borderColor: '#E5E7EB' }}
     >
       {/* Event Image */}
       <div className="relative w-full h-[120px] overflow-hidden rounded mb-3">
