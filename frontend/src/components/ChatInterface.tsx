@@ -7,7 +7,6 @@ import { ImageWithFallback } from './ImageWithFallback';
 import { CompactWheelPicker } from './CompactWheelPicker';
 import userAvatarImg from '../assets/images/figma/user-avatar.png';
 import agentAvatarImg from '../assets/images/figma/agent-avatar.png';
-import refreshIcon from '../assets/images/figma/refresh-icon.png';
 import musicIcon from '../assets/images/figma/music-icon.png';
 import wellnessIcon from '../assets/images/figma/wellness-icon.png';
 import luckyIcon from '../assets/images/figma/lucky-icon.png';
@@ -123,7 +122,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [messagesWithRecommendations, setMessagesWithRecommendations] = useState<ChatMessageWithRecommendations[]>([]);
-  const [currentStatus, setCurrentStatus] = useState<string>('');
+  const [_currentStatus, setCurrentStatus] = useState<string>('');
   const [supportedCities, setSupportedCities] = useState<string[]>([]);
   const [citiesDisplay, setCitiesDisplay] = useState<string[]>([]);
   const [supportedEventTypes, setSupportedEventTypes] = useState<string[]>([]);
@@ -131,12 +130,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [selectedEventTypeIndex, setSelectedEventTypeIndex] = useState(0);
   const [showWheelPicker, setShowWheelPicker] = useState(true);
   const [hasCompletedInitialSelection, setHasCompletedInitialSelection] = useState(false);
-  const [showRefreshHint, setShowRefreshHint] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const hasShownRefreshHint = useRef(false);
   const initialViewportHeight = useRef<number>(0);
+  const currentAssistantMessageIndexRef = useRef<number>(-1);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -160,6 +158,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
       }
     };
   }, []);
+
+  // Auto-scroll to bottom when messages change or loading state changes
+  useEffect(() => {
+    // Use setTimeout to ensure DOM has updated
+    setTimeout(() => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
+    }, 100);
+  }, [messagesWithRecommendations, isLoading]);
 
   useEffect(() => {
     const loadCities = async () => {
@@ -191,18 +199,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     loadEventTypes();
   }, []);
 
+  // Only initialize from conversationHistory on mount, don't rebuild on updates
+  // This prevents losing recommendations that were added via SSE streaming
   useEffect(() => {
-    setMessagesWithRecommendations(prevMessages => {
-      if (conversationHistory.length === 0) {
-        return [];
-      }
-
-      const recommendationOnlyMessages = prevMessages.filter(msg => {
-        const hasContent = msg.content && msg.content.trim() !== '';
-        const hasRecommendations = msg.recommendations && msg.recommendations.length > 0;
-        return !hasContent && hasRecommendations;
-      });
-
+    // Only initialize if messagesWithRecommendations is empty
+    if (messagesWithRecommendations.length === 0 && conversationHistory.length > 0) {
       const conversationMessages: ChatMessageWithRecommendations[] = conversationHistory.map(msg => {
         const recommendations = (msg as any).recommendations ?? [];
         return {
@@ -211,17 +212,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           showEvents: recommendations.length > 0
         };
       });
-
-      const combinedMessages = [...conversationMessages, ...recommendationOnlyMessages];
-      combinedMessages.sort((a, b) => {
-        const aTime = a.timestamp ? new Date(a.timestamp).getTime() : 0;
-        const bTime = b.timestamp ? new Date(b.timestamp).getTime() : 0;
-        return aTime - bTime;
-      });
-
-      return combinedMessages;
-    });
-  }, [conversationHistory]);
+      setMessagesWithRecommendations(conversationMessages);
+    }
+  }, []); // Empty dependency array - only run on mount
 
   const handleSuggestionClick = async (suggestionText: string) => {
     if (isLoading) return;
@@ -245,6 +238,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setMessagesWithRecommendations(prev => [...prev, userMessage]);
     setIsLoading(true);
     setCurrentStatus('');
+    // Reset the ref for the new response
+    currentAssistantMessageIndexRef.current = -1;
 
     try {
       const request: ChatRequest = {
@@ -260,15 +255,56 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         request,
         (status: string) => setCurrentStatus(status),
         (messageContent: string, metadata?: any) => {
-          const assistantMessage: ChatMessageWithRecommendations = {
+          console.log('📨 [handleSuggestionClick] Received message:', messageContent);
+          setMessagesWithRecommendations(prev => {
+            // Use ref to find the assistant message we're working with, or find the last one
+            let targetIndex = currentAssistantMessageIndexRef.current;
+            
+            // If ref is invalid, find the last assistant message
+            if (targetIndex < 0 || targetIndex >= prev.length || prev[targetIndex].role !== 'assistant') {
+              for (let i = prev.length - 1; i >= 0; i--) {
+                if (prev[i].role === 'assistant') {
+                  targetIndex = i;
+                  break;
+                }
+              }
+            }
+            
+            if (targetIndex >= 0 && targetIndex < prev.length && prev[targetIndex]) {
+              // Update existing assistant message with content, preserve recommendations
+              const targetMessage = prev[targetIndex];
+              const existingRecommendations = targetMessage.recommendations || [];
+              console.log(`📝 [handleSuggestionClick] Updating assistant message at index ${targetIndex} with content. Preserving ${existingRecommendations.length} recommendations`);
+              const updatedMessages = [...prev];
+              updatedMessages[targetIndex] = {
+                ...targetMessage,
+                content: messageContent,
+                recommendations: existingRecommendations,
+                showEvents: true // Always show events if there are recommendations
+              };
+              currentAssistantMessageIndexRef.current = targetIndex;
+              return updatedMessages;
+            } else {
+              // Create new assistant message only if no assistant message exists
+              const assistantMessage: ChatMessageWithRecommendations = {
+                role: 'assistant',
+                content: messageContent,
+                timestamp: new Date().toISOString(),
+                recommendations: [],
+                showEvents: false
+              };
+              console.log('📝 [handleSuggestionClick] Creating new assistant message (no existing assistant message found)');
+              const newIndex = prev.length;
+              currentAssistantMessageIndexRef.current = newIndex;
+              return [...prev, assistantMessage];
+            }
+          });
+          
+          onNewMessage({
             role: 'assistant',
             content: messageContent,
-            timestamp: new Date().toISOString(),
-            recommendations: []
-          };
-          
-          onNewMessage(assistantMessage as ChatMessage);
-          setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
+            timestamp: new Date().toISOString()
+          } as ChatMessage);
           
           if (metadata?.trial_exceeded) {
             onTrialExceeded();
@@ -278,44 +314,60 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           }
         },
         (recommendation: any) => {
+          const recTitle = recommendation?.data?.title || recommendation?.data?.data?.title || 'Unknown';
+          console.log('📥 [handleSuggestionClick] Received recommendation:', recTitle);
           setMessagesWithRecommendations(prev => {
-            if (prev.length === 0) {
-              return [{
-                role: 'assistant',
-                content: 'I found some great events for you. Here are my top recommendations:',
-                timestamp: new Date().toISOString(),
-                recommendations: [recommendation],
-                showEvents: true
-              }];
-            }
-
             const updatedMessages = [...prev];
-            const lastIndex = updatedMessages.length - 1;
-            const lastMessage = updatedMessages[lastIndex];
-
-            if (lastMessage.role === 'assistant') {
-              updatedMessages[lastIndex] = {
-                ...lastMessage,
-                recommendations: [...(lastMessage.recommendations ?? []), recommendation],
-                showEvents: true
-              };
-            } else {
+            // Use ref to find the assistant message we're working with
+            let targetIndex = currentAssistantMessageIndexRef.current;
+            
+            // Only use ref if it's valid and points to an assistant message
+            // Otherwise, create a new message (don't add to old messages)
+            if (targetIndex < 0 || targetIndex >= updatedMessages.length || updatedMessages[targetIndex].role !== 'assistant') {
+              // Create new assistant message with first recommendation
+              console.log(`📝 [handleSuggestionClick] Creating new assistant message with first recommendation: "${recTitle}" (ref was invalid: ${targetIndex})`);
+              const newIndex = updatedMessages.length;
               updatedMessages.push({
                 role: 'assistant',
-                content: 'I found some great events for you. Here are my top recommendations:',
+                content: '',
                 timestamp: new Date().toISOString(),
                 recommendations: [recommendation],
                 showEvents: true
               });
+              currentAssistantMessageIndexRef.current = newIndex;
+              return updatedMessages;
             }
 
-            if (!hasShownRefreshHint.current) {
-              setTimeout(() => {
-                setShowRefreshHint(true);
-                hasShownRefreshHint.current = true;
-                setTimeout(() => setShowRefreshHint(false), 5000);
-              }, 500);
+            // Add to the assistant message pointed to by ref (should be the current response)
+            const targetMessage = updatedMessages[targetIndex];
+            // Check if this is a recent message (within last 10 seconds) to avoid adding to old messages
+            const messageTime = targetMessage.timestamp ? new Date(targetMessage.timestamp).getTime() : 0;
+            const now = Date.now();
+            const isRecentMessage = (now - messageTime) < 10000; // 10 seconds
+            
+            if (isRecentMessage) {
+              const currentCount = targetMessage.recommendations?.length || 0;
+              const newRecommendations = [...(targetMessage.recommendations ?? []), recommendation];
+              console.log(`📊 [handleSuggestionClick] Adding recommendation "${recTitle}" (${currentCount + 1}) to assistant message at index ${targetIndex}. Total now: ${newRecommendations.length}`);
+              updatedMessages[targetIndex] = {
+                ...targetMessage,
+                recommendations: newRecommendations,
+                showEvents: true
+              };
+            } else {
+              // Message is too old, create a new one
+              console.log(`📝 [handleSuggestionClick] Message at index ${targetIndex} is too old, creating new message for recommendation: "${recTitle}"`);
+              const newIndex = updatedMessages.length;
+              updatedMessages.push({
+                role: 'assistant',
+                content: '',
+                timestamp: new Date().toISOString(),
+                recommendations: [recommendation],
+                showEvents: true
+              });
+              currentAssistantMessageIndexRef.current = newIndex;
             }
+
 
             return updatedMessages;
           });
@@ -368,6 +420,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     setMessage('');
     setIsLoading(true);
     setCurrentStatus('');
+    // Reset the ref for the new response
+    currentAssistantMessageIndexRef.current = -1;
 
     try {
       const request: ChatRequest = {
@@ -383,16 +437,56 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
         request,
         (status: string) => setCurrentStatus(status),
         (messageContent: string, metadata?: any) => {
-          const assistantMessage: ChatMessageWithRecommendations = {
+          console.log('📨 [handleSubmit] Received message:', messageContent);
+          setMessagesWithRecommendations(prev => {
+            // Use ref to find the assistant message we're working with, or find the last one
+            let targetIndex = currentAssistantMessageIndexRef.current;
+            
+            // If ref is invalid, find the last assistant message
+            if (targetIndex < 0 || targetIndex >= prev.length || prev[targetIndex].role !== 'assistant') {
+              for (let i = prev.length - 1; i >= 0; i--) {
+                if (prev[i].role === 'assistant') {
+                  targetIndex = i;
+                  break;
+                }
+              }
+            }
+            
+            if (targetIndex >= 0 && targetIndex < prev.length && prev[targetIndex]) {
+              // Update existing assistant message with content, preserve recommendations
+              const targetMessage = prev[targetIndex];
+              const existingRecommendations = targetMessage.recommendations || [];
+              console.log(`📝 [handleSubmit] Updating assistant message at index ${targetIndex} with content. Preserving ${existingRecommendations.length} recommendations`);
+              const updatedMessages = [...prev];
+              updatedMessages[targetIndex] = {
+                ...targetMessage,
+                content: messageContent,
+                recommendations: existingRecommendations,
+                showEvents: true // Always show events if there are recommendations
+              };
+              currentAssistantMessageIndexRef.current = targetIndex;
+              return updatedMessages;
+            } else {
+              // Create new assistant message only if no assistant message exists
+              const assistantMessage: ChatMessageWithRecommendations = {
+                role: 'assistant',
+                content: messageContent,
+                timestamp: new Date().toISOString(),
+                recommendations: [],
+                showEvents: false
+              };
+              console.log('📝 [handleSubmit] Creating new assistant message (no existing assistant message found)');
+              const newIndex = prev.length;
+              currentAssistantMessageIndexRef.current = newIndex;
+              return [...prev, assistantMessage];
+            }
+          });
+          
+          onNewMessage({
             role: 'assistant',
             content: messageContent,
-            timestamp: new Date().toISOString(),
-            recommendations: [],
-            showEvents: false
-          };
-          
-          onNewMessage(assistantMessage as ChatMessage);
-          setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
+            timestamp: new Date().toISOString()
+          } as ChatMessage);
           
           if (metadata?.trial_exceeded) {
             onTrialExceeded();
@@ -402,44 +496,60 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
           }
         },
         (recommendation: any) => {
+          const recTitle = recommendation?.data?.title || recommendation?.data?.data?.title || 'Unknown';
+          console.log('📥 [handleSubmit] Received recommendation:', recTitle);
           setMessagesWithRecommendations(prev => {
-            if (prev.length === 0) {
-              return [{
-                role: 'assistant',
-                content: 'I found some great events for you. Here are my top recommendations:',
-                timestamp: new Date().toISOString(),
-                recommendations: [recommendation],
-                showEvents: true
-              }];
-            }
-
             const updatedMessages = [...prev];
-            const lastIndex = updatedMessages.length - 1;
-            const lastMessage = updatedMessages[lastIndex];
-
-            if (lastMessage.role === 'assistant') {
-              updatedMessages[lastIndex] = {
-                ...lastMessage,
-                recommendations: [...(lastMessage.recommendations ?? []), recommendation],
-                showEvents: true
-              };
-            } else {
+            // Use ref to find the assistant message we're working with
+            let targetIndex = currentAssistantMessageIndexRef.current;
+            
+            // Only use ref if it's valid and points to an assistant message
+            // Otherwise, create a new message (don't add to old messages)
+            if (targetIndex < 0 || targetIndex >= updatedMessages.length || updatedMessages[targetIndex].role !== 'assistant') {
+              // Create new assistant message with first recommendation
+              console.log(`📝 [handleSubmit] Creating new assistant message with first recommendation: "${recTitle}" (ref was invalid: ${targetIndex})`);
+              const newIndex = updatedMessages.length;
               updatedMessages.push({
                 role: 'assistant',
-                content: 'I found some great events for you. Here are my top recommendations:',
+                content: '',
                 timestamp: new Date().toISOString(),
                 recommendations: [recommendation],
                 showEvents: true
               });
+              currentAssistantMessageIndexRef.current = newIndex;
+              return updatedMessages;
             }
 
-            if (!hasShownRefreshHint.current) {
-              setTimeout(() => {
-                setShowRefreshHint(true);
-                hasShownRefreshHint.current = true;
-                setTimeout(() => setShowRefreshHint(false), 5000);
-              }, 500);
+            // Add to the assistant message pointed to by ref (should be the current response)
+            const targetMessage = updatedMessages[targetIndex];
+            // Check if this is a recent message (within last 10 seconds) to avoid adding to old messages
+            const messageTime = targetMessage.timestamp ? new Date(targetMessage.timestamp).getTime() : 0;
+            const now = Date.now();
+            const isRecentMessage = (now - messageTime) < 10000; // 10 seconds
+            
+            if (isRecentMessage) {
+              const currentCount = targetMessage.recommendations?.length || 0;
+              const newRecommendations = [...(targetMessage.recommendations ?? []), recommendation];
+              console.log(`📊 [handleSubmit] Adding recommendation "${recTitle}" (${currentCount + 1}) to assistant message at index ${targetIndex}. Total now: ${newRecommendations.length}`);
+              updatedMessages[targetIndex] = {
+                ...targetMessage,
+                recommendations: newRecommendations,
+                showEvents: true
+              };
+            } else {
+              // Message is too old, create a new one
+              console.log(`📝 [handleSubmit] Message at index ${targetIndex} is too old, creating new message for recommendation: "${recTitle}"`);
+              const newIndex = updatedMessages.length;
+              updatedMessages.push({
+                role: 'assistant',
+                content: '',
+                timestamp: new Date().toISOString(),
+                recommendations: [recommendation],
+                showEvents: true
+              });
+              currentAssistantMessageIndexRef.current = newIndex;
             }
+
 
             return updatedMessages;
           });
@@ -466,97 +576,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
-  const handleRefresh = async () => {
-    const hasRecommendations = messagesWithRecommendations.some(
-      msg => msg.recommendations && msg.recommendations.length > 0
-    );
-    
-    if (!hasRecommendations || isLoading) return;
 
-    const lastUserMessage = messagesWithRecommendations
-      .slice()
-      .reverse()
-      .find(msg => msg.role === 'user' && msg.content);
-
-    if (!lastUserMessage || !lastUserMessage.content) return;
-
-    setIsLoading(true);
-    setCurrentStatus('Refreshing recommendations...');
-
-    try {
-      const request: ChatRequest = {
-        message: lastUserMessage.content,
-        conversation_history: conversationHistory,
-        llm_provider: llmProvider,
-        is_initial_response: false,
-        user_id: userId,
-        conversation_id: conversationId
-      };
-
-      await dataService.chatStream(
-        request,
-        (status: string) => setCurrentStatus(status),
-        (messageContent: string, metadata?: any) => {
-          const assistantMessage: ChatMessageWithRecommendations = {
-            role: 'assistant',
-            content: messageContent,
-            timestamp: new Date().toISOString(),
-            recommendations: []
-          };
-          
-          onNewMessage(assistantMessage as ChatMessage);
-          setMessagesWithRecommendations(prev => [...prev, assistantMessage]);
-          
-          if (metadata?.trial_exceeded) {
-            onTrialExceeded();
-          }
-        },
-        (recommendation: any) => {
-          setMessagesWithRecommendations(prev => {
-            const updatedMessages = [...prev];
-            const lastIndex = updatedMessages.length - 1;
-            const lastMessage = updatedMessages[lastIndex];
-
-            const isRecommendationOnly =
-              lastMessage.role === 'assistant' &&
-              (!lastMessage.content || lastMessage.content.trim().length === 0);
-
-            if (isRecommendationOnly) {
-              updatedMessages[lastIndex] = {
-                ...lastMessage,
-                recommendations: [...(lastMessage.recommendations ?? []), recommendation]
-              };
-            } else {
-              updatedMessages.push({
-                role: 'assistant',
-                content: undefined,
-                timestamp: new Date().toISOString(),
-                recommendations: [recommendation]
-              });
-            }
-
-            return updatedMessages;
-          });
-          onRecommendations([recommendation]);
-        },
-        (error: string) => {
-          console.error('Refresh error:', error);
-        },
-        () => {
-          setIsLoading(false);
-          setCurrentStatus('');
-        }
-      );
-    } catch (error) {
-      console.error('Error refreshing:', error);
-      setIsLoading(false);
-      setCurrentStatus('');
-    }
-  };
-
-  const hasRecommendations = messagesWithRecommendations.some(
-    msg => msg.recommendations && msg.recommendations.length > 0
-  );
 
   // Get examples based on selected event type
   const getCurrentExamples = () => {
@@ -629,14 +649,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                             </div>
                           )}
 
-                          {msg.showEvents && msg.recommendations && msg.recommendations.length > 0 && (
+                          {msg.recommendations && msg.recommendations.length > 0 && (
                             <div className="overflow-x-auto overflow-y-hidden -mx-1 scrollbar-hide">
                               <div className="flex gap-3 px-1 pb-2">
-                                {msg.recommendations.map((rec, recIndex) => (
-                                  <div key={recIndex} className="flex-shrink-0">
-                                    <RecommendationCard recommendation={rec} />
-                                  </div>
-                                ))}
+                                {msg.recommendations.map((rec, recIndex) => {
+                                  console.log(`Rendering recommendation ${recIndex + 1}/${msg.recommendations?.length || 0}:`, rec?.data?.title || 'Unknown');
+                                  return (
+                                    <div key={recIndex} className="flex-shrink-0">
+                                      <RecommendationCard recommendation={rec} />
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           )}
@@ -661,6 +684,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                   </div>
                 </div>
               )}
+              {/* Scroll anchor */}
+              <div ref={messagesEndRef} />
             </div>
           </>
         ) : (
@@ -755,37 +780,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
           {/* Input Form */}
         <form onSubmit={handleSubmit} className="flex gap-3 items-center relative">
-            <div className="relative">
-              {showRefreshHint && (
-                <div className="absolute bottom-full left-[100%] -translate-x-[40%] mb-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <div className="text-white px-5 py-3 rounded-xl shadow-lg text-sm whitespace-nowrap min-w-[220px]" style={{ backgroundColor: '#76C1B2' }}>
-                    <div className="flex items-center gap-2">
-                      <img src={tapIcon} alt="Tap" className="w-5 h-5" style={{ filter: 'brightness(0) invert(1)' }} />
-                      <span>Tap to refresh all events!</span>
-                    </div>
-                    <div className="absolute top-full left-[12%] -mt-px">
-                      <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px]" style={{ borderTopColor: '#76C1B2' }} />
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={!hasRecommendations || isLoading}
-              className="rounded-full bg-white h-14 w-14 flex items-center justify-center transition-all shadow-md border-[0.5px] border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50 disabled:hover:bg-white active:scale-90 active:shadow-lg"
-            >
-              <img 
-                src={refreshIcon} 
-                alt="Refresh" 
-                className="w-8 h-8 transition-transform active:rotate-180" 
-                style={{ 
-                  filter: 'invert(67%) sepia(18%) saturate(1245%) hue-rotate(121deg) brightness(92%) contrast(86%)'
-                }} 
-              />
-            </button>
-            </div>
             <input
               ref={inputRef}
               type="text"

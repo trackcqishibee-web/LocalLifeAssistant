@@ -12,12 +12,9 @@ export function CompactWheelPicker({ items, selectedIndex, onChange, label }: Co
   const [isDragging, setIsDragging] = useState(false);
 
   const itemWidth = 100;
-  const visibleItems = 3;
 
   useEffect(() => {
     if (scrollRef.current) {
-      const containerWidth = scrollRef.current.offsetWidth;
-      const paddingWidth = containerWidth / 2 - itemWidth / 2;
       const offset = selectedIndex * itemWidth;
       scrollRef.current.scrollLeft = offset;
     }
