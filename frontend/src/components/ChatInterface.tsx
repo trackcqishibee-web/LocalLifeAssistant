@@ -620,7 +620,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         <div className="rounded-xl rounded-tr-sm px-4 py-3 max-w-[80%] border shadow-sm" style={{ backgroundColor: '#E9E6DF', borderColor: '#EDEBE6' }}>
                     <p className="text-[15px]" style={{ color: '#221A13' }}>{msg.content}</p>
                   </div>
-                        <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1 border-0" style={{ backgroundColor: '#E9E6DF' }}>
+                        <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1 border-2" style={{ backgroundColor: '#E9E6DF', borderColor: '#EDEBE6' }}>
                     <ImageWithFallback src={userAvatarImg} alt="User" className="w-3/4 h-3/4 object-cover rounded-full" />
                   </div>
                 </div>
@@ -649,7 +649,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({
                         
                         <div className="flex-1 space-y-3 min-w-0">
                           {msg.content && (
-                            <div className="bg-white rounded-xl rounded-tl-sm px-4 py-3 shadow-md border" style={{ borderColor: '#F5F5F5' }}>
+                            <div className="rounded-xl rounded-tl-sm px-4 py-3 shadow-md border" style={{ backgroundColor: 'rgba(118, 193, 178, 0.1)', borderColor: 'rgba(118, 193, 178, 0.1)' }}>
                               <p className="text-[15px]" style={{ color: '#221A13' }}>{msg.content}</p>
                             </div>
                           )}
