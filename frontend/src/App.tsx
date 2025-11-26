@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, Home, LogIn, UserPlus } from 'lucide-react';
-import ChatInterface from './components/ChatInterface';
+import { MobileSearchView } from './components/MobileSearchView';
 import RegistrationModal from './components/RegistrationModal';
 import LoginModal from './components/LoginModal';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from './components/ui/sheet';
 import { ChatMessage, apiClient } from './api/client';
 import { getOrCreateUserId, setUserId } from './utils/userIdManager';
 import { updateUsageStats, shouldShowRegistrationPrompt, markRegistrationPrompted, getTrialWarningMessage } from './utils/usageTracker';
@@ -18,7 +16,6 @@ const createInitialMessages = (): ChatMessage[] => {
 const App: React.FC = () => {
   const [conversationHistory, setConversationHistory] = useState<ChatMessage[]>([]);
   const [llmProvider] = useState('openai');
-  const [menuOpen, setMenuOpen] = useState(false);
   const [userId, setUserIdState] = useState<string>('');
   const [usageStats, setUsageStats] = useState<any>(null);
   const [showRegistrationModal, setShowRegistrationModal] = useState(false);
@@ -389,148 +386,23 @@ const App: React.FC = () => {
 
 
   return (
-    <div className="h-dvh bg-[#FCFBF9] flex flex-col max-w-md mx-auto relative overflow-hidden">
-      {/* Fixed Header Container */}
-      <div 
-        className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-md z-[9999] bg-[#FCFBF9]"
-        style={{ position: 'fixed', top: 0, left: '50%', transform: 'translateX(-50%)', width: '100%', maxWidth: '28rem' }}
-      >
-        {/* Header */}
-        <div className="bg-[#FCFBF9] px-4 py-2.5 border-b border-slate-200/50 flex items-center gap-2">
-          <button
-            onClick={() => setMenuOpen(true)}
-            type="button"
-            className="p-1.5 hover:bg-slate-200/50 rounded-lg transition-colors"
-          >
-            <Menu className="w-5 h-5" style={{ color: 'rgb(118, 193, 178)' }} />
-          </button>
-          <h1
-            className="text-lg"
-            style={{
-              background: 'linear-gradient(135deg, #76C1B2 0%, #B46A55 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text',
-              fontFamily: 'Aladin, cursive'
-            }}
-          >
-            LocoMoco. Catch the Vibe. Locally
-          </h1>
-        </div>
-      </div>
-
-      {/* Side Menu */}
-      <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-        <SheetContent side="left" className="w-[85%] bg-[#FCFBF9] p-0" aria-describedby={undefined}>
-          <SheetHeader className="sr-only">
-            <SheetTitle>Menu</SheetTitle>
-          </SheetHeader>
-          <div className="flex flex-col h-full">
-            {/* Menu Header */}
-            <div className="p-6 border-b pt-16">
-              {currentUser ? (
-                <div>
-                  <div className="w-16 h-16 rounded-full bg-slate-200 mb-3 overflow-hidden">
-                    {currentUser.photoURL ? (
-                      <img src={currentUser.photoURL} alt="Profile" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: '#E9E6DF' }}>
-                        <span style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>
-                          {currentUser.displayName?.[0] || currentUser.email?.[0] || 'U'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <p style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>Welcome back!</p>
-                </div>
-              ) : (
-                <h2 style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>Menu</h2>
-              )}
-            </div>
-
-            {/* Menu Items */}
-            <div className="flex-1 overflow-auto">
-              <nav className="py-4">
-                <button 
-                  onClick={() => {
-                    setMenuOpen(false);
-                    window.location.href = '/';
-                  }}
-                  className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors text-left"
-                >
-                  <Home className="w-5 h-5" style={{ color: '#9A8B68' }} />
-                  <span style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>Home</span>
-                </button>
-
-                {authLoading ? (
-                  <div className="px-6 py-4 text-sm" style={{ color: '#5E574E' }}>Loading...</div>
-                ) : currentUser ? (
-                  <>
-                    <button 
-                      onClick={async () => {
-                        setMenuOpen(false);
-                        await handleLogout();
-                      }}
-                      className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors text-left mt-4 border-t"
-                    >
-                      <LogIn className="w-5 h-5" style={{ color: '#9A8B68' }} />
-                      <span style={{ color: '#221A13' }}>Log out</span>
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button 
-                      onClick={() => {
-                        setMenuOpen(false);
-                        setShowLoginModal(true);
-                      }}
-                      className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors text-left"
-                    >
-                      <LogIn className="w-5 h-5" style={{ color: '#9A8B68' }} />
-                      <span style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>Log in</span>
-                    </button>
-                    <button 
-                      onClick={() => {
-                        setMenuOpen(false);
-                        setShowRegistrationModal(true);
-                      }}
-                      className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors text-left"
-                    >
-                      <UserPlus className="w-5 h-5" style={{ color: '#9A8B68' }} />
-                      <span style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>Sign up</span>
-                    </button>
-                    {usageStats && !usageStats.is_registered && (
-                      <div className="px-6 py-3 text-xs" style={{ color: '#5E574E' }}>
-                        Trial: {usageStats.trial_remaining} interactions left
-                      </div>
-                    )}
-                  </>
-                )}
-              </nav>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {/* Chat Interface - Full Height */}
-      <div className="flex-1 min-h-0 pt-[57px]">
-        <ChatInterface
-          onNewMessage={handleNewMessage}
-          onRecommendations={handleRecommendations}
-          llmProvider={llmProvider}
-          conversationHistory={conversationHistory}
-          userId={userId}
-          onTrialExceeded={() => setShowRegistrationModal(true)}
-          conversationId={currentConversationId}
-        />
-      </div>
-
-      {/* Trial Warning Banner */}
-      {trialWarning && (
-        <div className="fixed top-[57px] left-0 right-0 bg-amber-50 border-l-4 border-amber-500 p-4 z-40 max-w-md mx-auto">
-          <p className="text-amber-700">{trialWarning}</p>
-        </div>
-      )}
+    <div className="min-h-screen bg-[#E8EEE8]">
+      <MobileSearchView
+        onNewMessage={handleNewMessage}
+        onRecommendations={handleRecommendations}
+        llmProvider={llmProvider}
+        conversationHistory={conversationHistory}
+        userId={userId}
+        onTrialExceeded={() => setShowRegistrationModal(true)}
+        conversationId={currentConversationId}
+        currentUser={currentUser}
+        authLoading={authLoading}
+        usageStats={usageStats}
+        trialWarning={trialWarning}
+        onLogin={() => setShowLoginModal(true)}
+        onRegister={() => setShowRegistrationModal(true)}
+        onLogout={handleLogout}
+      />
 
       {/* Registration Modal */}
       <RegistrationModal

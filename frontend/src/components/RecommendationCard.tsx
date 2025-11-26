@@ -62,13 +62,13 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
     <div
       data-card
       onClick={handleCardClick}
-      className={`flex-shrink-0 w-[240px] h-[360px] bg-white rounded-xl shadow-md border-2 transition-all cursor-pointer hover:shadow-lg active:shadow-lg active:scale-[0.98] p-3 flex flex-col ${
+      className={`flex-shrink-0 w-[240px] h-[288px] bg-white rounded-xl shadow-md border-2 transition-all cursor-pointer hover:shadow-lg active:shadow-lg active:scale-[0.98] p-3 flex flex-col ${
         isExample ? 'cursor-default' : ''
       }`}
       style={{ borderColor: '#E5E7EB' }}
     >
       {/* Event Image */}
-      <div className="relative w-full h-[120px] overflow-hidden rounded mb-3">
+      <div className="relative w-full h-[96px] overflow-hidden rounded mb-2">
         <ImageWithFallback
           src={eventData.image_url || ''}
           alt={eventData.title}
@@ -88,8 +88,8 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
       </div>
       
       {/* Card Content */}
-      <div className="flex flex-col flex-1 min-h-0 space-y-1.5">
-        <h3 className="line-clamp-2 min-h-[2.5rem] flex items-start" style={{ color: '#221A13', fontFamily: 'Abitare Sans, sans-serif' }}>{eventData.title}</h3>
+      <div className="flex flex-col flex-1 min-h-0 space-y-1">
+        <h3 className="line-clamp-2 min-h-[2rem] flex items-start" style={{ color: '#221A13', fontFamily: 'Abitare Sans, sans-serif' }}>{eventData.title}</h3>
         
         {/* Date/Time and Location */}
         <div className="flex flex-col gap-1.5 text-xs flex-shrink-0" style={{ color: '#5E574E' }}>
@@ -103,7 +103,7 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
           </div>
         </div>
         
-        <p className="text-sm line-clamp-2 min-h-[2.5rem] flex-1" style={{ color: '#5E574E', lineHeight: '1.4' }}>
+        <p className="text-sm line-clamp-2 min-h-[2rem] flex-1" style={{ color: '#5E574E', lineHeight: '1.4' }}>
           {eventData.description}
         </p>
       </div>
