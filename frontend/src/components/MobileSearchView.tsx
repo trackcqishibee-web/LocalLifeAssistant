@@ -5,6 +5,7 @@ import { Send, MapPin, Menu, Home, LogIn, UserPlus, Sparkles, MessageSquare } fr
 import { ChatMessage, ChatRequest, apiClient } from '../api/client';
 import { dataService } from '../services/dataService';
 import RecommendationCard from './RecommendationCard';
+import DancingPet from './DancingPet';
 import userAvatar from '../assets/images/figma/user-avatar.png';
 import agentAvatar from '../assets/images/figma/agent-avatar.png';
 import musicIcon from '../assets/images/figma/music-icon.png';
@@ -1164,15 +1165,61 @@ export function MobileSearchView({
 
               {/* Typing Indicator */}
               {isTyping && (
-                <div className="flex gap-2 items-start">
-                  <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2" style={{ backgroundColor: 'white', borderColor: 'rgb(118, 193, 178)' }}>
+                <div className="flex gap-2 items-start animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1.5 border-2 animate-pulse" style={{ backgroundColor: 'white', borderColor: 'rgb(118, 193, 178)' }}>
                     <img src={agentAvatar} alt="Agent" className="w-4/5 h-4/5 object-cover" />
                   </div>
-                  <div className="bg-white rounded-lg rounded-tl-sm px-4 py-3 shadow-md border" style={{ borderColor: '#F5F5F5' }}>
-                    <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1s' }} />
-                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '150ms', animationDuration: '1s' }} />
-                      <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '300ms', animationDuration: '1s' }} />
+                  <div className="bg-white rounded-lg rounded-tl-sm px-4 py-3 shadow-md border animate-pulse slide-in-from-bottom" style={{ borderColor: 'rgba(118, 193, 178, 0.2)' }}>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-2.5 h-2.5 bg-[#76C1B2] rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1.2s' }} />
+                      <div className="w-2.5 h-2.5 bg-[#76C1B2] rounded-full animate-bounce" style={{ animationDelay: '200ms', animationDuration: '1.2s' }} />
+                      <div className="w-2.5 h-2.5 bg-[#76C1B2] rounded-full animate-bounce" style={{ animationDelay: '400ms', animationDuration: '1.2s' }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Centered Dancing Pet in Recommendations Area (only show after event type selection) */}
+              {isTyping && hasCompletedInitialSelection && selectedEventTypeIndex >= 0 && (
+                <div className="flex flex-col items-center justify-center py-16 px-4 animate-in fade-in duration-500">
+                  <div className="mb-6">
+                    <DancingPet type="dog" size={100} />
+                  </div>
+                  <div className="flex items-center gap-1.5 mb-3">
+                    <div className="w-2.5 h-2.5 bg-[#76C1B2] rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1.2s' }} />
+                    <div className="w-2.5 h-2.5 bg-[#76C1B2] rounded-full animate-bounce" style={{ animationDelay: '200ms', animationDuration: '1.2s' }} />
+                    <div className="w-2.5 h-2.5 bg-[#76C1B2] rounded-full animate-bounce" style={{ animationDelay: '400ms', animationDuration: '1.2s' }} />
+                  </div>
+                  <p className="text-sm" style={{ color: '#5E574E' }}>Finding the best events for you...</p>
+                </div>
+              )}
+              
+              {/* Skeleton Loaders for Recommendations (only show after event type selection, but hidden when dancing pet is shown) */}
+              {isTyping && hasCompletedInitialSelection && selectedEventTypeIndex >= 0 && false && (
+                <div className="flex gap-2 items-start mt-4">
+                  <div className="w-11 h-11 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="overflow-x-auto overflow-y-hidden -mx-1 scrollbar-hide">
+                      <div className="flex gap-3 px-1 pb-2">
+                        {[1, 2, 3].map((i) => (
+                          <div key={i} className="flex-shrink-0 w-[280px] animate-in fade-in slide-in-from-right duration-300" style={{ animationDelay: `${i * 100}ms` }}>
+                            <div className="bg-white rounded-xl shadow-md border overflow-hidden animate-pulse" style={{ borderColor: 'rgba(118, 193, 178, 0.2)' }}>
+                              {/* Image Skeleton */}
+                              <div className="w-full h-40 bg-gradient-to-br from-slate-200 to-slate-300 animate-shimmer"></div>
+                              {/* Content Skeleton */}
+                              <div className="p-4 space-y-3">
+                                <div className="h-5 bg-slate-200 rounded w-3/4 animate-pulse"></div>
+                                <div className="h-4 bg-slate-200 rounded w-full animate-pulse"></div>
+                                <div className="h-4 bg-slate-200 rounded w-2/3 animate-pulse"></div>
+                                <div className="flex gap-2 mt-3">
+                                  <div className="h-6 bg-slate-200 rounded-full w-20 animate-pulse"></div>
+                                  <div className="h-6 bg-slate-200 rounded-full w-16 animate-pulse"></div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
