@@ -23,3 +23,6 @@ flask-limiter>=3.5.0
 firebase-admin>=6.0.0
 google-cloud-firestore>=2.11.0
 bcrypt>=4.0.0
+
+# Background job scheduling
+APScheduler>=3.10.0

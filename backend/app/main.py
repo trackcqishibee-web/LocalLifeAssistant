@@ -25,6 +25,9 @@ from .extraction_service import UserPreferences
 from .usage_tracker import UsageTracker
 from .conversation_storage import ConversationStorage
 from .user_manager import UserManager
+from .background_fetcher import BackgroundEventFetcher
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 # Load environment variables from .env file
 load_dotenv('../.env') or load_dotenv('.env') or load_dotenv('/app/.env')
@@ -141,7 +144,7 @@ class CreateConversationRequest(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 # Cache configuration
-CACHE_TTL_HOURS = 6  # Cache events for 6 hours
+CACHE_TTL_HOURS = 8  # Cache events for 8 hours (2x refresh interval for buffer)
 
 class MigrateConversationsRequest(BaseModel):
     """Request model for migrating conversations"""
@@ -155,6 +158,10 @@ search_service = SearchService()
 usage_tracker = UsageTracker()
 conversation_storage = ConversationStorage()
 user_manager = UserManager()
+background_fetcher = BackgroundEventFetcher(cache_manager, event_crawler)
+
+# Initialize background scheduler
+scheduler = AsyncIOScheduler()
 
 # Conversations are now stored in Firestore
 logger.info("Conversations storage: Firestore")
@@ -171,6 +178,46 @@ def format_city_name(city: str) -> str:
 def normalize_city_name(city: str) -> str:
     """Convert Title Case city name to snake_case for backend processing"""
     return city.lower().replace(' ', '_')
+
+# Background scheduler setup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize background scheduler on app startup"""
+    try:
+        # Schedule background event fetch job to run every 4 hours
+        # AsyncIOScheduler can handle sync functions by running them in executor
+        scheduler.add_job(
+            background_fetcher.fetch_all_events,
+            trigger=CronTrigger(hour='*/4', minute=0),  # Every 4 hours at minute 0
+            id='background_event_fetch',
+            name='Background Event Fetch',
+            replace_existing=True,
+            executor='default'  # Runs sync function in thread pool
+        )
+        scheduler.start()
+        logger.info("Background scheduler started - event fetch job scheduled every 4 hours")
+        
+        # Run initial fetch on startup in background (non-blocking)
+        # This ensures cache is populated immediately on startup
+        logger.info("Running initial background event fetch on startup...")
+        def run_fetch():
+            try:
+                background_fetcher.fetch_all_events()
+            except Exception as e:
+                logger.error(f"Error in initial background fetch: {e}", exc_info=True)
+        asyncio.create_task(asyncio.to_thread(run_fetch))
+    except Exception as e:
+        logger.error(f"Error starting background scheduler: {e}", exc_info=True)
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Shutdown background scheduler gracefully"""
+    try:
+        if scheduler.running:
+            scheduler.shutdown(wait=True)
+            logger.info("Background scheduler shut down gracefully")
+    except Exception as e:
+        logger.error(f"Error shutting down background scheduler: {e}", exc_info=True)
 
 # Routes
 @app.get("/health")
@@ -418,8 +465,9 @@ async def stream_chat_response(request: ChatRequest):
             logger.warning(f"No event type extracted, using default 'events'. Extracted preferences: {extracted_preferences.dict() if extracted_preferences else None}")
         
         # Step 6: Get cached events for the selected event type (should be instant now)
-        # Get cached events (should be instant since we pre-cached)
-        cached_events = cache_manager.get_cached_events(city, event_type=event_type, event_crawler=None)
+        # Get cached events - will use cache if available, or fetch fresh if cache is missing
+        # Pass event_crawler as fallback to fetch fresh events if cache is completely missing
+        cached_events = cache_manager.get_cached_events(city, event_type=event_type, event_crawler=event_crawler)
         cache_age_hours = cache_manager.get_cache_age(city, event_type=event_type)
 
         if cached_events:
@@ -429,11 +477,11 @@ async def stream_chat_response(request: ChatRequest):
                 logger.info(f"Using cached events for {city} (age: {cache_age_hours:.1f}h)")
                 cache_used = True
             else:
-                # Freshly fetched events
-                logger.info(f"Fetched {len(events)} fresh events for {city}")
+                # Freshly fetched events (cache was missing, so we fetched synchronously)
+                logger.info(f"Fetched {len(events)} fresh events for {city} (cache was missing)")
                 cache_used = False
         else:
-            logger.warning(f"Failed to get any events for {city}")
+            logger.warning(f"Failed to get any events for {city}/{event_type}")
             events = []
             cache_used = False
             cache_age_hours = None
@@ -739,6 +787,37 @@ async def delete_conversation(user_id: str, conversation_id: str):
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
+
+@app.get("/api/background/status")
+async def get_background_status():
+    """Get background job status and last refresh time"""
+    try:
+        last_refresh = background_fetcher.get_last_refresh_time()
+        scheduler_status = {
+            'running': scheduler.running,
+            'jobs': []
+        }
+        
+        if scheduler.running:
+            for job in scheduler.get_jobs():
+                scheduler_status['jobs'].append({
+                    'id': job.id,
+                    'name': job.name,
+                    'next_run_time': job.next_run_time.isoformat() if job.next_run_time else None
+                })
+        
+        return {
+            'success': True,
+            'scheduler': scheduler_status,
+            'last_refresh': last_refresh,
+            'cache_ttl_hours': CACHE_TTL_HOURS
+        }
+    except Exception as e:
+        logger.error(f"Error getting background status: {e}")
+        return {
+            'success': False,
+            'error': str(e)
+        }
 
 @app.post("/api/cache/cleanup")
 async def cleanup_cache():

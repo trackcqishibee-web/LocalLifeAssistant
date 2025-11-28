@@ -58,6 +58,56 @@ class CacheManager:
         except Exception as e:
             logger.error(f"Error saving cache to disk for {city}/{event_type}: {e}")
 
+    def filter_past_events(self, events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Filter out events where start_datetime is before current time (public method for use by other services)"""
+        if not events:
+            return []
+        
+        current_time = datetime.now()
+        future_events = []
+        
+        for event in events:
+            start_datetime_str = event.get('start_datetime', '')
+            if not start_datetime_str:
+                # If no start_datetime, keep the event (let it pass through)
+                future_events.append(event)
+                continue
+            
+            try:
+                # Try to parse the datetime string
+                # Handle various formats: ISO format, date only, etc.
+                if 'T' in start_datetime_str:
+                    # ISO format with time
+                    event_time = datetime.fromisoformat(start_datetime_str.replace('Z', '+00:00'))
+                else:
+                    # Date only format - assume start of day
+                    event_time = datetime.fromisoformat(start_datetime_str)
+                    # If it's just a date, compare dates only
+                    if event_time.date() < current_time.date():
+                        continue
+                    elif event_time.date() == current_time.date():
+                        # Same day - keep it (might be later today)
+                        future_events.append(event)
+                        continue
+                    else:
+                        # Future date
+                        future_events.append(event)
+                        continue
+                
+                # Compare with current time (accounting for timezone if needed)
+                if event_time >= current_time:
+                    future_events.append(event)
+            except (ValueError, TypeError) as e:
+                # If parsing fails, keep the event (better to show than hide)
+                logger.warning(f"Could not parse start_datetime '{start_datetime_str}' for event '{event.get('title', 'Unknown')}': {e}")
+                future_events.append(event)
+        
+        filtered_count = len(events) - len(future_events)
+        if filtered_count > 0:
+            logger.debug(f"Filtered out {filtered_count} past events, kept {len(future_events)} future events")
+        
+        return future_events
+
     def get_cached_events(self, city: str, event_type: str = "events", event_crawler=None) -> Optional[List[Dict[str, Any]]]:
         """Get cached events for a city and event type - checks local cache first, then Firebase, then fetches fresh if provided"""
         try:
@@ -68,12 +118,20 @@ class CacheManager:
                 cache_data = self.memory_cache[cache_key]
                 if self._is_cache_valid(cache_data.get('cached_at', '')):
                     events = cache_data.get('events', [])
+                    # Filter out past events
+                    events = self.filter_past_events(events)
                     logger.info(f"Retrieved {len(events)} events for {city}/{event_type} from local memory cache")
                     return events
                 else:
-                    # Remove expired entry from memory
-                    del self.memory_cache[cache_key]
-                    logger.debug(f"Removed expired cache from memory: {city}/{event_type}")
+                    # Cache expired but exists - return it immediately and trigger background refresh (stale-while-revalidate)
+                    events = cache_data.get('events', [])
+                    # Filter out past events
+                    events = self.filter_past_events(events)
+                    logger.info(f"Retrieved {len(events)} expired events for {city}/{event_type} from local memory cache (stale-while-revalidate)")
+                    # Trigger background refresh if event_crawler is provided
+                    if event_crawler:
+                        asyncio.create_task(self._refresh_cache_async(city, event_type, event_crawler))
+                    return events
 
             # Check local file cache
             file_path = self._get_cache_file_path(city, event_type)
@@ -86,12 +144,20 @@ class CacheManager:
                         # Load into memory cache for faster future access
                         self.memory_cache[cache_key] = cache_data
                         events = cache_data.get('events', [])
+                        # Filter out past events
+                        events = self.filter_past_events(events)
                         logger.info(f"Retrieved {len(events)} events for {city}/{event_type} from local file cache")
                         return events
                     else:
-                        # Remove expired file
-                        os.remove(file_path)
-                        logger.debug(f"Removed expired cache file: {city}/{event_type}")
+                        # Cache expired but exists - return it immediately and trigger background refresh (stale-while-revalidate)
+                        events = cache_data.get('events', [])
+                        # Filter out past events
+                        events = self.filter_past_events(events)
+                        logger.info(f"Retrieved {len(events)} expired events for {city}/{event_type} from local file cache (stale-while-revalidate)")
+                        # Trigger background refresh if event_crawler is provided
+                        if event_crawler:
+                            asyncio.create_task(self._refresh_cache_async(city, event_type, event_crawler))
+                        return events
                 except Exception as e:
                     logger.warning(f"Error reading cache file for {city}/{event_type}: {e}")
 
@@ -110,13 +176,23 @@ class CacheManager:
 
             if not self._is_cache_valid(cache_data.get('cached_at', '')):
                 logger.info(f"Cache for {city}/{event_type} is expired in Firebase")
-                # If cache expired and event_crawler provided, fetch fresh events
+                # Cache expired but exists - return it immediately and trigger background refresh (stale-while-revalidate)
+                events = cache_data.get('events', [])
+                # Filter out past events
+                events = self._filter_past_events(events)
+                logger.info(f"Retrieved {len(events)} expired events for {city}/{event_type} from Firebase (stale-while-revalidate)")
+                # Cache in local memory and disk for faster access
+                self.memory_cache[cache_key] = cache_data
+                self._save_cache_to_disk(city, cache_data, event_type)
+                # Trigger background refresh if event_crawler is provided
                 if event_crawler:
-                    return self._fetch_and_cache_fresh_events(city, event_type, event_crawler)
-                return None
+                    asyncio.create_task(self._refresh_cache_async(city, event_type, event_crawler))
+                return events
 
             # Cache in local memory and disk for future use
             events = cache_data.get('events', [])
+            # Filter out past events
+            events = self._filter_past_events(events)
             self.memory_cache[cache_key] = cache_data
             self._save_cache_to_disk(city, cache_data, event_type)
 
@@ -134,10 +210,12 @@ class CacheManager:
             fresh_events = event_crawler.fetch_events_by_city(city, category=event_type, max_pages=3)
 
             if fresh_events:
-                logger.info(f"Fetched {len(fresh_events)} fresh events for {city}/{event_type}")
-                # Cache the fresh events
-                self.cache_events(city, fresh_events, event_type)
-                return fresh_events
+                # Filter out past events before caching
+                future_events = self.filter_past_events(fresh_events)
+                logger.info(f"Fetched {len(fresh_events)} events for {city}/{event_type}, {len(future_events)} are future events")
+                # Cache the filtered events
+                self.cache_events(city, future_events, event_type)
+                return future_events
             else:
                 logger.warning(f"Failed to fetch fresh events for {city}/{event_type}")
                 return None
@@ -145,6 +223,24 @@ class CacheManager:
         except Exception as e:
             logger.error(f"Error fetching fresh events for {city}/{event_type}: {e}")
             return None
+
+    async def _refresh_cache_async(self, city: str, event_type: str, event_crawler):
+        """Async method to refresh cache in the background (stale-while-revalidate pattern)"""
+        try:
+            logger.info(f"Background refresh: Fetching fresh events for {city}/{event_type}")
+            fresh_events = event_crawler.fetch_events_by_city(city, category=event_type, max_pages=3)
+            
+            if fresh_events:
+                # Filter out past events before caching
+                future_events = self.filter_past_events(fresh_events)
+                logger.info(f"Background refresh: Fetched {len(fresh_events)} events for {city}/{event_type}, {len(future_events)} are future events")
+                # Cache the filtered events
+                self.cache_events(city, future_events, event_type)
+                logger.info(f"Background refresh: Successfully updated cache for {city}/{event_type}")
+            else:
+                logger.warning(f"Background refresh: No events fetched for {city}/{event_type}")
+        except Exception as e:
+            logger.error(f"Background refresh: Error refreshing cache for {city}/{event_type}: {e}", exc_info=True)
     
     def cache_all_event_types_for_city(self, city: str, event_crawler) -> Dict[str, List[Dict[str, Any]]]:
         """
