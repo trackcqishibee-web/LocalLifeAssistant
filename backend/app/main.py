@@ -511,48 +511,119 @@ async def stream_chat_response(request: ChatRequest):
                         actual_user_query = message_parts[1].strip()
                     logger.info(f"Extracted actual user query: '{actual_user_query}' from prefixed message: '{request.message}'")
         
-        logger.info(f"Starting LLM search for actual user query: '{actual_user_query}' (original message: '{request.message}') with {len(events)} events")
+        # Check if we need LLM processing
+        # Skip LLM if user just selected city/event type without a query (empty or just event type)
+        needs_llm_processing = bool(actual_user_query and actual_user_query.strip() and 
+                                    actual_user_query.strip().lower() not in supported_event_types)
         
-        # Convert UserPreferences object to dict for search service
-        user_preferences_dict = None
-        if extracted_preferences:
-            user_preferences_dict = {
-                'location': extracted_preferences.location,
-                'date': extracted_preferences.date,
-                'time': extracted_preferences.time,
-                'event_type': extracted_preferences.event_type
-            }
-            logger.info(f"User preferences being used: {user_preferences_dict}")
+        if not needs_llm_processing:
+            # No actual query - just return top events for the selected city/event type
+            # This is much faster (no LLM call needed) for initial city/event type selection
+            logger.info(f"Skipping LLM processing - no actual query provided, returning top events for {city}/{event_type}")
+            
+            # Rank events by quality and relevance (simple heuristic-based ranking)
+            def rank_event(event):
+                """Simple ranking function for events when LLM is not used"""
+                score = 0
+                
+                # Prioritize events happening soon (within next 7 days get bonus)
+                start_datetime_str = event.get('start_datetime', '')
+                if start_datetime_str:
+                    try:
+                        from datetime import datetime
+                        if 'T' in start_datetime_str:
+                            event_time = datetime.fromisoformat(start_datetime_str.replace('Z', '+00:00'))
+                        else:
+                            event_time = datetime.fromisoformat(start_datetime_str)
+                        
+                        days_until = (event_time - datetime.now()).days
+                        if 0 <= days_until <= 7:
+                            score += 10  # Events happening soon
+                        elif days_until < 0:
+                            score -= 100  # Past events (should be filtered, but just in case)
+                        else:
+                            score += max(0, 10 - days_until // 7)  # Further events get lower score
+                    except:
+                        pass
+                
+                # Free events get bonus
+                if event.get('is_free', False):
+                    score += 5
+                
+                # Events with images are more complete/higher quality
+                if event.get('image_url'):
+                    score += 3
+                
+                # Events with descriptions are more complete
+                if event.get('description') and len(event.get('description', '')) > 50:
+                    score += 2
+                
+                # Events with venue information are more complete
+                if event.get('venue_name'):
+                    score += 2
+                
+                # Prefer certain sources (more reliable)
+                source = event.get('source', '').lower()
+                if source in ['eventbrite', 'ticketmaster']:
+                    score += 2
+                elif source in ['meetup', 'predicthq']:
+                    score += 1
+                
+                return score
+            
+            # Sort events by rank (highest score first)
+            ranked_events = sorted(events, key=rank_event, reverse=True)
+            top_events = ranked_events[:10]  # Return top 10 ranked events
+            
+            # Add relevance scores for consistency with LLM results
+            for i, event in enumerate(top_events):
+                event['relevance_score'] = 10 - i  # Simple ranking (10, 9, 8, ...)
+            
+            logger.info(f"Ranked and selected top {len(top_events)} events from {len(events)} total events")
         else:
-            logger.warning("No user preferences extracted - extracted_preferences is None or empty")
-        
-        # Create a task for the AI processing
-        async def ai_processing():
-            return await search_service.intelligent_event_search(
-                actual_user_query,  # Use the actual user query, not the prefixed message
-                events, 
-                user_preferences=user_preferences_dict
-            )
-        
-        # Start the AI processing task
-        ai_task = asyncio.create_task(ai_processing())
-        
-        # Send first status message immediately to ensure it's shown
-        yield f"data: {json.dumps({'type': 'status', 'content': analysis_messages[0]})}\n\n"
-        logger.info(f"AI processing message: {analysis_messages[0]}")
-        await asyncio.sleep(0.5)  # Small delay to ensure message is sent
-        
-        # Show alternating messages while AI is processing
-        i = 1
-        while not ai_task.done():
-            message = analysis_messages[i % 2]  # Alternate between the two messages
-            yield f"data: {json.dumps({'type': 'status', 'content': message})}\n\n"
-            logger.info(f"AI processing message: {message}")
-            await asyncio.sleep(1.5)  # 1.5 second delay between messages
-            i += 1
-        
-        # Wait for AI processing to complete
-        top_events = await ai_task
+            # User provided an actual query - use LLM to intelligently rank events
+            logger.info(f"Starting LLM search for actual user query: '{actual_user_query}' (original message: '{request.message}') with {len(events)} events")
+            
+            # Convert UserPreferences object to dict for search service
+            user_preferences_dict = None
+            if extracted_preferences:
+                user_preferences_dict = {
+                    'location': extracted_preferences.location,
+                    'date': extracted_preferences.date,
+                    'time': extracted_preferences.time,
+                    'event_type': extracted_preferences.event_type
+                }
+                logger.info(f"User preferences being used: {user_preferences_dict}")
+            else:
+                logger.warning("No user preferences extracted - extracted_preferences is None or empty")
+            
+            # Create a task for the AI processing
+            async def ai_processing():
+                return await search_service.intelligent_event_search(
+                    actual_user_query,  # Use the actual user query, not the prefixed message
+                    events, 
+                    user_preferences=user_preferences_dict
+                )
+            
+            # Start the AI processing task
+            ai_task = asyncio.create_task(ai_processing())
+            
+            # Send first status message immediately to ensure it's shown
+            yield f"data: {json.dumps({'type': 'status', 'content': analysis_messages[0]})}\n\n"
+            logger.info(f"AI processing message: {analysis_messages[0]}")
+            await asyncio.sleep(0.5)  # Small delay to ensure message is sent
+            
+            # Show alternating messages while AI is processing
+            i = 1
+            while not ai_task.done():
+                message = analysis_messages[i % 2]  # Alternate between the two messages
+                yield f"data: {json.dumps({'type': 'status', 'content': message})}\n\n"
+                logger.info(f"AI processing message: {message}")
+                await asyncio.sleep(1.5)  # 1.5 second delay between messages
+                i += 1
+            
+            # Wait for AI processing to complete
+            top_events = await ai_task
         logger.info(f"LLM search returned {len(top_events)} events")
         
         # Debug: Check if events have LLM scores
