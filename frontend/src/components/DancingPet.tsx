@@ -4,10 +4,37 @@ interface DancingPetProps {
   type?: 'dog' | 'cat';
   size?: number;
   className?: string;
+  gifSrc?: string;
 }
 
-const DancingPet: React.FC<DancingPetProps> = ({ type = 'dog', size = 48, className = '' }) => {
+const DancingPet: React.FC<DancingPetProps> = ({ type = 'dog', size = 48, className = '', gifSrc }) => {
   const petColor = '#76C1B2'; // Brand color to match existing icons
+  
+  if (gifSrc) {
+    return (
+      <div 
+        className={`dancing-pet-container ${className}`}
+        style={{
+          width: size,
+          height: size,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <img
+          src={gifSrc}
+          alt="Dancing pet animation"
+          style={{
+            width: size,
+            height: size,
+            objectFit: 'contain',
+            filter: 'drop-shadow(0 2px 4px rgba(118, 193, 178, 0.3))',
+          }}
+        />
+      </div>
+    );
+  }
   
   return (
     <div 

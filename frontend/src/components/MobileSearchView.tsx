@@ -12,6 +12,7 @@ import musicIcon from '../assets/images/figma/music-icon.png';
 import wellnessIcon from '../assets/images/figma/wellness-icon.png';
 import luckyIcon from '../assets/images/figma/lucky-icon.png';
 import tapIcon from '../assets/images/figma/tap-icon.png';
+import catGif from '../assets/images/cat-sunglasses.gif';
 import { User } from 'firebase/auth';
 
 
@@ -1183,7 +1184,7 @@ export function MobileSearchView({
               {isTyping && hasCompletedInitialSelection && selectedEventTypeIndex >= 0 && (
                 <div className="flex flex-col items-center justify-center py-16 px-4 animate-in fade-in duration-500">
                   <div className="mb-6">
-                    <DancingPet type="dog" size={100} />
+                    <DancingPet gifSrc={catGif} size={100} />
                   </div>
                   <div className="flex items-center gap-1.5 mb-3">
                     <div className="w-2.5 h-2.5 bg-[#76C1B2] rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1.2s' }} />
