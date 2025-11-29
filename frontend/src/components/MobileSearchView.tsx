@@ -987,11 +987,23 @@ export function MobileSearchView({
                     className="flex justify-end gap-2 items-start"
                     ref={index === lastUserMessageIndex ? lastUserMessageRef : null}
                   >
-                    <div className="rounded-xl rounded-tr-sm px-4 py-3 max-w-[80%] border shadow-sm" style={{ backgroundColor: '#E9E6DF', borderColor: '#EDEBE6' }}>
+                    <div
+                      className="rounded-xl rounded-tr-sm px-4 py-3 max-w-[80%] border shadow-sm"
+                      style={{
+                        backgroundColor: '#D4CFC2',
+                        borderColor: '#D4CFC2',
+                      }}
+                    >
                       <p className="text-[15px]" style={{ color: '#221A13' }}>{message.content}</p>
                     </div>
                     {/* User Avatar */}
-                    <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1 border-0" style={{ backgroundColor: '#E9E6DF' }}>
+                    <div
+                      className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden border-2"
+                      style={{
+                        backgroundColor: '#E9E6DF',
+                        borderColor: '#D4CFC2',
+                      }}
+                    >
                       <img src={userProfilePic} alt="User" className="w-3/4 h-3/4 object-cover rounded-full" />
                     </div>
                   </div>
@@ -1087,23 +1099,25 @@ export function MobileSearchView({
                           <div className="flex gap-2 px-1 pb-2">
                             {citiesDisplay.map((city, index) => {
                               const colors = [
-                                '#F5B48A', // Peach
-                                '#8AD0C9', // Teal
-                                '#F8D27C', // Warm yellow
-                                '#8FB8FF', // Light blue
-                                '#D9E27A', // Soft chartreuse
-                                '#CDA0F6', // Lavender
-                                '#F4A3A0', // Soft rose
-                                '#FFAFA3'  // Coral
+                                '#E09C75', // Muted peach
+                                '#73B6AF', // Softer teal
+                                '#E4C063', // Muted yellow
+                                '#7EA4E6', // Softer blue
+                                '#C5D567', // Muted chartreuse
+                                '#B892E0', // Softer lavender
+                                '#E48E8A', // Muted rose
+                                '#F09588'  // Muted coral
                               ];
                               const borderColor = colors[index % colors.length];
+                              const backgroundColor = `${borderColor}14`; // extra-light tint based on border color
                               return (
                                 <button
                                   key={city}
                                   onClick={() => handleCitySelect(index)}
-                                  className="flex-shrink-0 px-4 py-2.5 rounded-xl shadow-sm border-2 transition-all hover:shadow-md active:scale-95 bg-white flex items-center gap-2"
+                                  className="flex-shrink-0 px-4 py-2 rounded-xl shadow-sm border-2 transition-all hover:shadow-md active:scale-95 flex items-center gap-2"
                                   style={{ 
-                                    borderColor: borderColor,
+                                    borderColor,
+                                    backgroundColor,
                                     color: '#221A13'
                                   }}
                                 >
@@ -1122,23 +1136,25 @@ export function MobileSearchView({
                           <div className="flex gap-2 px-1 pb-2">
                             {supportedEventTypes.map((type, index) => {
                               const colors = [
-                                '#F5B48A', // Peach
-                                '#8AD0C9', // Teal
-                                '#F8D27C', // Warm yellow
-                                '#8FB8FF', // Light blue
-                                '#D9E27A', // Soft chartreuse
-                                '#CDA0F6', // Lavender
-                                '#F4A3A0', // Soft rose
-                                '#FFAFA3'  // Coral
+                                '#E09C75', // Muted peach
+                                '#73B6AF', // Softer teal
+                                '#E4C063', // Muted yellow
+                                '#7EA4E6', // Softer blue
+                                '#C5D567', // Muted chartreuse
+                                '#B892E0', // Softer lavender
+                                '#E48E8A', // Muted rose
+                                '#F09588'  // Muted coral
                               ];
                               const borderColor = colors[index % colors.length];
+                              const backgroundColor = `${borderColor}14`; // extra-light tint based on border color
                               return (
                                 <button
                                   key={type}
                                   onClick={() => handleEventTypeSelect(index)}
-                                  className="flex-shrink-0 px-4 py-2.5 rounded-xl shadow-sm border-2 transition-all hover:shadow-md active:scale-95 bg-white flex items-center gap-2"
+                                  className="flex-shrink-0 px-4 py-2 rounded-xl shadow-sm border-2 transition-all hover:shadow-md active:scale-95 flex items-center gap-2"
                                   style={{ 
-                                    borderColor: borderColor,
+                                    borderColor,
+                                    backgroundColor,
                                     color: '#221A13'
                                   }}
                                 >
