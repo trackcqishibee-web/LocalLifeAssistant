@@ -1027,16 +1027,14 @@ export function MobileSearchView({
                             {/* "More Specific" Card - Only show if we have follow-up suggestions */}
                             {selectedEventTypeIndex >= 0 && (() => {
                               const eventTypeColors = [
-                                '#FF6B9D', // Music - pink
-                                '#70AD47', // Wellness - green
-                                '#FFB84D', // Food & Drink - orange
-                                '#9966CC', // Arts - purple
-                                '#5B9BD5', // Sports - blue
-                                '#FF7F7F', // Nightlife - red
-                                '#6BCF7F', // Outdoor - mint
-                                '#4ECDC4', // Tech - turquoise
-                                '#FFA07A', // Community - coral
-                                '#B565D8'  // Family - violet
+                                '#F5B48A', // Peach
+                                '#8AD0C9', // Teal
+                                '#F8D27C', // Warm yellow
+                                '#8FB8FF', // Light blue
+                                '#D9E27A', // Soft chartreuse
+                                '#CDA0F6', // Lavender
+                                '#F4A3A0', // Soft rose
+                                '#FFAFA3'  // Coral
                               ];
                               const eventColor = eventTypeColors[selectedEventTypeIndex];
                               // Create a lighter background color from the event color
@@ -1089,16 +1087,14 @@ export function MobileSearchView({
                           <div className="flex gap-2 px-1 pb-2">
                             {citiesDisplay.map((city, index) => {
                               const colors = [
-                                '#5B9BD5', // blue
-                                '#70AD47', // green
-                                '#9966CC', // purple
-                                '#FFA07A', // coral
-                                '#FF6B9D', // pink
-                                '#4ECDC4', // turquoise
-                                '#FFB84D', // orange
-                                '#B565D8', // violet
-                                '#FF7F7F', // red
-                                '#6BCF7F'  // mint
+                                '#F5B48A', // Peach
+                                '#8AD0C9', // Teal
+                                '#F8D27C', // Warm yellow
+                                '#8FB8FF', // Light blue
+                                '#D9E27A', // Soft chartreuse
+                                '#CDA0F6', // Lavender
+                                '#F4A3A0', // Soft rose
+                                '#FFAFA3'  // Coral
                               ];
                               const borderColor = colors[index % colors.length];
                               return (
@@ -1126,16 +1122,14 @@ export function MobileSearchView({
                           <div className="flex gap-2 px-1 pb-2">
                             {supportedEventTypes.map((type, index) => {
                               const colors = [
-                                '#FF6B9D', // Music - pink
-                                '#70AD47', // Wellness - green
-                                '#FFB84D', // Food & Drink - orange
-                                '#9966CC', // Arts - purple
-                                '#5B9BD5', // Sports - blue
-                                '#FF7F7F', // Nightlife - red
-                                '#6BCF7F', // Outdoor - mint
-                                '#4ECDC4', // Tech - turquoise
-                                '#FFA07A', // Community - coral
-                                '#B565D8'  // Family - violet
+                                '#F5B48A', // Peach
+                                '#8AD0C9', // Teal
+                                '#F8D27C', // Warm yellow
+                                '#8FB8FF', // Light blue
+                                '#D9E27A', // Soft chartreuse
+                                '#CDA0F6', // Lavender
+                                '#F4A3A0', // Soft rose
+                                '#FFAFA3'  // Coral
                               ];
                               const borderColor = colors[index % colors.length];
                               return (

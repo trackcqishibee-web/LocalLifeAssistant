@@ -7,37 +7,37 @@ interface EventTypeButtonsProps {
   disabled?: boolean;
 }
 
-// Map event types to display names and icons
+// Map event types to display names, icons and retro-inspired accent colors
 const eventTypeConfig: Record<string, { label: string; icon: string; color: string }> = {
   music: {
     label: 'Music',
     icon: musicIcon,
-    color: '#3B82F6' // Blue
+    color: '#E9B8A6' // Soft peach
   },
   sports: {
     label: 'Sports',
     icon: tapIcon,
-    color: '#10B981' // Green
+    color: '#C9A0A0' // Warm taupe
   },
   nightlife: {
     label: 'Nightlife',
     icon: tapIcon,
-    color: '#8B5CF6' // Purple
+    color: '#D3A48F' // Muted terracotta
   },
   business: {
     label: 'Business',
     icon: tapIcon,
-    color: '#F59E0B' // Amber
+    color: '#B9C6B0' // Sage
   },
   tech: {
     label: 'Tech',
     icon: tapIcon,
-    color: '#6366F1' // Indigo
+    color: '#AEC4C9' // Dusty teal
   },
   dating: {
     label: 'Dating',
     icon: tapIcon,
-    color: '#EC4899' // Pink
+    color: '#C7C1D7' // Lavender gray
   }
 };
 
