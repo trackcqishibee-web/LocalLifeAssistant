@@ -1,7 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
 import { Input } from './ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from './ui/sheet';
-import { Send, MapPin, Menu, Home, LogIn, UserPlus, Sparkles, MessageSquare } from 'lucide-react';
+import {
+  Send,
+  MapPin,
+  Menu,
+  Home,
+  LogIn,
+  UserPlus,
+  Sparkles,
+  MessageSquare,
+  Music2,
+  Dumbbell,
+  Wine,
+  Briefcase,
+  Cpu,
+  Heart
+} from 'lucide-react';
 import { ChatMessage, ChatRequest, apiClient } from '../api/client';
 import { dataService } from '../services/dataService';
 import RecommendationCard from './RecommendationCard';
@@ -1109,7 +1124,7 @@ export function MobileSearchView({
                                 '#F09588'  // Muted coral
                               ];
                               const borderColor = colors[index % colors.length];
-                              const backgroundColor = `${borderColor}14`; // extra-light tint based on border color
+                              const backgroundColor = borderColor;
                               return (
                                 <button
                                   key={city}
@@ -1118,10 +1133,10 @@ export function MobileSearchView({
                                   style={{ 
                                     borderColor,
                                     backgroundColor,
-                                    color: '#221A13'
+                                    color: '#FFFAF2' // near-white text for better contrast on colored chips
                                   }}
                                 >
-                                  <MapPin className="w-4 h-4" style={{ color: borderColor }} />
+                                  <MapPin className="w-4 h-4" style={{ color: '#FFFAF2' }} />
                                   <span className="text-sm whitespace-nowrap">{city}</span>
                                 </button>
                               );
@@ -1146,7 +1161,7 @@ export function MobileSearchView({
                                 '#F09588'  // Muted coral
                               ];
                               const borderColor = colors[index % colors.length];
-                              const backgroundColor = `${borderColor}14`; // extra-light tint based on border color
+                              const backgroundColor = borderColor;
                               return (
                                 <button
                                   key={type}
@@ -1155,10 +1170,23 @@ export function MobileSearchView({
                                   style={{ 
                                     borderColor,
                                     backgroundColor,
-                                    color: '#221A13'
+                                    color: '#FFFAF2' // near-white text for better contrast on colored chips
                                   }}
                                 >
-                                  <Sparkles className="w-4 h-4" style={{ color: borderColor }} />
+                                  {type === 'music' && <Music2 className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
+                                  {type === 'sports' && <Dumbbell className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
+                                  {type === 'nightlife' && <Wine className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
+                                  {type === 'business' && <Briefcase className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
+                                  {type === 'tech' && <Cpu className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
+                                  {type === 'dating' && <Heart className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
+                                  {type !== 'music' &&
+                                   type !== 'sports' &&
+                                   type !== 'nightlife' &&
+                                   type !== 'business' &&
+                                   type !== 'tech' &&
+                                   type !== 'dating' && (
+                                     <Sparkles className="w-4 h-4" style={{ color: '#FFFAF2' }} />
+                                  )}
                                   <span className="text-sm whitespace-nowrap lowercase">{type}</span>
                                 </button>
                               );
