@@ -346,23 +346,30 @@ async def stream_chat_response(request: ChatRequest):
         if len(message_parts) >= 3:
             # Format: "city:event_type: message"
             potential_event_type = message_parts[1].strip().lower()
+            actual_message = message_parts[2].strip().lower()
             logger.info(f"Checking potential event type '{potential_event_type}' in supported_event_types")
-            if potential_event_type in supported_event_types:
+            
+            # First, check if message text contains a valid event type (user's manual input takes priority)
+            message_event_type = None
+            for event_type in supported_event_types:
+                if event_type in actual_message:
+                    message_event_type = event_type
+                    logger.info(f"Found valid event type '{event_type}' in message text")
+                    break
+            
+            # If message text has a valid event type, use it (user's manual input overrides prefix)
+            if message_event_type:
+                extracted_preferences = UserPreferences(location=city, event_type=message_event_type)
+                logger.info(f"✓ Using event type '{message_event_type}' from message text (overriding prefix '{potential_event_type}')")
+            elif potential_event_type in supported_event_types:
+                # No valid event type in message text, use prefix
                 extracted_preferences = UserPreferences(location=city, event_type=potential_event_type)
                 logger.info(f"✓ Extracted city '{city}' and event type '{potential_event_type}' from message prefix")
             else:
-                logger.warning(f"Event type '{potential_event_type}' not found in supported_event_types")
-                # Event type not in prefix, check in actual message
-                actual_message = message_parts[2].strip().lower()
-                for event_type in supported_event_types:
-                    if event_type in actual_message:
-                        extracted_preferences = UserPreferences(location=city, event_type=event_type)
-                        logger.info(f"Extracted city '{city}' and event type '{event_type}' from message content")
-                        break
-                if not extracted_preferences:
-                    extracted_preferences = UserPreferences(location=city)
-                    logger.info(f"Extracted city '{city}' from message, no event type found")
-        else:
+                logger.warning(f"Event type '{potential_event_type}' not found in supported_event_types and no valid event type in message")
+                extracted_preferences = UserPreferences(location=city)
+                logger.info(f"Extracted city '{city}' from message, no event type found")
+        elif len(message_parts) == 2:
             # Format: "city: message" - check message for event type
             actual_message = message_parts[1].strip().lower()
             for event_type in supported_event_types:
@@ -373,6 +380,30 @@ async def stream_chat_response(request: ChatRequest):
             if not extracted_preferences:
                 extracted_preferences = UserPreferences(location=city)
                 logger.info(f"Extracted city '{city}' from message, no event type found")
+        else:
+            # Format: single part message (no colons) - could be city, event type, or regular query
+            single_message = message_parts[0].strip().lower()
+            logger.info(f"Single-part message detected: '{single_message}'")
+            
+            # Check if it's an event type
+            if single_message in supported_event_types:
+                extracted_preferences = UserPreferences(event_type=single_message)
+                logger.info(f"Extracted event type '{single_message}' from single-part message")
+            # Check if it's a city (already handled above, but keep for clarity)
+            elif city and location_provided:
+                # City was already extracted, check if message contains event type
+                for event_type in supported_event_types:
+                    if event_type in single_message:
+                        extracted_preferences = UserPreferences(location=city, event_type=event_type)
+                        logger.info(f"Extracted city '{city}' and event type '{event_type}' from single-part message")
+                        break
+                if not extracted_preferences:
+                    extracted_preferences = UserPreferences(location=city)
+                    logger.info(f"Extracted city '{city}' from single-part message, no event type found")
+            else:
+                # Neither city nor event type - treat as regular query
+                extracted_preferences = UserPreferences(location=city) if city else None
+                logger.info(f"Single-part message treated as regular query, city: {city}")
 
         # Save user message with extracted preferences (after we've determined location)
         # Only save for initial responses here - non-initial responses will be saved later

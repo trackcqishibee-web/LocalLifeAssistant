@@ -259,23 +259,267 @@ export function MobileSearchView({
     }
   }, [isTyping, messages.length]);
 
+  // Helper function to normalize city names for matching
+  const normalizeCityForMatch = (city: string): string => {
+    return city.toLowerCase().replace(/\s+/g, '_');
+  };
+
+  // Helper function to detect if input "looks like" a city or event type
+  const looksLikeCity = (input: string): boolean => {
+    // If it's a single word or two words in Title Case, it might be a city
+    const words = input.trim().split(/\s+/);
+    if (words.length <= 2) {
+      const cityPatterns = [
+        /\b(new|san|los|las|saint|st\.)\s+\w+/i,
+        /^[A-Z][a-z]+(\s+[A-Z][a-z]+)?$/, // Title Case (e.g., "New York" or "Boston")
+      ];
+      if (cityPatterns.some(pattern => pattern.test(input))) {
+        return true;
+      }
+    }
+    // Check if it's similar to any supported city name
+    return citiesDisplay.some(city => {
+      const cityLower = city.toLowerCase();
+      const inputLower = input.toLowerCase();
+      return cityLower.includes(inputLower) || inputLower.includes(cityLower) || 
+             normalizeCityForMatch(city) === normalizeCityForMatch(input);
+    });
+  };
+
+  const looksLikeEventType = (input: string): boolean => {
+    const inputLower = input.toLowerCase().trim();
+    // Check if it's exactly an event type keyword or contains event-related terms
+    const eventKeywords = ['music', 'sports', 'nightlife', 'business', 'tech', 'dating', 'concert', 'event', 'show', 'meetup', 'conference', 'workshop', 'festival', 'party', 'networking', 'comedy', 'theater'];
+    return eventKeywords.some(keyword => inputLower === keyword || inputLower.includes(keyword));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim() || isTyping) return;
 
     inputRef.current?.blur();
 
+    const inputText = query.trim();
+    const inputLower = inputText.toLowerCase();
+
+    // Check if input matches a valid city (case-insensitive)
+    const matchedCityIndex = citiesDisplay.findIndex(city => 
+      city.toLowerCase() === inputLower || 
+      normalizeCityForMatch(city) === normalizeCityForMatch(inputText)
+    );
+
+    // Check if input matches a valid event type
+    const matchedEventTypeIndex = supportedEventTypes.findIndex(type => 
+      type.toLowerCase() === inputLower
+    );
+
+    // Handle valid city input
+    if (matchedCityIndex >= 0) {
+      setSelectedCityIndex(matchedCityIndex);
+      setQuery('');
+      
+      const userMessage: ChatMessageWithRecommendations = {
+        role: 'user',
+        content: citiesDisplay[matchedCityIndex],
+        timestamp: new Date().toISOString(),
+      };
+      
+      onNewMessage(userMessage as ChatMessage);
+      setMessages(prev => [...prev, userMessage]);
+      setIsTyping(true);
+      
+      // Bot asks for event type
+      setTimeout(() => {
+        const botMessage: ChatMessageWithRecommendations = {
+          role: 'assistant',
+          content: 'What kind of events are you interested in?',
+          showEventTypeSelection: true,
+        };
+        setMessages(prev => [...prev, botMessage]);
+        setIsTyping(false);
+      }, 800);
+      return;
+    }
+
+    // Handle valid event type input
+    if (matchedEventTypeIndex >= 0) {
+      setSelectedEventTypeIndex(matchedEventTypeIndex);
+      
+      // If city is already selected, trigger API call
+      if (selectedCityIndex >= 0) {
+        setHasCompletedInitialSelection(true);
+        setQuery('');
+        
+        const userMessage: ChatMessageWithRecommendations = {
+          role: 'user',
+          content: supportedEventTypes[matchedEventTypeIndex],
+          timestamp: new Date().toISOString(),
+        };
+        
+        onNewMessage(userMessage as ChatMessage);
+        setMessages(prev => [...prev, userMessage]);
+        setMessagesWithRecommendations(prev => [...prev, userMessage]);
+        setIsTyping(true);
+        currentAssistantMessageIndexRef.current = -1;
+
+        // Trigger API call with new event type
+        const citySnakeCase = supportedCities[selectedCityIndex];
+        const eventType = supportedEventTypes[matchedEventTypeIndex];
+        const messageToSend = `${citySnakeCase}:${eventType}: Show me ${eventType} events in ${citiesDisplay[selectedCityIndex]}`;
+
+        try {
+          const request: ChatRequest = {
+            message: messageToSend,
+            conversation_history: conversationHistory,
+            llm_provider: llmProvider,
+            is_initial_response: conversationHistory.length <= 1,
+            user_id: userId,
+            conversation_id: conversationId
+          };
+
+          let recommendationCount = 0;
+          let botMessage: ChatMessageWithRecommendations | null = null;
+
+          await dataService.chatStream(
+            request,
+            () => {},
+            (messageContent: string, metadata?: any) => {
+              console.log('📨 [handleSubmit] Received message:', messageContent);
+              
+              if (metadata?.trial_exceeded) {
+                onTrialExceeded();
+              }
+              if (metadata?.conversation_id && metadata.conversation_id !== conversationId) {
+                localStorage.setItem('current_conversation_id', metadata.conversation_id);
+              }
+            },
+            (recommendation: any) => {
+              const recTitle = recommendation?.data?.title || recommendation?.data?.data?.title || 'Unknown';
+              console.log('📥 [handleSubmit] Received recommendation:', recTitle);
+              
+              recommendationCount++;
+              
+              if (!botMessage) {
+                botMessage = {
+                  role: 'assistant',
+                  content: `Found ${recommendationCount} events in ${citiesDisplay[selectedCityIndex]} that match your search! Check out the recommendations ↓`,
+                  timestamp: new Date().toISOString(),
+                  recommendations: [recommendation],
+                  showEvents: true
+                };
+                
+                setMessages(prev => [...prev, botMessage!]);
+                setMessagesWithRecommendations(prev => [...prev, botMessage!]);
+                currentAssistantMessageIndexRef.current = -1;
+                setIsTyping(false);
+              } else {
+                botMessage = {
+                  ...botMessage,
+                  content: `Found ${recommendationCount} events in ${citiesDisplay[selectedCityIndex]} that match your search! Check out the recommendations ↓`,
+                  recommendations: [...(botMessage.recommendations || []), recommendation]
+                };
+                
+                setMessages(prev => {
+                  const updated = [...prev];
+                  if (currentAssistantMessageIndexRef.current >= 0 && currentAssistantMessageIndexRef.current < updated.length) {
+                    updated[currentAssistantMessageIndexRef.current] = botMessage!;
+                  }
+                  return updated;
+                });
+                
+                setMessagesWithRecommendations(prev => {
+                  const updated = [...prev];
+                  if (currentAssistantMessageIndexRef.current >= 0 && currentAssistantMessageIndexRef.current < updated.length) {
+                    updated[currentAssistantMessageIndexRef.current] = botMessage!;
+                  }
+                  return updated;
+                });
+              }
+              
+              onRecommendations([recommendation]);
+            },
+            (error: string) => {
+              console.error('Streaming error:', error);
+              const errorMessage: ChatMessage = {
+                role: 'assistant',
+                content: `Sorry, I encountered an error: ${error}`,
+                timestamp: new Date().toISOString()
+              };
+              onNewMessage(errorMessage);
+              setIsTyping(false);
+            },
+            () => {
+              setIsTyping(false);
+            }
+          );
+        } catch (error) {
+          console.error('Error in handleSubmit:', error);
+          setIsTyping(false);
+        }
+        return;
+      } else {
+        // City not selected, ask for city first
+        setQuery('');
+        const errorMessage: ChatMessageWithRecommendations = {
+          role: 'assistant',
+          content: 'Please select a city first, then choose an event type.',
+          timestamp: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, errorMessage]);
+        return;
+      }
+    }
+
+    // Handle invalid input that looks like city or event type
+    if (looksLikeCity(inputText) && matchedCityIndex < 0) {
+      setQuery('');
+      const errorMessage: ChatMessageWithRecommendations = {
+        role: 'assistant',
+        content: 'This city is not supported. Please either re-enter the correct name or use the button to select.',
+        timestamp: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+      return;
+    }
+
+    if (looksLikeEventType(inputText) && matchedEventTypeIndex < 0) {
+      setQuery('');
+      const errorMessage: ChatMessageWithRecommendations = {
+        role: 'assistant',
+        content: 'This event type is not supported. Please either re-enter the correct name or use the button to select.',
+        timestamp: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+      return;
+    }
+
+    // Regular query - check if it contains a different event type and update state
     // Include selected city and event type in message if available (send snake_case format)
-    let messageToSend = query.trim();
-    if (hasCompletedInitialSelection && supportedCities[selectedCityIndex] && supportedEventTypes[selectedEventTypeIndex]) {
+    let messageToSend = inputText;
+    let eventTypeToUse = selectedEventTypeIndex >= 0 ? supportedEventTypes[selectedEventTypeIndex] : null;
+    
+    // Check if query contains a different event type
+    if (hasCompletedInitialSelection && selectedEventTypeIndex >= 0) {
+      const queryLower = inputText.toLowerCase();
+      for (let i = 0; i < supportedEventTypes.length; i++) {
+        if (supportedEventTypes[i].toLowerCase() !== supportedEventTypes[selectedEventTypeIndex].toLowerCase() &&
+            queryLower.includes(supportedEventTypes[i].toLowerCase())) {
+          // Found a different event type in the query - update state
+          setSelectedEventTypeIndex(i);
+          eventTypeToUse = supportedEventTypes[i];
+          break;
+        }
+      }
+    }
+    
+    if (hasCompletedInitialSelection && supportedCities[selectedCityIndex] && eventTypeToUse) {
       const citySnakeCase = supportedCities[selectedCityIndex];
-      const eventType = supportedEventTypes[selectedEventTypeIndex];
-      messageToSend = `${citySnakeCase}:${eventType}: ${query.trim()}`;
+      messageToSend = `${citySnakeCase}:${eventTypeToUse}: ${inputText}`;
     }
 
     const userMessage: ChatMessageWithRecommendations = {
       role: 'user',
-      content: query.trim(),
+      content: inputText,
       timestamp: new Date().toISOString(),
       recommendations: []
     };
@@ -408,14 +652,21 @@ export function MobileSearchView({
             const now = Date.now();
             const isRecentMessage = (now - messageTime) < 10000;
             
-            if (isRecentMessage) {
+            // Check for duplicate recommendation by event_id
+            const recId = recommendation?.data?.event_id || recommendation?.data?.data?.event_id;
+            const existingRecIds = (targetMessage.recommendations ?? []).map((r: any) => 
+              r?.data?.event_id || r?.data?.data?.event_id
+            );
+            const isDuplicate = recId && existingRecIds.includes(recId);
+            
+            if (isRecentMessage && !isDuplicate) {
               const newRecommendations = [...(targetMessage.recommendations ?? []), recommendation];
               updatedMessages[targetIndex] = {
                 ...targetMessage,
                 recommendations: newRecommendations,
                 showEvents: true
               };
-            } else {
+            } else if (!isRecentMessage && !isDuplicate) {
               const newIndex = updatedMessages.length;
               updatedMessages.push({
                 role: 'assistant',
@@ -425,6 +676,10 @@ export function MobileSearchView({
                 showEvents: true
               });
               currentAssistantMessageIndexRef.current = newIndex;
+            } else if (isDuplicate) {
+              // Skip duplicate recommendation
+              console.log('Skipping duplicate recommendation:', recTitle);
+              return updatedMessages;
             }
 
             return updatedMessages;
@@ -452,14 +707,21 @@ export function MobileSearchView({
             const now = Date.now();
             const isRecentMessage = (now - messageTime) < 10000;
             
-            if (isRecentMessage) {
+            // Check for duplicate recommendation by event_id
+            const recId = recommendation?.data?.event_id || recommendation?.data?.data?.event_id;
+            const existingRecIds = (targetMessage.recommendations ?? []).map((r: any) => 
+              r?.data?.event_id || r?.data?.data?.event_id
+            );
+            const isDuplicate = recId && existingRecIds.includes(recId);
+            
+            if (isRecentMessage && !isDuplicate) {
               const newRecommendations = [...(targetMessage.recommendations ?? []), recommendation];
               updatedMessages[targetIndex] = {
                 ...targetMessage,
                 recommendations: newRecommendations,
                 showEvents: true
               };
-            } else {
+            } else if (!isRecentMessage && !isDuplicate) {
               const newIndex = updatedMessages.length;
               updatedMessages.push({
                 role: 'assistant',
@@ -469,6 +731,10 @@ export function MobileSearchView({
                 showEvents: true
               });
               currentAssistantMessageIndexRef.current = newIndex;
+            } else if (isDuplicate) {
+              // Skip duplicate recommendation
+              console.log('Skipping duplicate recommendation:', recTitle);
+              return updatedMessages;
             }
 
             return updatedMessages;
