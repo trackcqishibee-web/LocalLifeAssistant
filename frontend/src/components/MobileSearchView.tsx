@@ -1,7 +1,22 @@
 import { useState, useEffect, useRef } from 'react';
 import { Input } from './ui/input';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from './ui/sheet';
-import { Send, MapPin, Menu, Home, LogIn, UserPlus, Sparkles, MessageSquare } from 'lucide-react';
+import {
+  Send,
+  MapPin,
+  Menu,
+  Home,
+  LogIn,
+  UserPlus,
+  Sparkles,
+  MessageSquare,
+  Music2,
+  Dumbbell,
+  Wine,
+  Briefcase,
+  Cpu,
+  Heart
+} from 'lucide-react';
 import { ChatMessage, ChatRequest, apiClient } from '../api/client';
 import { dataService } from '../services/dataService';
 import RecommendationCard from './RecommendationCard';
@@ -989,11 +1004,23 @@ export function MobileSearchView({
                     className="flex justify-end gap-2 items-start"
                     ref={index === lastUserMessageIndex ? lastUserMessageRef : null}
                   >
-                    <div className="rounded-xl rounded-tr-sm px-4 py-3 max-w-[80%] border shadow-sm" style={{ backgroundColor: '#E9E6DF', borderColor: '#EDEBE6' }}>
+                    <div
+                      className="rounded-xl rounded-tr-sm px-4 py-3 max-w-[80%] border shadow-sm"
+                      style={{
+                        backgroundColor: '#D4CFC2',
+                        borderColor: '#D4CFC2',
+                      }}
+                    >
                       <p className="text-[15px]" style={{ color: '#221A13' }}>{message.content}</p>
                     </div>
                     {/* User Avatar */}
-                    <div className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden p-1 border-0" style={{ backgroundColor: '#E9E6DF' }}>
+                    <div
+                      className="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center mt-1 overflow-hidden border-2"
+                      style={{
+                        backgroundColor: '#E9E6DF',
+                        borderColor: '#D4CFC2',
+                      }}
+                    >
                       <img src={userProfilePic} alt="User" className="w-3/4 h-3/4 object-cover rounded-full" />
                     </div>
                   </div>
@@ -1029,16 +1056,14 @@ export function MobileSearchView({
                             {/* "More Specific" Card - Only show if we have follow-up suggestions */}
                             {selectedEventTypeIndex >= 0 && (() => {
                               const eventTypeColors = [
-                                '#FF6B9D', // Music - pink
-                                '#70AD47', // Wellness - green
-                                '#FFB84D', // Food & Drink - orange
-                                '#9966CC', // Arts - purple
-                                '#5B9BD5', // Sports - blue
-                                '#FF7F7F', // Nightlife - red
-                                '#6BCF7F', // Outdoor - mint
-                                '#4ECDC4', // Tech - turquoise
-                                '#FFA07A', // Community - coral
-                                '#B565D8'  // Family - violet
+                                '#F5B48A', // Peach
+                                '#8AD0C9', // Teal
+                                '#F8D27C', // Warm yellow
+                                '#8FB8FF', // Light blue
+                                '#D9E27A', // Soft chartreuse
+                                '#CDA0F6', // Lavender
+                                '#F4A3A0', // Soft rose
+                                '#FFAFA3'  // Coral
                               ];
                               const eventColor = eventTypeColors[selectedEventTypeIndex];
                               // Create a lighter background color from the event color
@@ -1091,29 +1116,29 @@ export function MobileSearchView({
                           <div className="flex gap-2 px-1 pb-2">
                             {citiesDisplay.map((city, index) => {
                               const colors = [
-                                '#5B9BD5', // blue
-                                '#70AD47', // green
-                                '#9966CC', // purple
-                                '#FFA07A', // coral
-                                '#FF6B9D', // pink
-                                '#4ECDC4', // turquoise
-                                '#FFB84D', // orange
-                                '#B565D8', // violet
-                                '#FF7F7F', // red
-                                '#6BCF7F'  // mint
+                                '#E09C75', // Muted peach
+                                '#73B6AF', // Softer teal
+                                '#E4C063', // Muted yellow
+                                '#7EA4E6', // Softer blue
+                                '#C5D567', // Muted chartreuse
+                                '#B892E0', // Softer lavender
+                                '#E48E8A', // Muted rose
+                                '#F09588'  // Muted coral
                               ];
                               const borderColor = colors[index % colors.length];
+                              const backgroundColor = borderColor;
                               return (
                                 <button
                                   key={city}
                                   onClick={() => handleCitySelect(index)}
-                                  className="flex-shrink-0 px-4 py-2.5 rounded-xl shadow-sm border-2 transition-all hover:shadow-md active:scale-95 bg-white flex items-center gap-2"
+                                  className="flex-shrink-0 px-4 py-2 rounded-xl shadow-sm border-2 transition-all hover:shadow-md active:scale-95 flex items-center gap-2"
                                   style={{ 
-                                    borderColor: borderColor,
-                                    color: '#221A13'
+                                    borderColor,
+                                    backgroundColor,
+                                    color: '#FFFAF2' // near-white text for better contrast on colored chips
                                   }}
                                 >
-                                  <MapPin className="w-4 h-4" style={{ color: borderColor }} />
+                                  <MapPin className="w-4 h-4" style={{ color: '#FFFAF2' }} />
                                   <span className="text-sm whitespace-nowrap">{city}</span>
                                 </button>
                               );
@@ -1128,29 +1153,42 @@ export function MobileSearchView({
                           <div className="flex gap-2 px-1 pb-2">
                             {supportedEventTypes.map((type, index) => {
                               const colors = [
-                                '#FF6B9D', // Music - pink
-                                '#70AD47', // Wellness - green
-                                '#FFB84D', // Food & Drink - orange
-                                '#9966CC', // Arts - purple
-                                '#5B9BD5', // Sports - blue
-                                '#FF7F7F', // Nightlife - red
-                                '#6BCF7F', // Outdoor - mint
-                                '#4ECDC4', // Tech - turquoise
-                                '#FFA07A', // Community - coral
-                                '#B565D8'  // Family - violet
+                                '#E09C75', // Muted peach
+                                '#73B6AF', // Softer teal
+                                '#E4C063', // Muted yellow
+                                '#7EA4E6', // Softer blue
+                                '#C5D567', // Muted chartreuse
+                                '#B892E0', // Softer lavender
+                                '#E48E8A', // Muted rose
+                                '#F09588'  // Muted coral
                               ];
                               const borderColor = colors[index % colors.length];
+                              const backgroundColor = borderColor;
                               return (
                                 <button
                                   key={type}
                                   onClick={() => handleEventTypeSelect(index)}
-                                  className="flex-shrink-0 px-4 py-2.5 rounded-xl shadow-sm border-2 transition-all hover:shadow-md active:scale-95 bg-white flex items-center gap-2"
+                                  className="flex-shrink-0 px-4 py-2 rounded-xl shadow-sm border-2 transition-all hover:shadow-md active:scale-95 flex items-center gap-2"
                                   style={{ 
-                                    borderColor: borderColor,
-                                    color: '#221A13'
+                                    borderColor,
+                                    backgroundColor,
+                                    color: '#FFFAF2' // near-white text for better contrast on colored chips
                                   }}
                                 >
-                                  <Sparkles className="w-4 h-4" style={{ color: borderColor }} />
+                                  {type === 'music' && <Music2 className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
+                                  {type === 'sports' && <Dumbbell className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
+                                  {type === 'nightlife' && <Wine className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
+                                  {type === 'business' && <Briefcase className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
+                                  {type === 'tech' && <Cpu className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
+                                  {type === 'dating' && <Heart className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
+                                  {type !== 'music' &&
+                                   type !== 'sports' &&
+                                   type !== 'nightlife' &&
+                                   type !== 'business' &&
+                                   type !== 'tech' &&
+                                   type !== 'dating' && (
+                                     <Sparkles className="w-4 h-4" style={{ color: '#FFFAF2' }} />
+                                  )}
                                   <span className="text-sm whitespace-nowrap lowercase">{type}</span>
                                 </button>
                               );

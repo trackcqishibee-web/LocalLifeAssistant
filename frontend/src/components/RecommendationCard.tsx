@@ -88,22 +88,35 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
       </div>
       
       {/* Card Content */}
-      <div className="flex flex-col flex-1 min-h-0 space-y-1">
-        <h3 className="line-clamp-2 min-h-[2rem] flex items-start" style={{ color: '#221A13', fontFamily: 'Abitare Sans, sans-serif' }}>{eventData.title}</h3>
+      <div className="flex flex-col flex-1 min-h-0 space-y-1.5">
+        {/* Title */}
+        <h3
+          className="text-sm font-semibold leading-snug line-clamp-2 min-h-[2.25rem] flex items-start"
+          style={{ color: '#221A13', fontFamily: 'Abitare Sans, sans-serif' }}
+        >
+          {eventData.title}
+        </h3>
         
         {/* Date/Time and Location */}
-        <div className="flex flex-col gap-1.5 text-xs flex-shrink-0" style={{ color: '#5E574E' }}>
-          <div className="flex items-center gap-1">
+        <div className="flex flex-col gap-1.5 text-[11px] flex-shrink-0 text-[#6E665C]">
+          <div className="flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#B46A55' }} />
-            <span className="truncate">{formatDate(eventData.start_datetime)}</span>
+            <span className="truncate font-medium text-[#B46A55]">
+              {formatDate(eventData.start_datetime)}
+            </span>
           </div>
-          <div className="flex items-center gap-1">
-            <MapPin className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#B46A55' }} />
-            <span className="truncate">{eventData.venue_name}</span>
+          <div className="flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#76C1B2' }} />
+            <span className="truncate text-[#5E574E]">
+              {eventData.venue_name}
+            </span>
           </div>
         </div>
         
-        <p className="text-sm line-clamp-2 min-h-[2rem] flex-1" style={{ color: '#5E574E', lineHeight: '1.4' }}>
+        {/* Description */}
+        <p
+          className="text-xs leading-relaxed line-clamp-2 min-h-[2.25rem] flex-1 text-[#5E574E]"
+        >
           {eventData.description}
         </p>
       </div>
