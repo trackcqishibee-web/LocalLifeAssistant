@@ -1151,7 +1151,7 @@ export function MobileSearchView({
   };
 
   return (
-    <div className="min-h-[100svh] bg-[#FCFBF9] flex flex-col w-full max-w-md mx-auto">
+    <div className="h-full bg-[#FCFBF9] flex flex-col max-w-md mx-auto">
       {/* Sticky Header Container */}
       <div className="sticky top-0 z-50 bg-[#FCFBF9] flex-shrink-0">
         {/* Header */}
