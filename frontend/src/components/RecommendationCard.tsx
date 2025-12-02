@@ -62,7 +62,7 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
     <div
       data-card
       onClick={handleCardClick}
-      className={`flex-shrink-0 w-[240px] h-[288px] bg-white rounded-xl shadow-md border-2 transition-all cursor-pointer hover:shadow-lg active:shadow-lg active:scale-[0.98] p-3 flex flex-col ${
+      className={`flex-shrink-0 w-[240px] h-[282px] bg-white rounded-xl shadow-md border-2 transition-all cursor-pointer hover:shadow-lg active:shadow-lg active:scale-[0.98] p-3 flex flex-col ${
         isExample ? 'cursor-default' : ''
       }`}
       style={{ borderColor: '#E5E7EB' }}
@@ -115,7 +115,7 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({ recommendation 
         
         {/* Description */}
         <p
-          className="text-xs leading-relaxed line-clamp-2 min-h-[2.25rem] flex-1 text-[#5E574E]"
+          className="text-xs leading-relaxed line-clamp-3 min-h-[2.25rem] flex-1 text-[#5E574E]"
         >
           {eventData.description}
         </p>
