@@ -1151,7 +1151,7 @@ export function MobileSearchView({
   };
 
   return (
-    <div className="h-dvh bg-[#FCFBF9] flex flex-col max-w-md mx-auto">
+    <div className="min-h-[100svh] bg-[#FCFBF9] flex flex-col w-full max-w-md mx-auto">
       {/* Sticky Header Container */}
       <div className="sticky top-0 z-50 bg-[#FCFBF9] flex-shrink-0">
         {/* Header */}
@@ -1722,7 +1722,7 @@ export function MobileSearchView({
               }}
               placeholder={
                 selectedCityIndex < 0 || selectedEventTypeIndex < 0
-                  ? "Please select your location and event type"
+                  ? "Please select location and event type"
                   : messages.length > 1
                   ? "What else are you looking for?"
                   : "What vibe are you looking for?"
