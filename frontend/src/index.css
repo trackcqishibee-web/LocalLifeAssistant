@@ -122,10 +122,11 @@
   }
   html, body {
     @apply bg-background text-foreground;
-    overflow: hidden;
+    /* Allow the page to scroll so mobile browser UI (nav bar) can hide/show */
     touch-action: pan-y;
   }
   #root {
-    overflow: hidden;
+    /* Ensure the app fills the viewport but does not block scrolling */
+    min-height: 100vh;
   }
 }
