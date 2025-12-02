@@ -386,7 +386,7 @@ const App: React.FC = () => {
 
 
   return (
-    <div className="min-h-screen bg-[#E8EEE8]">
+    <div className="h-dvh bg-[#E8EEE8]">
       <MobileSearchView
         onNewMessage={handleNewMessage}
         onRecommendations={handleRecommendations}

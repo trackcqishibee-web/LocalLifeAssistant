@@ -7,7 +7,6 @@ import {
   Menu,
   Home,
   LogIn,
-  UserPlus,
   Sparkles,
   MessageSquare,
   Music2,
@@ -130,7 +129,6 @@ export function MobileSearchView({
   usageStats,
   trialWarning,
   onLogin,
-  onRegister,
   onLogout
 }: MobileSearchViewProps) {
   const [query, setQuery] = useState('');
@@ -1151,7 +1149,7 @@ export function MobileSearchView({
   };
 
   return (
-    <div className="h-dvh bg-[#FCFBF9] flex flex-col max-w-md mx-auto">
+    <div className="h-full bg-[#FCFBF9] flex flex-col max-w-md mx-auto">
       {/* Sticky Header Container */}
       <div className="sticky top-0 z-50 bg-[#FCFBF9] flex-shrink-0">
         {/* Header */}
@@ -1320,7 +1318,7 @@ export function MobileSearchView({
                       className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors text-left mt-4 border-t"
                     >
                       <LogIn className="w-5 h-5" style={{ color: '#9A8B68' }} />
-                      <span style={{ color: '#221A13' }}>Log out</span>
+                      <span style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>Log out</span>
                     </button>
                   </>
                 ) : (
@@ -1330,17 +1328,7 @@ export function MobileSearchView({
                       className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors text-left"
                     >
                       <LogIn className="w-5 h-5" style={{ color: '#9A8B68' }} />
-                      <span style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>Log in</span>
-                    </button>
-                    <button 
-                      onClick={() => {
-                        setMenuOpen(false);
-                        onRegister();
-                      }}
-                      className="w-full flex items-center gap-4 px-6 py-4 hover:bg-slate-50 transition-colors text-left"
-                    >
-                      <UserPlus className="w-5 h-5" style={{ color: '#9A8B68' }} />
-                      <span style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>Sign up</span>
+                      <span style={{ color: '#221A13', fontFamily: 'Aladin, cursive' }}>Log in / Sign up</span>
                     </button>
                     {usageStats && !usageStats.is_registered && (
                       <div className="px-6 py-3 text-xs" style={{ color: '#5E574E' }}>
@@ -1722,7 +1710,7 @@ export function MobileSearchView({
               }}
               placeholder={
                 selectedCityIndex < 0 || selectedEventTypeIndex < 0
-                  ? "Please select your location and event type"
+                  ? "Please select location and event type"
                   : messages.length > 1
                   ? "What else are you looking for?"
                   : "What vibe are you looking for?"
