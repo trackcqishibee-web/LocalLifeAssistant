@@ -1517,8 +1517,18 @@ export function MobileSearchView({
                                 '#E09C75',
                                 '#A89F8F',
                               ];
-                              const borderColor = colors[index % colors.length];
-                              const backgroundColor = borderColor;
+                              const firstButtonColor = colors[0];
+                              let borderColor, backgroundColor;
+                              if (index % 2 === 1) {
+                                // Odd indices: border same as first button, background transparent
+                                borderColor = firstButtonColor;
+                                backgroundColor = firstButtonColor + '26';
+                              } else {
+                                // Even indices: keep current behavior
+                                borderColor = colors[index % colors.length];
+                                backgroundColor = borderColor;
+                              }
+                              const textColor = index % 2 === 0 ? 'white' : '#2A1F14';
                               return (
                                 <button
                                   key={city}
@@ -1527,10 +1537,10 @@ export function MobileSearchView({
                                   style={{ 
                                     borderColor,
                                     backgroundColor,
-                                    color: '#FFFAF2' // near-white text for better contrast on colored chips
+                                    color: textColor
                                   }}
                                 >
-                                  <MapPin className="w-4 h-4" style={{ color: '#FFFAF2' }} />
+                                  <MapPin className="w-4 h-4" style={{ color: textColor }} />
                                   <span className="text-sm whitespace-nowrap">{city}</span>
                                 </button>
                               );
@@ -1565,8 +1575,18 @@ export function MobileSearchView({
                                 '#73B6AF',
                                 '#A89F8F',
                               ];
-                              const borderColor = colors[index % colors.length];
-                              const backgroundColor = borderColor;
+                              const firstButtonColor = colors[0];
+                              let borderColor, backgroundColor;
+                              if (index % 2 === 1) {
+                                // Odd indices: border same as first button, background transparent
+                                borderColor = firstButtonColor;
+                                backgroundColor = firstButtonColor + '26';
+                              } else {
+                                // Even indices: keep current behavior
+                                borderColor = colors[index % colors.length];
+                                backgroundColor = borderColor;
+                              }
+                              const textColor = index % 2 === 0 ? 'white' : '#2A1F14';
                               return (
                                 <button
                                   key={type}
@@ -1575,22 +1595,22 @@ export function MobileSearchView({
                                   style={{ 
                                     borderColor,
                                     backgroundColor,
-                                    color: '#FFFAF2' // near-white text for better contrast on colored chips
+                                    color: textColor
                                   }}
                                 >
-                                  {type === 'music' && <Music2 className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
-                                  {type === 'sports' && <Dumbbell className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
-                                  {type === 'nightlife' && <Wine className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
-                                  {type === 'business' && <Briefcase className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
-                                  {type === 'tech' && <Cpu className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
-                                  {type === 'dating' && <Heart className="w-4 h-4" style={{ color: '#FFFAF2' }} />}
+                                  {type === 'music' && <Music2 className="w-4 h-4" style={{ color: textColor }} />}
+                                  {type === 'sports' && <Dumbbell className="w-4 h-4" style={{ color: textColor }} />}
+                                  {type === 'nightlife' && <Wine className="w-4 h-4" style={{ color: textColor }} />}
+                                  {type === 'business' && <Briefcase className="w-4 h-4" style={{ color: textColor }} />}
+                                  {type === 'tech' && <Cpu className="w-4 h-4" style={{ color: textColor }} />}
+                                  {type === 'dating' && <Heart className="w-4 h-4" style={{ color: textColor }} />}
                                   {type !== 'music' &&
                                    type !== 'sports' &&
                                    type !== 'nightlife' &&
                                    type !== 'business' &&
                                    type !== 'tech' &&
                                    type !== 'dating' && (
-                                     <Sparkles className="w-4 h-4" style={{ color: '#FFFAF2' }} />
+                                     <Sparkles className="w-4 h-4" style={{ color: textColor }} />
                                   )}
                                   <span className="text-sm whitespace-nowrap lowercase">{type}</span>
                                 </button>
