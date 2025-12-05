@@ -41,6 +41,10 @@ class EventbriteProvider(EventProvider):
         """Get Eventbrite location ID for a city"""
         city_key = city_name.lower().strip().replace(" ", "_")
         return self.location_ids.get(city_key)
+
+    def get_supported_cities(self):
+        """Get list of supported city names"""
+        return list(self.location_ids.keys())
     
     def _format_price(self, price_str: str, is_free: bool) -> str:
         """Format price string"""
@@ -54,10 +58,6 @@ class EventbriteProvider(EventProvider):
             return f"{price_float:g}"
         except:
             return clean_price or "Free"
-    
-    def get_supported_cities(self):
-        """Get list of supported city names"""
-        return list(self.location_ids.keys())
     
     def search(self, city, category=None):
         """Search events by city"""
@@ -214,50 +214,120 @@ class MeetupProvider(EventProvider):
             return []
 
 class AllEventsProvider(EventProvider):
-    def __init__(self, api_key):
+    def __init__(self, api_key=None):
+        # API key not required for this endpoint; kept for compatibility
         self.api_key = api_key
-        # Note: Using illustrative endpoint from research
-        self.url = "https://api.allevents.in/events/list/"
+        self.url = "https://allevents.in/api/index.php/events/web/qs/search_v1"
 
-    def search(self, city, category="events"):
-        if not self.api_key:
-            print("AllEvents key missing")
+    def search(self, city, category="events", lat=None, lon=None):
+
+        # Use provided coordinates or geocode city to improve accuracy
+        if lat is None or lon is None:
+            print(f"AllEvents: Could not geocode city '{city}'")
             return []
+        cookies = {
+            "FPID": "FPID2.2.eboPeLs04b9qsXo1MCpRek3XeCf%2F4q7lCGF86c9eaUk%3D.1760280802",
+        }
 
-        headers = {"Ocp-Apim-Subscription-Key": self.api_key}
-        params = {
+        headers = {
+            "referer": "https://allevents.in/",
+            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        }
+        
+        json_data = {
+            "query": category if category != "events" else "",
+            "latitude": str(lat),
+            "longitude": str(lon),
             "city": city,
-            "category": category
+            'region_code': 'US',
+            "search_scope": "city",
         }
 
         try:
-            response = requests.get(self.url, headers=headers, params=params)
+            response = requests.post(self.url, headers=headers, json=json_data, cookies=cookies)
             response.raise_for_status()
-            data = response.json()
+            # Guard against empty or non-JSON responses for better debugging
+            if not response.text.strip():
+                print(f"AllEvents: empty response body (status {response.status_code}) for city={city}, category={category}")
+                return []
+            try:
+                data = response.json()
+            except Exception as parse_err:
+                preview = response.text[:200].replace("\n", " ")
+                print(f"AllEvents: non-JSON response ({parse_err}), status {response.status_code}, preview: {preview!r}")
+                return []
             
             events = []
-            for item in data.get("data", []):
+            items = data.get("events") or data.get("global_events") or []
+            for item in items:
+                venue = item.get("venue", {})
+                ticket = item.get("ticket", {})
+                
+                # Parse ticket pricing
+                min_price = "Free"
+                max_price = "Free"
+                is_free = True
+                if ticket.get("has_tickets", False):
+                    min_val = ticket.get("min_ticket_price", "0.00")
+                    max_val = ticket.get("max_ticket_price", "0.00")
+                    try:
+                        min_float = float(min_val) if min_val else 0.0
+                        max_float = float(max_val) if max_val else 0.0
+                        if min_float > 0 or max_float > 0:
+                            is_free = False
+                            currency = ticket.get("ticket_currency", "")
+                            min_price = f"{currency} {min_float:g}" if currency else f"{min_float:g}"
+                            max_price = f"{currency} {max_float:g}" if currency else f"{max_float:g}"
+                    except (ValueError, TypeError):
+                        pass
+                
+                # Parse start time (Unix timestamp)
+                start_time = item.get("start_time", "")
+                start_datetime = ""
+                if start_time:
+                    try:
+                        start_datetime = datetime.fromtimestamp(int(start_time)).isoformat()
+                    except (ValueError, TypeError):
+                        start_datetime = item.get("start_time_display", "")
+                
+                # Get venue coordinates
+                venue_lat = 0.0
+                venue_lon = 0.0
+                try:
+                    venue_lat = float(venue.get("latitude", 0)) if venue.get("latitude") else 0.0
+                    venue_lon = float(venue.get("longitude", 0)) if venue.get("longitude") else 0.0
+                except (ValueError, TypeError):
+                    pass
+                
                 events.append({
                     "event_id": str(item.get("event_id", "")),
                     "title": item.get("eventname", ""),
-                    "description": item.get("description", ""),
-                    "start_datetime": item.get("start_time_display", ""),
-                    "end_datetime": item.get("end_time_display", ""),
+                    "description": venue.get("full_address", ""),
+                    "start_datetime": start_datetime or item.get("start_time_display", ""),
+                    "end_datetime": "",
                     "timezone": "UTC",
-                    "venue_name": item.get("venue_name", ""),
-                    "venue_city": city,
-                    "venue_country": "",
-                    "latitude": 0.0,
-                    "longitude": 0.0,
+                    "venue_name": item.get("location", ""),
+                    "venue_city": venue.get("city", city),
+                    "venue_country": venue.get("country", ""),
+                    "latitude": venue_lat,
+                    "longitude": venue_lon,
                     "organizer_name": "",
-                    "ticket_min_price": "Free",
-                    "ticket_max_price": "Free",
-                    "is_free": True,
+                    "ticket_min_price": min_price,
+                    "ticket_max_price": max_price,
+                    "is_free": is_free,
                     "categories": [],
-                    "image_url": item.get("banner_url", ""),
-                    "event_url": item.get("event_url", item.get("banner_url", "")),
+                    "image_url": item.get("banner_url", item.get("thumb_url", "")),
+                    "event_url": item.get("event_url", ""),
                     "source": "allevents"
                 })
+            # Keep only events matching the requested city
+            target_city = city.strip().lower()
+            events = [
+                e for e in events
+                if str(e.get("venue_city", "")).strip().lower() == target_city
+            ]
+            # Cap at 20 events for consistency
+            events = events[:20]
             return events
         except Exception as e:
             print(f"AllEvents error: {e}")
