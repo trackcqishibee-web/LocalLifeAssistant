@@ -33,6 +33,11 @@ class UnifiedEventService:
 
     def get_events(self, location_name, category="events"):
         all_events = []
+
+        # 0. Preprocess location name
+        # Convert location name from snake_case to title case
+        location_name = location_name.lower().strip().replace("_", " ")
+        location_name = location_name.title()
         
         # 1. Geocode the location
         lat, lon = self.geocoder.get_coordinates(location_name)
@@ -53,7 +58,7 @@ class UnifiedEventService:
 
         # 4. Fetch from Providers needing City Name
         print(f"Fetching AllEvents for {location_name}...")
-        all_events.extend(self.allevents.search(location_name, category))
+        all_events.extend(self.allevents.search(location_name, category, lat, lon))
         
         print(f"Fetching Ticketmaster for {location_name}...")
         all_events.extend(self.ticketmaster.search(location_name, category))
