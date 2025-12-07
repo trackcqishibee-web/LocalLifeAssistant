@@ -178,70 +178,37 @@ export function MobileSearchView({
     return R * c; // Distance in kilometers
   };
 
-  // Helper function to geocode a city name to coordinates
-  const geocodeCity = async (cityName: string): Promise<{ lat: number; lon: number } | null> => {
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(cityName)}&limit=1`,
-        {
-          headers: {
-            'User-Agent': 'LocalLifeAssistant/1.0'
-          }
-        }
-      );
-      
-      if (!response.ok) {
-        return null;
-      }
-      
-      const data = await response.json();
-      if (data && data.length > 0) {
-        return {
-          lat: parseFloat(data[0].lat),
-          lon: parseFloat(data[0].lon)
-        };
-      }
-      return null;
-    } catch (error) {
-      console.error('Error geocoding city:', error);
-      return null;
-    }
-  };
-
-  // Preload city coordinates in parallel
+  // Preload city coordinates from backend
   const preloadCityCoordinates = async (cities: string[]) => {
     if (isGeocodingCities.current) return;
     isGeocodingCities.current = true;
 
-    const citiesToGeocode = cities.filter(city => !cityCoordinatesCache.current.has(city));
-    if (citiesToGeocode.length === 0) {
+    const citiesToLoad = cities.filter(city => !cityCoordinatesCache.current.has(city));
+    if (citiesToLoad.length === 0) {
       isGeocodingCities.current = false;
       return;
     }
 
-    console.log(`Preloading coordinates for ${citiesToGeocode.length} cities...`);
+    console.log(`Loading coordinates for ${citiesToLoad.length} cities from backend...`);
     
-    // Geocode cities in parallel batches (5 at a time to respect rate limits)
-    const BATCH_SIZE = 5;
-    for (let i = 0; i < citiesToGeocode.length; i += BATCH_SIZE) {
-      const batch = citiesToGeocode.slice(i, i + BATCH_SIZE);
-      const geocodePromises = batch.map(async (cityName) => {
-        const readableCityName = cityName.replace(/_/g, ' ');
-        const coords = await geocodeCity(readableCityName);
-        if (coords) {
-          cityCoordinatesCache.current.set(cityName, coords);
+    try {
+      const coordinates = await apiClient.getCityCoordinates();
+      
+      // Cache all coordinates
+      Object.entries(coordinates).forEach(([cityName, coords]) => {
+        if (coords && coords.lat && coords.lon) {
+          cityCoordinatesCache.current.set(cityName, {
+            lat: coords.lat,
+            lon: coords.lon
+          });
         }
       });
       
-      await Promise.all(geocodePromises);
-      
-      // Small delay between batches to respect API rate limits
-      if (i + BATCH_SIZE < citiesToGeocode.length) {
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
+      console.log(`Loaded coordinates for ${Object.keys(coordinates).length} cities`);
+    } catch (error) {
+      console.error('Error loading city coordinates from backend:', error);
     }
     
-    console.log('City coordinates preloaded');
     isGeocodingCities.current = false;
   };
 

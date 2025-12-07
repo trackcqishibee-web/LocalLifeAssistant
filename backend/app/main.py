@@ -270,6 +270,64 @@ async def get_supported_cities():
         logger.error(f"Error getting supported cities: {e}")
         return {"success": False, "error": str(e)}
 
+# Hardcoded coordinates for common cities (for fast matching)
+COMMON_CITY_COORDINATES = {
+    "san_francisco": {"lat": 37.7749, "lon": -122.4194},
+    "new_york": {"lat": 40.7128, "lon": -74.0060},
+    "los_angeles": {"lat": 34.0522, "lon": -118.2437},
+    "miami": {"lat": 25.7617, "lon": -80.1918},
+    "chicago": {"lat": 41.8781, "lon": -87.6298},
+    "seattle": {"lat": 47.6062, "lon": -122.3321},
+    "boston": {"lat": 42.3601, "lon": -71.0589},
+    "singapore": {"lat": 1.3521, "lon": 103.8198},
+    "san_jose": {"lat": 37.3382, "lon": -121.8863},
+    "mountain_view": {"lat": 37.3861, "lon": -122.0839},
+    "los_altos": {"lat": 37.3852, "lon": -122.1141},
+    "palo_alto": {"lat": 37.4419, "lon": -122.1430},
+    "sunnyvale": {"lat": 37.3688, "lon": -122.0363},
+    "cupertino": {"lat": 37.3230, "lon": -122.0322},
+    "redwood_city": {"lat": 37.4852, "lon": -122.2364},
+    "menlo_park": {"lat": 37.4530, "lon": -122.1817},
+    "fremont": {"lat": 37.5483, "lon": -121.9886},
+    "hayward": {"lat": 37.6688, "lon": -122.0808},
+    "oakland": {"lat": 37.8044, "lon": -122.2712},
+    "berkeley": {"lat": 37.8715, "lon": -122.2730},
+    "daly_city": {"lat": 37.7058, "lon": -122.4619},
+    "santa_clara": {"lat": 37.3541, "lon": -121.9552},
+}
+
+@app.get("/api/city-coordinates")
+async def get_city_coordinates():
+    """Get coordinates for all supported cities (uses hardcoded data first, then geocoding)"""
+    try:
+        from event_api.services.geocoding import GeocodingService
+        geocoder = GeocodingService()
+        
+        supported_cities = event_crawler.get_supported_cities()
+        city_coordinates = {}
+        
+        for city in supported_cities:
+            # Check hardcoded coordinates first (fast)
+            if city in COMMON_CITY_COORDINATES:
+                city_coordinates[city] = COMMON_CITY_COORDINATES[city]
+            else:
+                # Fallback to geocoding API (slower)
+                readable_city = city.replace('_', ' ')
+                lat, lon = geocoder.get_coordinates(readable_city)
+                if lat and lon:
+                    city_coordinates[city] = {
+                        "lat": lat,
+                        "lon": lon
+                    }
+        
+        return {
+            "success": True,
+            "coordinates": city_coordinates
+        }
+    except Exception as e:
+        logger.error(f"Error getting city coordinates: {e}")
+        return {"success": False, "error": str(e)}
+
 
 async def stream_chat_response(request: ChatRequest):
     """Generator function for streaming chat responses"""
