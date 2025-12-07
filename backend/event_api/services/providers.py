@@ -1,7 +1,8 @@
 import requests
 from datetime import datetime
 import os
-from bs4 import BeautifulSoup
+import csv
+import io
 
 class EventProvider:
     def search(self, **kwargs):
@@ -512,7 +513,17 @@ class GoogleSheetProvider(EventProvider):
     """Provider for events from published Google Sheets"""
     
     def __init__(self, sheet_url=None):
-        self.sheet_url = sheet_url or "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFXbpLjUSajMeNrfbAptdjGFLPqs4v7LeMKB_SHAmpqpd76NIfTumohn2sJT6MRYzI3swxjIZbiMWb/pubhtml"
+        # Convert pubhtml URL to CSV format
+        default_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFXbpLjUSajMeNrfbAptdjGFLPqs4v7LeMKB_SHAmpqpd76NIfTumohn2sJT6MRYzI3swxjIZbiMWb/pub?output=csv"
+        if sheet_url:
+            # Convert pubhtml to csv if needed
+            if '/pubhtml' in sheet_url:
+                sheet_url = sheet_url.replace('/pubhtml', '/pub?output=csv')
+            elif '/pub?output=csv' not in sheet_url and '/export?format=csv' not in sheet_url:
+                # If it's a different format, try to convert
+                if '/pub' in sheet_url:
+                    sheet_url = sheet_url.replace('/pub', '/pub?output=csv')
+        self.sheet_url = sheet_url or default_url
         self.session = requests.Session()
         self._setup_session()
         self._cache = None
@@ -525,66 +536,25 @@ class GoogleSheetProvider(EventProvider):
         })
     
     def _fetch_sheet_data(self):
-        """Fetch and parse Google Sheet HTML"""
+        """Fetch and parse Google Sheet CSV"""
         try:
             response = self.session.get(self.sheet_url, timeout=10)
             response.raise_for_status()
-            soup = BeautifulSoup(response.text, 'html.parser')
             
-            # Find the table in the HTML
-            table = soup.find('table')
-            if not table:
-                print("GoogleSheet: No table found in HTML")
+            # Parse CSV content
+            csv_content = response.text
+            reader = csv.DictReader(io.StringIO(csv_content))
+            rows = list(reader)
+            
+            if not rows:
+                print("GoogleSheet: No data rows found in CSV")
                 return []
             
-            # Extract rows
-            rows = table.find_all('tr')
-            if len(rows) < 2:
-                print("GoogleSheet: No data rows found")
-                return []
-            
-            # Parse header row to get column indices
-            header_row = rows[0]
-            headers = [th.get_text(strip=True).lower() for th in header_row.find_all(['th', 'td'])]
-            
-            # Column mapping
-            column_map = {
-                'city': headers.index('city') if 'city' in headers else None,
-                'event_type': headers.index('event_type') if 'event_type' in headers else None,
-                'image_name': headers.index('image_name') if 'image_name' in headers else None,
-                'event_id': headers.index('event_id') if 'event_id' in headers else None,
-                'title': headers.index('title') if 'title' in headers else None,
-                'description': headers.index('description') if 'description' in headers else None,
-                'start_datetime': headers.index('start_datetime') if 'start_datetime' in headers else None,
-                'end_datetime': headers.index('end_datetime') if 'end_datetime' in headers else None,
-                'timezone': headers.index('timezone') if 'timezone' in headers else None,
-                'venue_name': headers.index('venue_name') if 'venue_name' in headers else None,
-                'venue_city': headers.index('venue_city') if 'venue_city' in headers else None,
-                'venue_country': headers.index('venue_country') if 'venue_country' in headers else None,
-                'latitude': headers.index('latitude') if 'latitude' in headers else None,
-                'longitude': headers.index('longitude') if 'longitude' in headers else None,
-                'organizer_name': headers.index('organizer_name') if 'organizer_name' in headers else None,
-                'ticket_min_price': headers.index('ticket_min_price') if 'ticket_min_price' in headers else None,
-                'ticket_max_price': headers.index('ticket_max_price') if 'ticket_max_price' in headers else None,
-                'is_free': headers.index('is_free') if 'is_free' in headers else None,
-                'categories': headers.index('categories') if 'categories' in headers else None,
-                'image_url': headers.index('image_url') if 'image_url' in headers else None,
-                'event_url': headers.index('event_url') if 'event_url' in headers else None,
-                'source': headers.index('source') if 'source' in headers else None,
-            }
-            
-            # Parse data rows
             events = []
-            for row in rows[1:]:
-                cells = row.find_all(['td', 'th'])
-                if len(cells) < len(headers):
-                    continue
-                
+            for row in rows:
+                # Helper function to get cell value
                 def get_cell_value(col_name):
-                    idx = column_map.get(col_name)
-                    if idx is not None and idx < len(cells):
-                        return cells[idx].get_text(strip=True)
-                    return ""
+                    return row.get(col_name, "").strip() if row.get(col_name) else ""
                 
                 # Parse boolean values
                 is_free_str = get_cell_value('is_free').lower()
@@ -692,16 +662,11 @@ class GoogleSheetProvider(EventProvider):
         """Get list of unique event types from the Google Sheet"""
         try:
             events = self._fetch_sheet_data()
-            event_types = set()
-            for event in events:
-                event_type = event.get("event_type", "").strip()
-                if event_type:
-                    event_types.add(event_type.lower())
-                # Also include categories
-                categories = event.get("categories", [])
-                for cat in categories:
-                    if cat and cat.strip():
-                        event_types.add(cat.strip().lower())
+            event_types = {
+                event.get("event_type", "").strip().lower()
+                for event in events
+                if event.get("event_type", "").strip()
+            }
             return sorted(list(event_types))
         except Exception as e:
             print(f"GoogleSheet get_supported_events error: {e}")
