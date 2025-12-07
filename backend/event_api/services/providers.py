@@ -1,6 +1,7 @@
 import requests
 from datetime import datetime
 import os
+from bs4 import BeautifulSoup
 
 class EventProvider:
     def search(self, **kwargs):
@@ -505,4 +506,203 @@ class PredictHQProvider(EventProvider):
             return events
         except Exception as e:
             print(f"PredictHQ error: {e}")
+            return []
+
+class GoogleSheetProvider(EventProvider):
+    """Provider for events from published Google Sheets"""
+    
+    def __init__(self, sheet_url=None):
+        self.sheet_url = sheet_url or "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFXbpLjUSajMeNrfbAptdjGFLPqs4v7LeMKB_SHAmpqpd76NIfTumohn2sJT6MRYzI3swxjIZbiMWb/pubhtml"
+        self.session = requests.Session()
+        self._setup_session()
+        self._cache = None
+        self._cache_timestamp = None
+    
+    def _setup_session(self):
+        """Setup session with required headers"""
+        self.session.headers.update({
+            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        })
+    
+    def _fetch_sheet_data(self):
+        """Fetch and parse Google Sheet HTML"""
+        try:
+            response = self.session.get(self.sheet_url, timeout=10)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Find the table in the HTML
+            table = soup.find('table')
+            if not table:
+                print("GoogleSheet: No table found in HTML")
+                return []
+            
+            # Extract rows
+            rows = table.find_all('tr')
+            if len(rows) < 2:
+                print("GoogleSheet: No data rows found")
+                return []
+            
+            # Parse header row to get column indices
+            header_row = rows[0]
+            headers = [th.get_text(strip=True).lower() for th in header_row.find_all(['th', 'td'])]
+            
+            # Column mapping
+            column_map = {
+                'city': headers.index('city') if 'city' in headers else None,
+                'event_type': headers.index('event_type') if 'event_type' in headers else None,
+                'image_name': headers.index('image_name') if 'image_name' in headers else None,
+                'event_id': headers.index('event_id') if 'event_id' in headers else None,
+                'title': headers.index('title') if 'title' in headers else None,
+                'description': headers.index('description') if 'description' in headers else None,
+                'start_datetime': headers.index('start_datetime') if 'start_datetime' in headers else None,
+                'end_datetime': headers.index('end_datetime') if 'end_datetime' in headers else None,
+                'timezone': headers.index('timezone') if 'timezone' in headers else None,
+                'venue_name': headers.index('venue_name') if 'venue_name' in headers else None,
+                'venue_city': headers.index('venue_city') if 'venue_city' in headers else None,
+                'venue_country': headers.index('venue_country') if 'venue_country' in headers else None,
+                'latitude': headers.index('latitude') if 'latitude' in headers else None,
+                'longitude': headers.index('longitude') if 'longitude' in headers else None,
+                'organizer_name': headers.index('organizer_name') if 'organizer_name' in headers else None,
+                'ticket_min_price': headers.index('ticket_min_price') if 'ticket_min_price' in headers else None,
+                'ticket_max_price': headers.index('ticket_max_price') if 'ticket_max_price' in headers else None,
+                'is_free': headers.index('is_free') if 'is_free' in headers else None,
+                'categories': headers.index('categories') if 'categories' in headers else None,
+                'image_url': headers.index('image_url') if 'image_url' in headers else None,
+                'event_url': headers.index('event_url') if 'event_url' in headers else None,
+                'source': headers.index('source') if 'source' in headers else None,
+            }
+            
+            # Parse data rows
+            events = []
+            for row in rows[1:]:
+                cells = row.find_all(['td', 'th'])
+                if len(cells) < len(headers):
+                    continue
+                
+                def get_cell_value(col_name):
+                    idx = column_map.get(col_name)
+                    if idx is not None and idx < len(cells):
+                        return cells[idx].get_text(strip=True)
+                    return ""
+                
+                # Parse boolean values
+                is_free_str = get_cell_value('is_free').lower()
+                is_free = is_free_str in ('true', '1', 'yes', 'free')
+                
+                # Parse numeric values
+                latitude = 0.0
+                longitude = 0.0
+                try:
+                    lat_str = get_cell_value('latitude')
+                    lon_str = get_cell_value('longitude')
+                    if lat_str:
+                        latitude = float(lat_str)
+                    if lon_str:
+                        longitude = float(lon_str)
+                except (ValueError, TypeError):
+                    pass
+                
+                # Parse categories (comma-separated)
+                categories_str = get_cell_value('categories')
+                categories = [c.strip() for c in categories_str.split(',') if c.strip()] if categories_str else []
+                
+                # Get city and event_type values for filtering
+                city_value = get_cell_value('city')
+                event_type_value = get_cell_value('event_type')
+                
+                event = {
+                    "event_id": get_cell_value('event_id') or "",
+                    "title": get_cell_value('title') or "",
+                    "description": get_cell_value('description') or "",
+                    "start_datetime": get_cell_value('start_datetime') or "",
+                    "end_datetime": get_cell_value('end_datetime') or "",
+                    "timezone": get_cell_value('timezone') or "UTC",
+                    "venue_name": get_cell_value('venue_name') or "",
+                    "venue_city": get_cell_value('venue_city') or city_value or "",
+                    "venue_country": get_cell_value('venue_country') or "",
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "organizer_name": get_cell_value('organizer_name') or "",
+                    "ticket_min_price": get_cell_value('ticket_min_price') or "Free",
+                    "ticket_max_price": get_cell_value('ticket_max_price') or "Free",
+                    "is_free": is_free,
+                    "categories": categories,
+                    "image_url": get_cell_value('image_url') or "",
+                    "event_url": get_cell_value('event_url') or "",
+                    "source": get_cell_value('source') or "googlesheet",
+                    "city": city_value,
+                    "event_type": event_type_value
+                }
+                
+                events.append(event)
+            
+            return events
+        except Exception as e:
+            print(f"GoogleSheet fetch error: {e}")
+            return []
+    
+    def search(self, city=None, category=None):
+        """Search events by city and/or category"""
+        try:
+            # Fetch all events from sheet
+            events = self._fetch_sheet_data()
+            
+            # Filter by city if provided
+            if city:
+                target_city = city.strip().lower().replace(" ", "_")
+                events = [
+                    e for e in events
+                    if str(e.get("venue_city", "")).strip().lower().replace(" ", "_") == target_city or
+                       str(e.get("city", "")).strip().lower().replace(" ", "_") == target_city
+                ]
+            
+            # Filter by category/event_type if provided
+            if category:
+                category_lower = category.strip().lower()
+                events = [
+                    e for e in events
+                    if category_lower in str(e.get("event_type", "")).lower() or
+                       any(category_lower in str(c).lower() for c in e.get("categories", []))
+                ]
+            
+            return events
+        except Exception as e:
+            print(f"GoogleSheet error: {e}")
+            return []
+    
+    def get_supported_cities(self):
+        """Get list of unique cities from the Google Sheet"""
+        try:
+            events = self._fetch_sheet_data()
+            cities = set()
+            for event in events:
+                city = event.get("city", "").strip()
+                venue_city = event.get("venue_city", "").strip()
+                if city:
+                    cities.add(city.lower().replace(" ", "_"))
+                if venue_city:
+                    cities.add(venue_city.lower().replace(" ", "_"))
+            return sorted(list(cities))
+        except Exception as e:
+            print(f"GoogleSheet get_supported_cities error: {e}")
+            return []
+    
+    def get_supported_events(self):
+        """Get list of unique event types from the Google Sheet"""
+        try:
+            events = self._fetch_sheet_data()
+            event_types = set()
+            for event in events:
+                event_type = event.get("event_type", "").strip()
+                if event_type:
+                    event_types.add(event_type.lower())
+                # Also include categories
+                categories = event.get("categories", [])
+                for cat in categories:
+                    if cat and cat.strip():
+                        event_types.add(cat.strip().lower())
+            return sorted(list(event_types))
+        except Exception as e:
+            print(f"GoogleSheet get_supported_events error: {e}")
             return []
