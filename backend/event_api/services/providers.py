@@ -623,8 +623,7 @@ class GoogleSheetProvider(EventProvider):
                 target_city = city.strip().lower().replace(" ", "_")
                 events = [
                     e for e in events
-                    if str(e.get("venue_city", "")).strip().lower().replace(" ", "_") == target_city or
-                       str(e.get("city", "")).strip().lower().replace(" ", "_") == target_city
+                    if str(e.get("city", "")).strip().lower().replace(" ", "_") == target_city
                 ]
             
             # Filter by category/event_type if provided
@@ -648,11 +647,8 @@ class GoogleSheetProvider(EventProvider):
             cities = set()
             for event in events:
                 city = event.get("city", "").strip()
-                venue_city = event.get("venue_city", "").strip()
                 if city:
                     cities.add(city.lower().replace(" ", "_"))
-                if venue_city:
-                    cities.add(venue_city.lower().replace(" ", "_"))
             return sorted(list(cities))
         except Exception as e:
             print(f"GoogleSheet get_supported_cities error: {e}")
