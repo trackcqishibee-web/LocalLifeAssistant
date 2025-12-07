@@ -278,6 +278,14 @@ class APIClient {
     return [];
   }
 
+  async getCityCoordinates(): Promise<Record<string, { lat: number; lon: number }>> {
+    const response = await axios.get(`${this.baseURL}/api/city-coordinates`);
+    if (response.data.success) {
+      return response.data.coordinates || {};
+    }
+    return {};
+  }
+
 
   async getUserUsage(userId: string): Promise<any> {
     const response = await axios.get(`${this.baseURL}/api/usage/${userId}`);

@@ -12,12 +12,13 @@ scraper = UnifiedEventService()
 def get_events():
     location = request.args.get('location')
     category = request.args.get('category')
+    inline = request.args.get('inline', 'true').lower() == 'true'
     
     if not location or not category:
         return jsonify({"error": "Missing required parameters: location, category"}), 400
         
     try:
-        events = scraper.get_events(location, category)
+        events = scraper.get_events(location, category, inline=inline)
         return jsonify({
             "status": "success",
             "count": len(events),

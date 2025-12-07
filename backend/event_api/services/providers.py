@@ -1,6 +1,9 @@
 import requests
 from datetime import datetime
 import os
+import csv
+import io
+import hashlib
 
 class EventProvider:
     def search(self, **kwargs):
@@ -505,4 +508,214 @@ class PredictHQProvider(EventProvider):
             return events
         except Exception as e:
             print(f"PredictHQ error: {e}")
+            return []
+
+class GoogleSheetProvider(EventProvider):
+    """Provider for events from published Google Sheets"""
+    
+    def __init__(self, sheet_url=None):
+        # Convert pubhtml URL to CSV format
+        default_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSFXbpLjUSajMeNrfbAptdjGFLPqs4v7LeMKB_SHAmpqpd76NIfTumohn2sJT6MRYzI3swxjIZbiMWb/pub?output=csv"
+        if sheet_url:
+            # Convert pubhtml to csv if needed
+            if '/pubhtml' in sheet_url:
+                sheet_url = sheet_url.replace('/pubhtml', '/pub?output=csv')
+            elif '/pub?output=csv' not in sheet_url and '/export?format=csv' not in sheet_url:
+                # If it's a different format, try to convert
+                if '/pub' in sheet_url:
+                    sheet_url = sheet_url.replace('/pub', '/pub?output=csv')
+        self.sheet_url = sheet_url or default_url
+        self.session = requests.Session()
+        self._setup_session()
+        self._cache = None
+        self._cache_timestamp = None
+        self._last_content_hash = None
+    
+    def _setup_session(self):
+        """Setup session with required headers"""
+        self.session.headers.update({
+            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        })
+    
+    def _get_content_hash(self, content: str) -> str:
+        """Calculate MD5 hash of content to detect changes"""
+        return hashlib.md5(content.encode('utf-8')).hexdigest()
+    
+    def check_for_updates(self) -> bool:
+        """
+        Check if Google Sheet has been updated by comparing content hash.
+        If updated, immediately refresh the cache.
+        Returns True if sheet has been updated, False otherwise.
+        """
+        try:
+            # Get actual content to check hash
+            content_response = self.session.get(self.sheet_url, timeout=10)
+            content_response.raise_for_status()
+            csv_content = content_response.text
+            
+            current_hash = self._get_content_hash(csv_content)
+            
+            if self._last_content_hash is None:
+                # First time checking, load and cache the data
+                self._last_content_hash = current_hash
+                self._fetch_sheet_data(force_refresh=True)  # Load initial data
+                return False
+            
+            if current_hash != self._last_content_hash:
+                # Content has changed - immediately refresh cache
+                self._last_content_hash = current_hash
+                self._cache = None  # Clear cache
+                self._cache_timestamp = None
+                # Immediately reload the data
+                self._fetch_sheet_data(force_refresh=True)
+                return True
+            
+            return False
+        except Exception as e:
+            print(f"GoogleSheet check_for_updates error: {e}")
+            return False
+    
+    def _fetch_sheet_data(self, force_refresh=False):
+        """Fetch and parse Google Sheet CSV"""
+        # Check cache first (unless force refresh)
+        if not force_refresh and self._cache is not None:
+            return self._cache
+        
+        try:
+            response = self.session.get(self.sheet_url, timeout=10)
+            response.raise_for_status()
+            
+            # Parse CSV content
+            csv_content = response.text
+            
+            # Update content hash
+            self._last_content_hash = self._get_content_hash(csv_content)
+            
+            reader = csv.DictReader(io.StringIO(csv_content))
+            rows = list(reader)
+            
+            if not rows:
+                print("GoogleSheet: No data rows found in CSV")
+                return []
+            
+            events = []
+            for row in rows:
+                # Helper function to get cell value
+                def get_cell_value(col_name):
+                    return row.get(col_name, "").strip() if row.get(col_name) else ""
+                
+                # Parse boolean values
+                is_free_str = get_cell_value('is_free').lower()
+                is_free = is_free_str in ('true', '1', 'yes', 'free')
+                
+                # Parse numeric values
+                latitude = 0.0
+                longitude = 0.0
+                try:
+                    lat_str = get_cell_value('latitude')
+                    lon_str = get_cell_value('longitude')
+                    if lat_str:
+                        latitude = float(lat_str)
+                    if lon_str:
+                        longitude = float(lon_str)
+                except (ValueError, TypeError):
+                    pass
+                
+                # Parse categories (comma-separated)
+                categories_str = get_cell_value('categories')
+                categories = [c.strip() for c in categories_str.split(',') if c.strip()] if categories_str else []
+                
+                # Get city and event_type values for filtering
+                city_value = get_cell_value('city')
+                event_type_value = get_cell_value('event_type')
+                
+                event = {
+                    "event_id": get_cell_value('event_id') or "",
+                    "title": get_cell_value('title') or "",
+                    "description": get_cell_value('description') or "",
+                    "start_datetime": get_cell_value('start_datetime') or "",
+                    "end_datetime": get_cell_value('end_datetime') or "",
+                    "timezone": get_cell_value('timezone') or "UTC",
+                    "venue_name": get_cell_value('venue_name') or "",
+                    "venue_city": get_cell_value('venue_city') or city_value or "",
+                    "venue_country": get_cell_value('venue_country') or "",
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "organizer_name": get_cell_value('organizer_name') or "",
+                    "ticket_min_price": get_cell_value('ticket_min_price') or "Free",
+                    "ticket_max_price": get_cell_value('ticket_max_price') or "Free",
+                    "is_free": is_free,
+                    "categories": categories,
+                    "image_url": get_cell_value('image_url') or "",
+                    "event_url": get_cell_value('event_url') or "",
+                    "source": get_cell_value('source') or "googlesheet",
+                    "city": city_value,
+                    "event_type": event_type_value
+                }
+                
+                events.append(event)
+            
+            # Cache the results
+            self._cache = events
+            self._cache_timestamp = datetime.now()
+            
+            return events
+        except Exception as e:
+            print(f"GoogleSheet fetch error: {e}")
+            return []
+    
+    def search(self, city=None, category=None):
+        """Search events by city and/or category"""
+        try:
+            # Fetch all events from sheet
+            events = self._fetch_sheet_data()
+            
+            # Filter by city if provided
+            if city:
+                target_city = city.strip().lower().replace(" ", "_")
+                events = [
+                    e for e in events
+                    if str(e.get("city", "")).strip().lower().replace(" ", "_") == target_city
+                ]
+            
+            # Filter by category/event_type if provided
+            if category:
+                category_lower = category.strip().lower()
+                events = [
+                    e for e in events
+                    if category_lower in str(e.get("event_type", "")).lower() or
+                       any(category_lower in str(c).lower() for c in e.get("categories", []))
+                ]
+            
+            return events
+        except Exception as e:
+            print(f"GoogleSheet error: {e}")
+            return []
+    
+    def get_supported_cities(self):
+        """Get list of unique cities from the Google Sheet"""
+        try:
+            events = self._fetch_sheet_data()
+            cities = set()
+            for event in events:
+                city = event.get("city", "").strip()
+                if city:
+                    cities.add(city.lower().replace(" ", "_"))
+            return sorted(list(cities))
+        except Exception as e:
+            print(f"GoogleSheet get_supported_cities error: {e}")
+            return []
+    
+    def get_supported_events(self):
+        """Get list of unique event types from the Google Sheet"""
+        try:
+            events = self._fetch_sheet_data()
+            event_types = {
+                event.get("event_type", "").strip().lower()
+                for event in events
+                if event.get("event_type", "").strip()
+            }
+            return sorted(list(event_types))
+        except Exception as e:
+            print(f"GoogleSheet get_supported_events error: {e}")
             return []

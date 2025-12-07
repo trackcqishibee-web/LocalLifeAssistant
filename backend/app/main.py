@@ -194,8 +194,48 @@ async def startup_event():
             replace_existing=True,
             executor='default'  # Runs sync function in thread pool
         )
+        
+        # Schedule Google Sheet sync check every 1 minute
+        def check_google_sheet_updates():
+            try:
+                # Use the global event_crawler instance which has the UnifiedEventService
+                if hasattr(event_crawler, 'unified_service') and hasattr(event_crawler.unified_service, 'googlesheet'):
+                    googlesheet = event_crawler.unified_service.googlesheet
+                    if hasattr(googlesheet, 'check_for_updates'):
+                        updated = googlesheet.check_for_updates()
+                        if updated:
+                            logger.info("Google Sheet update detected - cache refreshed immediately")
+                            # Also update CacheManager JSON cache for all cities and event types
+                            try:
+                                supported_cities = event_crawler.get_supported_cities()
+                                supported_event_types = event_crawler.get_supported_events()
+                                
+                                for city in supported_cities:
+                                    for event_type in supported_event_types:
+                                        # Fetch events from GoogleSheet for this city/event_type
+                                        events = googlesheet.search(city, event_type)
+                                        if events:
+                                            # Cache to JSON files via CacheManager
+                                            cache_manager.cache_events(city, events, event_type)
+                                            logger.info(f"Cached {len(events)} {event_type} events for {city} to JSON")
+                            except Exception as cache_error:
+                                logger.error(f"Error updating JSON cache after Google Sheet update: {cache_error}", exc_info=True)
+                        return updated
+            except Exception as e:
+                logger.error(f"Error checking Google Sheet updates: {e}", exc_info=True)
+            return False
+        
+        scheduler.add_job(
+            check_google_sheet_updates,
+            trigger=CronTrigger(minute='*'),  # Every 1 minute
+            id='google_sheet_sync',
+            name='Google Sheet Sync Check',
+            replace_existing=True,
+            executor='default'
+        )
+        
         scheduler.start()
-        logger.info("Background scheduler started - event fetch job scheduled every 4 hours")
+        logger.info("Background scheduler started - event fetch job scheduled every 4 hours, Google Sheet sync every 1 minute")
         
         # Run initial fetch on startup in background (non-blocking)
         # This ensures cache is populated immediately on startup
@@ -268,6 +308,64 @@ async def get_supported_cities():
         }
     except Exception as e:
         logger.error(f"Error getting supported cities: {e}")
+        return {"success": False, "error": str(e)}
+
+# Hardcoded coordinates for common cities (for fast matching)
+COMMON_CITY_COORDINATES = {
+    "san_francisco": {"lat": 37.7749, "lon": -122.4194},
+    "new_york": {"lat": 40.7128, "lon": -74.0060},
+    "los_angeles": {"lat": 34.0522, "lon": -118.2437},
+    "miami": {"lat": 25.7617, "lon": -80.1918},
+    "chicago": {"lat": 41.8781, "lon": -87.6298},
+    "seattle": {"lat": 47.6062, "lon": -122.3321},
+    "boston": {"lat": 42.3601, "lon": -71.0589},
+    "singapore": {"lat": 1.3521, "lon": 103.8198},
+    "san_jose": {"lat": 37.3382, "lon": -121.8863},
+    "mountain_view": {"lat": 37.3861, "lon": -122.0839},
+    "los_altos": {"lat": 37.3852, "lon": -122.1141},
+    "palo_alto": {"lat": 37.4419, "lon": -122.1430},
+    "sunnyvale": {"lat": 37.3688, "lon": -122.0363},
+    "cupertino": {"lat": 37.3230, "lon": -122.0322},
+    "redwood_city": {"lat": 37.4852, "lon": -122.2364},
+    "menlo_park": {"lat": 37.4530, "lon": -122.1817},
+    "fremont": {"lat": 37.5483, "lon": -121.9886},
+    "hayward": {"lat": 37.6688, "lon": -122.0808},
+    "oakland": {"lat": 37.8044, "lon": -122.2712},
+    "berkeley": {"lat": 37.8715, "lon": -122.2730},
+    "daly_city": {"lat": 37.7058, "lon": -122.4619},
+    "santa_clara": {"lat": 37.3541, "lon": -121.9552},
+}
+
+@app.get("/api/city-coordinates")
+async def get_city_coordinates():
+    """Get coordinates for all supported cities (uses hardcoded data first, then geocoding)"""
+    try:
+        from event_api.services.geocoding import GeocodingService
+        geocoder = GeocodingService()
+        
+        supported_cities = event_crawler.get_supported_cities()
+        city_coordinates = {}
+        
+        for city in supported_cities:
+            # Check hardcoded coordinates first (fast)
+            if city in COMMON_CITY_COORDINATES:
+                city_coordinates[city] = COMMON_CITY_COORDINATES[city]
+            else:
+                # Fallback to geocoding API (slower)
+                readable_city = city.replace('_', ' ')
+                lat, lon = geocoder.get_coordinates(readable_city)
+                if lat and lon:
+                    city_coordinates[city] = {
+                        "lat": lat,
+                        "lon": lon
+                    }
+        
+        return {
+            "success": True,
+            "coordinates": city_coordinates
+        }
+    except Exception as e:
+        logger.error(f"Error getting city coordinates: {e}")
         return {"success": False, "error": str(e)}
 
 

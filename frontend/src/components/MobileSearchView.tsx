@@ -143,6 +143,9 @@ export function MobileSearchView({
   const [supportedCities, setSupportedCities] = useState<string[]>([]);
   const [citiesDisplay, setCitiesDisplay] = useState<string[]>([]);
   const [supportedEventTypes, setSupportedEventTypes] = useState<string[]>([]);
+  const cityCoordinatesCache = useRef<Map<string, { lat: number; lon: number }>>(new Map());
+  const isGeocodingCities = useRef<boolean>(false);
+  const locationRequested = useRef<boolean>(false);
   const [messagesWithRecommendations, setMessagesWithRecommendations] = useState<ChatMessageWithRecommendations[]>([]);
   const lastUserMessageRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -162,6 +165,163 @@ export function MobileSearchView({
   // Find the index of the last user message
   const lastUserMessageIndex = messages.map((msg, i) => msg.role === 'user' ? i : -1).filter(i => i !== -1).pop() ?? -1;
 
+  // Helper function to calculate distance between two coordinates using Haversine formula
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distance in kilometers
+  };
+
+  // Preload city coordinates from backend
+  const preloadCityCoordinates = async (cities: string[]) => {
+    if (isGeocodingCities.current) return;
+    isGeocodingCities.current = true;
+
+    const citiesToLoad = cities.filter(city => !cityCoordinatesCache.current.has(city));
+    if (citiesToLoad.length === 0) {
+      isGeocodingCities.current = false;
+      return;
+    }
+
+    console.log(`Loading coordinates for ${citiesToLoad.length} cities from backend...`);
+    
+    try {
+      const coordinates = await apiClient.getCityCoordinates();
+      
+      // Cache all coordinates
+      Object.entries(coordinates).forEach(([cityName, coords]) => {
+        if (coords && coords.lat && coords.lon) {
+          cityCoordinatesCache.current.set(cityName, {
+            lat: coords.lat,
+            lon: coords.lon
+          });
+        }
+      });
+      
+      console.log(`Loaded coordinates for ${Object.keys(coordinates).length} cities`);
+    } catch (error) {
+      console.error('Error loading city coordinates from backend:', error);
+    }
+    
+    isGeocodingCities.current = false;
+  };
+
+  // Helper function to match detected location with supported cities by distance
+  const matchCityByDistance = (
+    detectedLat: number,
+    detectedLon: number,
+    supportedCities: string[]
+  ): number => {
+    const MAX_DISTANCE_KM = 10;
+    let closestIndex = -1;
+    let closestDistance = Infinity;
+
+    // All cities should be geocoded by now (from preload)
+    for (let i = 0; i < supportedCities.length; i++) {
+      const cityName = supportedCities[i];
+      const cityCoords = cityCoordinatesCache.current.get(cityName);
+      
+      if (cityCoords) {
+        const distance = calculateDistance(
+          detectedLat,
+          detectedLon,
+          cityCoords.lat,
+          cityCoords.lon
+        );
+        
+        if (distance <= MAX_DISTANCE_KM && distance < closestDistance) {
+          closestDistance = distance;
+          closestIndex = i;
+        }
+      }
+    }
+
+    if (closestIndex >= 0) {
+      console.log(`Matched city ${supportedCities[closestIndex]} at distance ${closestDistance.toFixed(2)}km`);
+    }
+    
+    return closestIndex;
+  };
+
+  // Preload city coordinates when cities are loaded
+  useEffect(() => {
+    if (supportedCities.length > 0) {
+      preloadCityCoordinates(supportedCities);
+    }
+  }, [supportedCities]);
+
+  // Request location and auto-select city
+  useEffect(() => {
+    if (supportedCities.length === 0 || citiesDisplay.length === 0 || selectedCityIndex >= 0) return;
+    if (locationRequested.current) return;
+    
+    locationRequested.current = true;
+    
+    const requestLocation = async () => {
+      if (!navigator.geolocation) {
+        console.log('Geolocation is not supported by this browser');
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          try {
+            const { latitude, longitude } = position.coords;
+            console.log('Detected location:', latitude, longitude);
+            
+            // Wait for city coordinates to be preloaded (with timeout)
+            const maxWaitTime = 10000; // 10 seconds
+            const startTime = Date.now();
+            while (isGeocodingCities.current && (Date.now() - startTime) < maxWaitTime) {
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            // Match with supported cities by distance (within 10km) - now synchronous
+            const matchedIndex = matchCityByDistance(latitude, longitude, supportedCities);
+            
+            if (matchedIndex >= 0 && matchedIndex < citiesDisplay.length) {
+              console.log('Matched city:', supportedCities[matchedIndex]);
+              setSelectedCityIndex(matchedIndex);
+              
+              // Update bot message to show city is selected
+              setMessages(prev => {
+                if (prev.length > 0 && prev[0].showCitySelection) {
+                  return [{
+                    ...prev[0],
+                    content: `Found you near ${citiesDisplay[matchedIndex]}! What kind of events are you interested in?`,
+                    showCitySelection: false,
+                    showEventTypeSelection: true
+                  }];
+                }
+                return prev;
+              });
+            } else {
+              console.log('No supported city found within 10km');
+            }
+          } catch (error) {
+            console.error('Error during location matching:', error);
+          }
+        },
+        (error) => {
+          console.log('Location access denied or failed:', error.message);
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 5000,
+          maximumAge: 300000 // Cache for 5 minutes
+        }
+      );
+    };
+
+    requestLocation();
+  }, [supportedCities, citiesDisplay, selectedCityIndex]);
+  
   // Load real cities and event types from API
   useEffect(() => {
     const loadCities = async () => {
