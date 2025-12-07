@@ -3,6 +3,7 @@ from datetime import datetime
 import os
 import csv
 import io
+import hashlib
 
 class EventProvider:
     def search(self, **kwargs):
@@ -528,6 +529,7 @@ class GoogleSheetProvider(EventProvider):
         self._setup_session()
         self._cache = None
         self._cache_timestamp = None
+        self._last_content_hash = None
     
     def _setup_session(self):
         """Setup session with required headers"""
@@ -535,14 +537,60 @@ class GoogleSheetProvider(EventProvider):
             "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         })
     
-    def _fetch_sheet_data(self):
+    def _get_content_hash(self, content: str) -> str:
+        """Calculate MD5 hash of content to detect changes"""
+        return hashlib.md5(content.encode('utf-8')).hexdigest()
+    
+    def check_for_updates(self) -> bool:
+        """
+        Check if Google Sheet has been updated by comparing content hash.
+        If updated, immediately refresh the cache.
+        Returns True if sheet has been updated, False otherwise.
+        """
+        try:
+            # Get actual content to check hash
+            content_response = self.session.get(self.sheet_url, timeout=10)
+            content_response.raise_for_status()
+            csv_content = content_response.text
+            
+            current_hash = self._get_content_hash(csv_content)
+            
+            if self._last_content_hash is None:
+                # First time checking, load and cache the data
+                self._last_content_hash = current_hash
+                self._fetch_sheet_data(force_refresh=True)  # Load initial data
+                return False
+            
+            if current_hash != self._last_content_hash:
+                # Content has changed - immediately refresh cache
+                self._last_content_hash = current_hash
+                self._cache = None  # Clear cache
+                self._cache_timestamp = None
+                # Immediately reload the data
+                self._fetch_sheet_data(force_refresh=True)
+                return True
+            
+            return False
+        except Exception as e:
+            print(f"GoogleSheet check_for_updates error: {e}")
+            return False
+    
+    def _fetch_sheet_data(self, force_refresh=False):
         """Fetch and parse Google Sheet CSV"""
+        # Check cache first (unless force refresh)
+        if not force_refresh and self._cache is not None:
+            return self._cache
+        
         try:
             response = self.session.get(self.sheet_url, timeout=10)
             response.raise_for_status()
             
             # Parse CSV content
             csv_content = response.text
+            
+            # Update content hash
+            self._last_content_hash = self._get_content_hash(csv_content)
+            
             reader = csv.DictReader(io.StringIO(csv_content))
             rows = list(reader)
             
@@ -606,6 +654,10 @@ class GoogleSheetProvider(EventProvider):
                 }
                 
                 events.append(event)
+            
+            # Cache the results
+            self._cache = events
+            self._cache_timestamp = datetime.now()
             
             return events
         except Exception as e:

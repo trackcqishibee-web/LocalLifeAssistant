@@ -194,8 +194,48 @@ async def startup_event():
             replace_existing=True,
             executor='default'  # Runs sync function in thread pool
         )
+        
+        # Schedule Google Sheet sync check every 1 minute
+        def check_google_sheet_updates():
+            try:
+                # Use the global event_crawler instance which has the UnifiedEventService
+                if hasattr(event_crawler, 'unified_service') and hasattr(event_crawler.unified_service, 'googlesheet'):
+                    googlesheet = event_crawler.unified_service.googlesheet
+                    if hasattr(googlesheet, 'check_for_updates'):
+                        updated = googlesheet.check_for_updates()
+                        if updated:
+                            logger.info("Google Sheet update detected - cache refreshed immediately")
+                            # Also update CacheManager JSON cache for all cities and event types
+                            try:
+                                supported_cities = event_crawler.get_supported_cities()
+                                supported_event_types = event_crawler.get_supported_events()
+                                
+                                for city in supported_cities:
+                                    for event_type in supported_event_types:
+                                        # Fetch events from GoogleSheet for this city/event_type
+                                        events = googlesheet.search(city, event_type)
+                                        if events:
+                                            # Cache to JSON files via CacheManager
+                                            cache_manager.cache_events(city, events, event_type)
+                                            logger.info(f"Cached {len(events)} {event_type} events for {city} to JSON")
+                            except Exception as cache_error:
+                                logger.error(f"Error updating JSON cache after Google Sheet update: {cache_error}", exc_info=True)
+                        return updated
+            except Exception as e:
+                logger.error(f"Error checking Google Sheet updates: {e}", exc_info=True)
+            return False
+        
+        scheduler.add_job(
+            check_google_sheet_updates,
+            trigger=CronTrigger(minute='*'),  # Every 1 minute
+            id='google_sheet_sync',
+            name='Google Sheet Sync Check',
+            replace_existing=True,
+            executor='default'
+        )
+        
         scheduler.start()
-        logger.info("Background scheduler started - event fetch job scheduled every 4 hours")
+        logger.info("Background scheduler started - event fetch job scheduled every 4 hours, Google Sheet sync every 1 minute")
         
         # Run initial fetch on startup in background (non-blocking)
         # This ensures cache is populated immediately on startup
